@@ -4,7 +4,7 @@
 # Symlinks the scripts in stage/ to /usr/local/bin (+ user VPN scripts to
 # ~/.local/bin), copies configs to ~/.config/, drops the keybind + hypr
 # color snippets alongside your hyprland config, and installs optional
-# wallpapers. Nothing in this script touches hyprland.conf itself — the
+# wallpapers. Nothing in this script touches hyprland.conf itself - the
 # post-install block tells you which one-liners to add manually.
 
 set -euo pipefail
@@ -224,11 +224,11 @@ if confirm "Update package manager and install runtime deps?" n; then
   if (( ${#TO_INSTALL[@]} == 0 )); then
     ok "all runtime deps already present"
   elif [[ "$PKG_MANAGER" == "unknown" ]]; then
-    warn "Unknown package manager — please install these manually:"
+    warn "Unknown package manager - please install these manually:"
     printf '  - %s\n' "${PKG_CANONICAL[@]}"
   else
     info "Installing: ${TO_INSTALL[*]}"
-    "${INSTALL_CMD[@]}" "${TO_INSTALL[@]}" || warn "some packages failed — review output above"
+    "${INSTALL_CMD[@]}" "${TO_INSTALL[@]}" || warn "some packages failed - review output above"
   fi
 else
   skip "package install skipped"
@@ -255,7 +255,7 @@ else
   SUDO=""
 fi
 
-# ── System symlinks — /usr/local/bin ────────────────────────────────────────
+# ── System symlinks - /usr/local/bin ────────────────────────────────────────
 
 info "Installing system binaries to $SYS_BIN/ (symlinks → repo)…"
 
@@ -268,7 +268,7 @@ sys_link() {
 
 sys_link "$STAGE/dotctl" "$SYS_BIN/dotctl"
 
-# Module scripts — everything in stage/modules/ except the VPN pair, which
+# Module scripts - everything in stage/modules/ except the VPN pair, which
 # only installs when the user opted in at the gate above.
 for m in "$STAGE"/modules/*; do
   name="$(basename "$m")"
@@ -298,20 +298,20 @@ if [[ -f "$STAGE/dotctl.1" ]]; then
   $SUDO mandb -q "$SYS_MAN/.." 2>/dev/null || true
   ok "$SYS_MAN/dotctl.1.gz"
 else
-  warn "dotctl.1 not found in stage/ — skipping man page"
+  warn "dotctl.1 not found in stage/ - skipping man page"
 fi
 
 # ── User installs (no sudo) ─────────────────────────────────────────────────
 
 info "Installing user configs to $CONFIG_HOME/…"
 
-# Element config dirs — copy (not symlink) so user edits stay private.
+# Element config dirs - copy (not symlink) so user edits stay private.
 copy_config() {
   local src="$1" dest="$2"
   [[ -d "$src" ]] || { warn "missing: $src"; return 1; }
   mkdir -p "$(dirname "$dest")"
   if [[ -d "$dest" ]]; then
-    if confirm "  $dest exists — overwrite?" n; then
+    if confirm "  $dest exists - overwrite?" n; then
       rm -rf "$dest"
     else
       skip "kept existing $dest"
@@ -328,21 +328,21 @@ copy_config "$REPO/mako_config"   "$CONFIG_HOME/mako"
 copy_config "$REPO/wofi_config"   "$CONFIG_HOME/wofi"
 copy_config "$REPO/waybar_config" "$CONFIG_HOME/waybar"
 
-# Cycle scripts (copies — user curates IMAGES=() per theme)
+# Cycle scripts (copies - user curates IMAGES=() per theme)
 info "Installing cycle scripts to $CONFIG_HOME/dotctl/cycle/…"
 mkdir -p "$CONFIG_HOME/dotctl/cycle"
 cp -a "$STAGE/cycle/." "$CONFIG_HOME/dotctl/cycle/"
 chmod +x "$CONFIG_HOME/dotctl/cycle"/cycle-hyprpaper-*
 ok "$CONFIG_HOME/dotctl/cycle/"
 
-# Hypr color template — apply_hypr reads it from ~/.local/share/dotctl/
+# Hypr color template - apply_hypr reads it from ~/.local/share/dotctl/
 info "Installing hypr color template to $DATA_HOME/dotctl/…"
 install -Dm644 "$STAGE/hypr/dotctl-colors.conf.tmpl" "$DATA_HOME/dotctl/dotctl-colors.conf.tmpl"
 ok "$DATA_HOME/dotctl/dotctl-colors.conf.tmpl"
 
 # Hypr snippets (keybinds + color stub). The color stub is a neutral-grey
 # placeholder so hyprland's `source = ~/.config/hypr/dotctl-colors.conf`
-# directive resolves immediately — `dotctl apply` overwrites it with real
+# directive resolves immediately - `dotctl apply` overwrites it with real
 # palette-driven values on first run.
 if [[ -d "$CONFIG_HOME/hypr" ]]; then
   info "Installing hypr snippets to $CONFIG_HOME/hypr/…"
@@ -351,7 +351,7 @@ if [[ -d "$CONFIG_HOME/hypr" ]]; then
 
   if [[ ! -f "$CONFIG_HOME/hypr/dotctl-colors.conf" ]]; then
     cat > "$CONFIG_HOME/hypr/dotctl-colors.conf" <<'STUB'
-# dotctl — placeholder hyprland color file (neutral grays)
+# dotctl - placeholder hyprland color file (neutral grays)
 # This file is overwritten by `dotctl apply` with palette-driven colors.
 # Kept as a stub so hyprland's `source = ` directive always resolves.
 
@@ -371,10 +371,10 @@ STUB
     skip "$CONFIG_HOME/hypr/dotctl-colors.conf already exists"
   fi
 else
-  warn "$CONFIG_HOME/hypr/ doesn't exist — skipping keybind + color snippets"
+  warn "$CONFIG_HOME/hypr/ doesn't exist - skipping keybind + color snippets"
 fi
 
-# VPN scripts were handled in the main system symlink loop above — nothing
+# VPN scripts were handled in the main system symlink loop above - nothing
 # extra to do here. `stage/snippets/vpn/README.md` documents OpenVPN setup.
 if (( WANT_VPN == 1 )); then
   info "VPN setup docs: $STAGE/snippets/vpn/README.md"
@@ -409,7 +409,7 @@ ${BOLD}${GRN}dotctl installed.${RST}
 ${BOLD}Next steps:${RST}
 
 1. Add these two lines to the ${BOLD}bottom${RST} of ~/.config/hypr/hyprland.conf
-   (the bottom matters — later entries override earlier ones):
+   (the bottom matters - later entries override earlier ones):
 
      ${CYN}source = ~/.config/hypr/dotctl-keybinds.conf${RST}
      ${CYN}source = ~/.config/hypr/dotctl-colors.conf${RST}

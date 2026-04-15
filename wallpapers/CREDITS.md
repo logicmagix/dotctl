@@ -5,7 +5,7 @@ and are provided under the [Unsplash License](https://unsplash.com/license).
 
 The Unsplash License permits free commercial and non-commercial use without
 attribution. Attribution is listed here as a courtesy to the photographers and
-as a record of provenance — it is **not** a condition of the license.
+as a record of provenance - it is **not** a condition of the license.
 
 Wallpapers are **not** covered by dotctl's source-code license; they remain
 under the Unsplash License referenced above.

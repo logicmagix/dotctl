@@ -1,7 +1,7 @@
 #!/bin/sh
 # runit service script for dotctl-watch.
 #
-# User-scope install (recommended — the watcher needs your Wayland/DBus session):
+# User-scope install (recommended - the watcher needs your Wayland/DBus session):
 #   mkdir -p ~/service/dotctl-watch
 #   install -m 755 dotctl-watch.runit ~/service/dotctl-watch/run
 #   # ensure runsvdir is running against ~/service (e.g. from ~/.xprofile):

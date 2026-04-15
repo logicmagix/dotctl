@@ -2,7 +2,7 @@
 # Unified audio control: switch outputs, toggle mute.
 #
 # Profiles are resolved at runtime from a mix of port type, sink name and
-# sink description reported by pactl — no hardcoded sink names. Works on
+# sink description reported by pactl - no hardcoded sink names. Works on
 # any system with pulseaudio or pipewire-pulse.
 #
 # Matching priority (first hit wins):
@@ -109,7 +109,7 @@ is_analog_row() {
 
 # Iterate rows and return the first matching "sink|port_id". Caller provides
 # the predicate name. Extra predicate names prefixed with "!" mean "must NOT
-# match" — used to exclude headset/hdmi rows from the aux fallback.
+# match" - used to exclude headset/hdmi rows from the aux fallback.
 pick_row() {
   local primary="$1"; shift
   local excludes=("$@")

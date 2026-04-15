@@ -1,5 +1,5 @@
 /* ===================================================================
-   WAYBAR STYLE — console (chevron blocks), minimal module set
+   WAYBAR STYLE - console (chevron blocks), minimal module set
    =================================================================== */
 
 /* -- Keyframe Animations ------------------------------------------ */
@@ -9,8 +9,8 @@
   }
 }
 
-/* PALETTE:BEGIN — replaced at apply time by dotctl */
-/* -- forest palette (canonical default — replaced at apply time) --- */
+/* PALETTE:BEGIN - replaced at apply time by dotctl */
+/* -- forest palette (canonical default - replaced at apply time) --- */
 @define-color black    #141410;
 @define-color red      #8b3a3a;  /* oxblood */
 @define-color green    #4b5320;  /* drab green */
@@ -72,11 +72,11 @@
 
 /* -- Bar Container ------------------------------------------------ */
 #waybar {
-  /* TRANSPARENT:BEGIN — replaced at apply time by dotctl */
+  /* TRANSPARENT:BEGIN - replaced at apply time by dotctl */
   background: transparent;
   /* TRANSPARENT:END */
   color: @white;
-  /* FONT:BEGIN — replaced at apply time by dotctl */
+  /* FONT:BEGIN - replaced at apply time by dotctl */
   font-family: "MesloLGS NF", "Meslo LG S", monospace;
   font-size: 11pt;
   font-weight: 500;
@@ -131,7 +131,7 @@
 }
 
 /* ===================================================================
-   LEFT SIDE — system info with right-pointing () chevrons
+   LEFT SIDE - system info with right-pointing () chevrons
    power  launcher  workspaces  cpu  cputemp
    memory  gpu  (end)
    =================================================================== */
@@ -156,7 +156,7 @@
 
 /* Workspaces */
 #workspaces {
-  /* no margin pull — kept distinct from the launcher block */
+  /* no margin pull - kept distinct from the launcher block */
 }
 
 #workspaces button {
@@ -218,13 +218,13 @@
   padding-right: 8pt;
 }
 
-/* Left-side chevrons () — each bridges two adjacent blocks */
+/* Left-side chevrons () - each bridges two adjacent blocks */
 #custom-rarrow1  { color: @red;   background: @teal;       } /* power  launcher       */
 #custom-rarrow2  { color: @teal;  background: @plum;       } /* launcher  workspace area  */
 #custom-rarrow3  { color: @plum;  background: transparent; } /* workspaces  (end)        */
 
 /* ===================================================================
-   CENTER — clock with decorative bookend arrows
+   CENTER - clock with decorative bookend arrows
    =================================================================== */
 
 #window {
@@ -232,7 +232,7 @@
   margin-left: 45pt;
 }
 
-/* Center chevrons — clickable workspace prev/next */
+/* Center chevrons - clickable workspace prev/next */
 #custom-rarrow-center-l,
 #custom-rarrow-center-r {
   color: @gold;
@@ -240,7 +240,7 @@
   padding: 0 4pt;
 }
 
-/* Clock — .date/.time classes from old dual-clock setup, kept for reuse */
+/* Clock - .date/.time classes from old dual-clock setup, kept for reuse */
 #clock.date {
   background: @black;
   color: @white;
@@ -251,7 +251,7 @@
 }
 
 /* ===================================================================
-   RIGHT SIDE — app launchers + system tray + audio
+   RIGHT SIDE - app launchers + system tray + audio
    Uses left-pointing () chevrons.
    browser  tray  pulseaudio
    =================================================================== */
@@ -263,12 +263,12 @@
 #tray        { background: @black; }
 #custom-audio  { background: @rose;  color: @black; }
 
-/* Right-side chevrons () — each bridges two adjacent blocks */
+/* Right-side chevrons () - each bridges two adjacent blocks */
 #custom-rsep-browser  { color: @gold;  background: transparent; } /* bar bg  browser          */
 #custom-rsep-tray     { color: @black; background: @gold;       } /* browser  tray            */
 #custom-rsep-pulse    { color: @rose;  background: @black;      } /* tray  pulseaudio     */
 
-/* VPN:BEGIN — stripped when WAYBAR_VPN=off */
+/* VPN:BEGIN - stripped when WAYBAR_VPN=off */
 #custom-vpn {
   padding-left: 8pt;
   padding-right: 8pt;
@@ -330,7 +330,7 @@
    HOVER EFFECTS
    Smooth brighten on hover for interactive blocks.
    System monitors (cpu, memory, temperature, gpu, cputemp)
-   are intentionally excluded — no hover on status readouts.
+   are intentionally excluded - no hover on status readouts.
    =================================================================== */
 
 /* Transition setup for interactive modules */
@@ -355,6 +355,6 @@
 /* System module hover */
 #custom-audio:hover { background: shade(@rose, 1.22); }
 
-/* Center clock — keep its own opaque bg so it stays readable even when
+/* Center clock - keep its own opaque bg so it stays readable even when
    the bar is transparent (otherwise GTK's default hover leaks through). */
 #clock:hover { background: @black; color: @white; }

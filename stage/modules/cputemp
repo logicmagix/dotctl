@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# waybar-cputemp — print CPU temp + waybar state class (JSON).
+# waybar-cputemp - print CPU temp + waybar state class (JSON).
 # Output: {"text":"CPU Temp: N°C","class":"normal|warning|critical","alt":"..."}
 
 labels=('Tctl' 'Tdie' 'CPU Package' 'CPU Composite' 'Package id 0')

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# audio-output-status — waybar JSON status for the default sink.
+# audio-output-status - waybar JSON status for the default sink.
 #
 # Emits one JSON line on startup plus one per pactl event (sink change,
 # default-sink change, volume, mute, hotplug). Designed to be wired into a

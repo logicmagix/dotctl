@@ -3,7 +3,7 @@
 #
 # Removes symlinks and installed files that point into the repo. Leaves
 # user configs in ~/.config/{cava,kitty,mako,wofi,waybar} alone unless
-# you explicitly confirm — those may have been edited post-install.
+# you explicitly confirm - those may have been edited post-install.
 
 set -euo pipefail
 
@@ -45,7 +45,7 @@ This will remove:
   - $DATA_HOME/dotctl/dotctl-colors.conf.tmpl
   - $CONFIG_HOME/hypr/{dotctl-keybinds.conf, dotctl-colors.conf}
 
-Only symlinks that point ${BOLD}into the repo${RST} are removed — unrelated
+Only symlinks that point ${BOLD}into the repo${RST} are removed - unrelated
 binaries with the same name are left alone.
 
 Optional (prompted individually):
@@ -77,10 +77,10 @@ unlink_if_repo() {
       $SUDO rm -f "$link"
       ok "removed $link"
     else
-      skip "$link points outside the repo — kept"
+      skip "$link points outside the repo - kept"
     fi
   elif [[ -e "$link" ]]; then
-    skip "$link is not a symlink — kept (remove manually if you want)"
+    skip "$link is not a symlink - kept (remove manually if you want)"
   else
     skip "$link absent"
   fi
@@ -149,12 +149,12 @@ for elem in cava kitty mako wofi waybar; do
     if confirm "  Remove $CONFIG_HOME/$elem/ ?" n; then
       # Harden against read-only files before removing, then verify the
       # dir is actually gone. Running apps (notably kitty) can re-create
-      # their config dir immediately after rm — warn instead of dying so
+      # their config dir immediately after rm - warn instead of dying so
       # the rest of uninstall still runs.
       chmod -R u+w "$CONFIG_HOME/$elem" 2>/dev/null || true
       rm -rf "$CONFIG_HOME/$elem"
       if [[ -e "$CONFIG_HOME/$elem" ]]; then
-        warn "$CONFIG_HOME/$elem/ reappeared after removal — a running $elem process likely recreated it. Close all $elem windows and remove it manually:  rm -rf $CONFIG_HOME/$elem"
+        warn "$CONFIG_HOME/$elem/ reappeared after removal - a running $elem process likely recreated it. Close all $elem windows and remove it manually:  rm -rf $CONFIG_HOME/$elem"
       else
         ok "removed $CONFIG_HOME/$elem/"
       fi

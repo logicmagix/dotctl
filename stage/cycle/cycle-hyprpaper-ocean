@@ -1,5 +1,5 @@
 #!/bin/bash
-# cycle-hyprpaper-<COLOR> — wallpaper cycle for the <COLOR> theme.
+# cycle-hyprpaper-<COLOR> - wallpaper cycle for the <COLOR> theme.
 #
 # Template used by `theme-ctl new wallpaper <name>` and by every existing
 # cycle-hyprpaper-* script. Self-contained: drop into ~/.local/bin/, ensure
@@ -8,7 +8,7 @@
 # Verbs:
 #   forward    step to next image (wrap at end)
 #   backward   step to previous image (wrap at start)
-#   current    re-apply the current image (no step) — used on theme switch
+#   current    re-apply the current image (no step) - used on theme switch
 #   first      reset index to 0 and apply
 #
 # Replace ocean and the IMAGES array when creating a new one.

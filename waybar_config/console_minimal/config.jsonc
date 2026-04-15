@@ -27,7 +27,7 @@
     /* VPN:END */
     "custom/rsep-pulse",   "custom/audio"
   ],
-  // ===== Separators (pointed chevrons — swapped to half-circles when WAYBAR_DECOR=round) =====
+  // ===== Separators (pointed chevrons - swapped to half-circles when WAYBAR_DECOR=round) =====
   "custom/rarrow1":         { "format": "", "tooltip": false },
   "custom/rarrow2":         { "format": "", "tooltip": false },
   "custom/rarrow3":         { "format": "", "tooltip": false },

@@ -1,4 +1,4 @@
-# dotctl waybar decorator — round (Powerline half circles)
+# dotctl waybar decorator - round (Powerline half circles)
 # Substitutes the canonical pointed chevrons with their round equivalents.
 #
 # Format: each non-comment line is  FROM TO  (whitespace-separated). At apply

@@ -2,7 +2,7 @@
 
 Unified theme controller for a Hyprland Wayland desktop. One command
 re-themes cava, kitty, mako, wofi, waybar, hyprland, and hyprpaper against
-a coordinated state file — no more editing seven config files to change a
+a coordinated state file - no more editing seven config files to change a
 color.
 
 ```sh
@@ -33,31 +33,31 @@ after a hand edit; `dotctl watch` auto-applies on save.
 
 ## Features
 
-- **Unified switch** — `dotctl set -c <color> -f <font>` fans out across
+- **Unified switch** - `dotctl set -c <color> -f <font>` fans out across
   cava, kitty, mako, wofi, and waybar in one command.
-- **Per-element override** — still want gruvbox on waybar while the rest
+- **Per-element override** - still want gruvbox on waybar while the rest
   stays forest? `dotctl set --waybar-color gruvbox`.
-- **`sync`** — copy color/font from one element to another, or to `all`,
+- **`sync`** - copy color/font from one element to another, or to `all`,
   to re-unify after drift.
-- **Presets** — `dotctl preset save tv` / `dotctl preset load laptop`
+- **Presets** - `dotctl preset save tv` / `dotctl preset load laptop`
   for named display setups.
-- **Cycle keybinds** — `SUPER+ALT+Arrow` rotates wallpapers within the
+- **Cycle keybinds** - `SUPER+ALT+Arrow` rotates wallpapers within the
   current theme or waybar variants within the current palette.
-- **Waybar palette injection** — a single canonical `config.jsonc` /
+- **Waybar palette injection** - a single canonical `config.jsonc` /
   `style.css` pair per variant, with palette, font, and decorator glyphs
   rewritten at apply time. Add a new palette by dropping a `.palette`
   file in place.
-- **Wallpaper themes as directories** — drop a folder of images, run
+- **Wallpaper themes as directories** - drop a folder of images, run
   `dotctl scan`, get a cycle script back. Curate `IMAGES=( )` by hand for
   a non-alphabetical order.
-- **Hyprland integration without editing `hyprland.conf`** — ships two
+- **Hyprland integration without editing `hyprland.conf`** - ships two
   sourceable snippets (`dotctl-keybinds.conf` + `dotctl-colors.conf`)
   that you enable with two one-liners.
-- **Transparent or opaque waybar** — toggle plus explicit opacity when
+- **Transparent or opaque waybar** - toggle plus explicit opacity when
   you want the bar to sit at 30% over the wallpaper.
-- **Launcher distro logo** — pick from 14 distro glyphs; the choice
+- **Launcher distro logo** - pick from 14 distro glyphs; the choice
   survives `cycle waybar` rotations.
-- **Drift detection** — `dotctl show` flags any element whose color or
+- **Drift detection** - `dotctl show` flags any element whose color or
   font has drifted off the rest of the UI.
 
 ## Included content
@@ -77,13 +77,13 @@ after a hand edit; `dotctl watch` auto-applies on save.
 
 **Runtime elements** (install.sh offers to package-manage these for you):
 - `waybar`, `cava`, `kitty`, `mako`, `wofi`
-- `inotify-tools` (optional — powers `dotctl watch`; 1 s mtime polling fallback if missing)
+- `inotify-tools` (optional - powers `dotctl watch`; 1 s mtime polling fallback if missing)
 - `jq`, `wl-clipboard`
 
 **Known-good distros** (auto-detected by `install.sh`):
 Gentoo, Arch / CachyOS / EndeavourOS / Manjaro / Artix, Debian / Ubuntu /
 Mint / Pop!\_OS, Fedora / Nobara, openSUSE, Void, NixOS, Slackware. Other
-distros work — you just get a "please install these manually" notice.
+distros work - you just get a "please install these manually" notice.
 
 **Fonts**: the shipped palettes assume a Nerd Font is available
 (`MesloLGS NF` or `Phoenix Sans`). Install one via your package manager
@@ -112,7 +112,7 @@ The installer is interactive and walks you through:
 9. Optionally copy wallpaper packs into `~/Pictures/dotctl/wallpapers/`.
 
 Steps 3, 4, 8 use `sudo` (one prompt at the top; the rest runs as you).
-Nothing in `install.sh` touches `hyprland.conf` itself — the post-install
+Nothing in `install.sh` touches `hyprland.conf` itself - the post-install
 block tells you exactly which two `source =` lines to add by hand.
 
 ### Hyprland wiring
@@ -127,12 +127,12 @@ source = ~/.config/hypr/dotctl-colors.conf
 
 Then `hyprctl reload`. You now have:
 
-- `SUPER+ALT+Right` / `Left` — cycle wallpaper within the current theme
-- `SUPER+ALT+Up` / `Down` — rotate waybar variants (pill/console × full/minimal)
-- `ALT+SHIFT+A` — route audio to analog / line-out
-- `ALT+SHIFT+S` — route audio to headset / bluetooth
-- `ALT+SHIFT+H` — route audio to HDMI / DisplayPort
-- `ALT+SHIFT+M` — toggle mute on the default sink
+- `SUPER+ALT+Right` / `Left` - cycle wallpaper within the current theme
+- `SUPER+ALT+Up` / `Down` - rotate waybar variants (pill/console × full/minimal)
+- `ALT+SHIFT+A` - route audio to analog / line-out
+- `ALT+SHIFT+S` - route audio to headset / bluetooth
+- `ALT+SHIFT+H` - route audio to HDMI / DisplayPort
+- `ALT+SHIFT+M` - toggle mute on the default sink
 
 ## Quick start
 
@@ -231,9 +231,9 @@ run. New fields added in a dotctl update are soft-migrated to defaults.
 
 `dotctl set` has three flag tiers with strict precedence:
 
-1. `--preset <name>` — load a saved state as the baseline
-2. `-c / -f / --font-size` — fan out across every element that has the axis
-3. `--<element>-<axis>` — per-element override on top of the above
+1. `--preset <name>` - load a saved state as the baseline
+2. `-c / -f / --font-size` - fan out across every element that has the axis
+3. `--<element>-<axis>` - per-element override on top of the above
 
 So `dotctl set --preset laptop -c forest --waybar-color gruvbox` loads
 the laptop preset, forces forest on cava/kitty/mako/wofi/waybar, then
@@ -304,13 +304,13 @@ by `install.sh`.
 
 **Man page is stale after updating dotctl.**
 Some older installers dropped an uncompressed `/usr/local/share/man/man1/dotctl.1`
-that shadows the gzipped current copy. Re-run `install.sh` — it now
+that shadows the gzipped current copy. Re-run `install.sh` - it now
 removes the stale sibling. Or manually:
 `sudo rm -f /usr/local/share/man/man1/dotctl.1 && sudo mandb -q`.
 
 **Kitty config reappears after uninstall.**
 A running kitty process may be auto-recreating `~/.config/kitty/`. Close
-all kitty windows first, then re-run `./uninstall.sh` — it will warn
+all kitty windows first, then re-run `./uninstall.sh` - it will warn
 instead of silently failing in this case.
 
 **Hyprland doesn't pick up color changes.**

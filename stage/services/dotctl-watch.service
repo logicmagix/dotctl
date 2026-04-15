@@ -1,5 +1,5 @@
 [Unit]
-Description=dotctl config watcher — auto-apply ~/.config/dotctl/config on save
+Description=dotctl config watcher - auto-apply ~/.config/dotctl/config on save
 PartOf=graphical-session.target
 After=graphical-session.target
 

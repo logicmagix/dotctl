@@ -1,5 +1,5 @@
 /* ===================================================================
-   WAYBAR STYLE — outlined-pill, full module set
+   WAYBAR STYLE - outlined-pill, full module set
    =================================================================== */
 
 @keyframes blink-critical {
@@ -11,8 +11,8 @@
   100% { box-shadow: inset 0 0 0 2px @cyan; }
 }
 
-/* PALETTE:BEGIN — replaced at apply time by dotctl */
-/* -- forest palette (canonical default — replaced at apply time) --- */
+/* PALETTE:BEGIN - replaced at apply time by dotctl */
+/* -- forest palette (canonical default - replaced at apply time) --- */
 @define-color black    #141410;
 @define-color red      #8b3a3a;  /* oxblood / warning */
 @define-color green    #4b5320;  /* drab green */
@@ -64,11 +64,11 @@
 
 /* -- Bar Container ------------------------------------------------ */
 #waybar {
-  /* TRANSPARENT:BEGIN — replaced at apply time by dotctl */
+  /* TRANSPARENT:BEGIN - replaced at apply time by dotctl */
   background: transparent;
   /* TRANSPARENT:END */
   color: @white;
-  /* FONT:BEGIN — replaced at apply time by dotctl */
+  /* FONT:BEGIN - replaced at apply time by dotctl */
   font-family: "MesloLGS NF", "Meslo LG S", monospace;
   font-size: 11pt;
   font-weight: 500;
@@ -76,7 +76,7 @@
 }
 
 /* ===================================================================
-   BUBBLE BASE — outlined pill, dark interior, accent border
+   BUBBLE BASE - outlined pill, dark interior, accent border
    =================================================================== */
 
 #custom-power,
@@ -189,7 +189,7 @@
   background: alpha(@magenta, 0.1);
 }
 
-/* System monitors — accent border, matching text */
+/* System monitors - accent border, matching text */
 #cpu {
   color: @lime;
   border-color: @lime;
@@ -253,7 +253,7 @@
   border-color: @rose;
 }
 
-/* VPN:BEGIN — stripped when WAYBAR_VPN=off */
+/* VPN:BEGIN - stripped when WAYBAR_VPN=off */
 #custom-vpn.on              { color: @green; border-color: @green; }
 #custom-vpn.on.killswitch   { color: @mint;  border-color: @mint;  }
 #custom-vpn.off             { color: @red;   border-color: @red;   }
@@ -268,7 +268,7 @@
 /* VPN:END */
 
 /* ===================================================================
-   HOVER — fill the bubble with its accent color
+   HOVER - fill the bubble with its accent color
    =================================================================== */
 
 #custom-power:hover   { background: @red;   color: @hover_fg; }
