@@ -125,7 +125,37 @@ source = ~/.config/hypr/dotctl-keybinds.conf
 source = ~/.config/hypr/dotctl-colors.conf
 ```
 
-Then `hyprctl reload`. You now have:
+Then `hyprctl reload`.
+
+### Recommended animation and wallpaper settings
+
+Add these to your `hyprland.conf` for smooth wofi fade animations and
+flicker-free wallpaper cycling. Without them, wofi pops in/out abruptly
+and a brief flash of the default Hyprland wallpaper is visible when
+cycling images.
+
+In the `animations { }` block, replace or add:
+
+```ini
+animation = fade,          1, 8,  easeOutQuint
+animation = layers,        1, 4,  easeOutQuint
+animation = layersIn,      1, 4,  easeOutQuint, fade
+animation = layersOut,     1, 3,  easeOutQuint, fade
+animation = fadeLayersIn,  1, 8,  almostLinear
+animation = fadeLayersOut, 1, 6,  almostLinear
+```
+
+Disable the default wallpaper so nothing flashes during cycling:
+
+```ini
+force_default_wallpaper = 0
+```
+
+Then `hyprctl reload`.
+
+### Keybinds
+
+You now have:
 
 - `SUPER+ALT+Right` / `Left` - cycle wallpaper within the current theme
 - `SUPER+ALT+Up` / `Down` - rotate waybar variants (pill/console × full/minimal)

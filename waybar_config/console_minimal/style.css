@@ -145,6 +145,7 @@ tooltip {
 #custom-power {
   background: @red;
   color: @hover_fg;   /* palette-aware */
+  font-family: "Symbols Nerd Font";
   font-size: 26px;
   padding-left: 11px;
   padding-right: 11px;
@@ -154,6 +155,7 @@ tooltip {
 #custom-launcher {
   background: @teal;
   color: @hover_fg;   /* palette-aware */
+  font-family: "Symbols Nerd Font";
   font-size: 32px;
   padding-left: 11px;
   padding-right: 11px;
@@ -245,14 +247,9 @@ tooltip {
   padding: 0 5px;
 }
 
-/* Clock - .date/.time classes from old dual-clock setup, kept for reuse */
-#clock.date {
+#clock {
   background: @black;
   color: @white;
-}
-#clock.time {
-  background: @white;
-  color: @black;
 }
 
 /* ===================================================================

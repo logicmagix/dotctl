@@ -519,6 +519,24 @@ ${BOLD}Next steps:${RST}
 
      ${CYN}waybar & disown${RST}
 
+4. ${BOLD}Recommended:${RST} add these settings to ~/.config/hypr/hyprland.conf
+   for smooth wofi fade animations and flicker-free wallpaper cycling:
+
+   In your ${BOLD}animations${RST} block, replace or add:
+
+     ${CYN}animation = fade,          1, 8,  easeOutQuint${RST}
+     ${CYN}animation = layers,        1, 4,  easeOutQuint${RST}
+     ${CYN}animation = layersIn,      1, 4,  easeOutQuint, fade${RST}
+     ${CYN}animation = layersOut,     1, 3,  easeOutQuint, fade${RST}
+     ${CYN}animation = fadeLayersIn,  1, 8,  almostLinear${RST}
+     ${CYN}animation = fadeLayersOut, 1, 6,  almostLinear${RST}
+
+   Disable the default wallpaper (prevents a flash during cycling):
+
+     ${CYN}force_default_wallpaper = 0${RST}
+
+   Then: ${CYN}hyprctl reload${RST}
+
 ${DIM}VPN module setup (if enabled): $STAGE/snippets/vpn/README.md${RST}
 
 DONE
