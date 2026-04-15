@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+# audio-output-status — waybar JSON status for the default sink.
+#
+# Emits one JSON line on startup plus one per pactl event (sink change,
+# default-sink change, volume, mute, hotplug). Designed to be wired into a
+# waybar custom module:
+#
+#   "custom/audio": {
+#     "format": "{}",
+#     "return-type": "json",
+#     "exec": "audio-output-status",
+#     "on-click": "audio-output-menu",
+#     "on-click-right": "pavucontrol",
+#     "on-scroll-up":   "pactl set-sink-volume @DEFAULT_SINK@ +2%",
+#     "on-scroll-down": "pactl set-sink-volume @DEFAULT_SINK@ -2%"
+#   }
+#
+# Classification mirrors the audio-output script so the indicator icon
+# matches the actual destination the one-touch keybinds route to. The
+# "class" field is exported to CSS as .aux / .hdmi / .headset / .bluetooth
+# so themes can recolor per-output if they want.
+
+set -euo pipefail
+
+# Known wireless/bluetooth headset product names. Case-insensitive regex.
+# Intentionally mirrors the list used by audio-output so USB "Headset
+# Adapter" dongles do NOT get classified as headsets.
+HEADSET_BRANDS='Barracuda|Arctis|HyperX|SteelSeries|Kraken|BlackShark|Nari|Astro A[0-9]|AirPods|QuietComfort|Bose QC|WH-1000|WF-1000|Jabra (Evolve|Elite)|Corsair (HS|Void)|Logitech G[0-9]|Beats|Plantronics|Poly Voyager|JBL Quantum|Sennheiser|Turtle Beach|EPOS'
+
+json_escape() {
+  local s="$1"
+  s=${s//\\/\\\\}
+  s=${s//\"/\\\"}
+  printf '%s' "$s"
+}
+
+classify() {
+  local sink="$1" desc="$2" port_type="$3"
+
+  if [[ "$sink" == bluez_output.* ]]; then
+    printf bluetooth; return
+  fi
+  if [[ "$port_type" == "HDMI" ]] || [[ "$sink" == *hdmi* ]]; then
+    printf hdmi; return
+  fi
+  if [[ "$port_type" == "Headphones" || "$port_type" == "Headset" ]]; then
+    printf headset; return
+  fi
+
+  # Brand-name match (case-insensitive) on description, but skip USB
+  # "Headset Adapter" dongles which advertise misleading form_factor.
+  shopt -s nocasematch
+  if [[ ! "$desc" =~ Adapter ]] && [[ "$desc" =~ ($HEADSET_BRANDS) ]]; then
+    shopt -u nocasematch
+    printf headset; return
+  fi
+  shopt -u nocasematch
+
+  printf aux
+}
+
+emit() {
+  local sink vol mute data desc port_type kind type_icon vol_icon text tip
+
+  sink=$(pactl get-default-sink 2>/dev/null || true)
+  if [ -z "$sink" ]; then
+    printf '{"text":"🔇 --","tooltip":"no default sink","class":"none","percentage":0}\n'
+    return
+  fi
+
+  mute=$(pactl get-sink-mute "$sink" 2>/dev/null | awk '{print $2}') || mute=no
+  vol=$(pactl get-sink-volume "$sink" 2>/dev/null \
+    | awk 'NR==1 { for (i=1;i<=NF;i++) if ($i ~ /%$/) { gsub("%","",$i); print $i+0; exit } }')
+  [ -z "${vol:-}" ] && vol=0
+
+  data=$(pactl list sinks 2>/dev/null | awk -v s="$sink" '
+    /^Sink #/                   { k=0; next }
+    $1=="Name:"                 { k=($2==s)?1:0; next }
+    k && $1=="Description:"     { sub(/^[[:space:]]*Description:[[:space:]]*/,""); print "desc="$0; next }
+    k && /^[[:space:]]+Ports:/  { inports=1; next }
+    k && $1=="Active" && $2=="Port:" { inports=0; next }
+    k && inports && /type:/ {
+      if (match($0, /type: [A-Za-z-]+/)) {
+        print "type=" substr($0, RSTART+6, RLENGTH-6)
+      }
+    }
+  ')
+
+  desc=$(awk -F= '$1=="desc"{sub(/^desc=/,""); print; exit}' <<<"$data")
+  port_type=$(awk -F= '$1=="type"{sub(/^type=/,""); print; exit}' <<<"$data")
+
+  kind=$(classify "$sink" "$desc" "$port_type")
+
+  case "$kind" in
+    aux)       type_icon='🎚️' ;;
+    hdmi)      type_icon='🖥️' ;;
+    headset)   type_icon='🎧' ;;
+    bluetooth) type_icon='🔵' ;;
+    *)         type_icon='🔊' ;;
+  esac
+
+  if [ "$mute" = "yes" ]; then
+    text="${type_icon} 🔇 ${vol}%"
+  else
+    if   [ "$vol" -lt 34 ]; then vol_icon='🔈'
+    elif [ "$vol" -lt 67 ]; then vol_icon='🔉'
+    else                         vol_icon='🔊'
+    fi
+    text="${type_icon} ${vol_icon} ${vol}%"
+  fi
+
+  tip=$(json_escape "${desc:-$sink}")
+  printf '{"text":"%s","tooltip":"%s","class":"%s","percentage":%d}\n' \
+    "$text" "$tip" "$kind" "$vol"
+}
+
+emit
+
+# Re-emit on any pactl event that could change the display.
+exec pactl subscribe 2>/dev/null | while IFS= read -r line; do
+  case "$line" in
+    *"'change' on sink"*|*"'change' on server"*|*"'new' on sink"*|*"'remove' on sink"*)
+      emit
+      ;;
+  esac
+done

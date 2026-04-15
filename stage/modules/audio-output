@@ -1,8 +1,26 @@
 #!/usr/bin/env bash
 # Unified audio control: switch outputs, toggle mute.
-# Output classes are resolved at runtime from the port type reported by
-# pactl — no hardcoded sink names. Works on any system with pulseaudio or
-# pipewire-pulse.
+#
+# Profiles are resolved at runtime from a mix of port type, sink name and
+# sink description reported by pactl — no hardcoded sink names. Works on
+# any system with pulseaudio or pipewire-pulse.
+#
+# Matching priority (first hit wins):
+#   headset : bluez_output.* → port type Headphones|Headset → description
+#             matches a known wireless/bluetooth headset brand (Barracuda,
+#             Arctis, HyperX, Jabra, AirPods, ...). USB "Headset Adapter"
+#             dongles are explicitly excluded from the brand match so they
+#             stay available as plain analog aux outputs.
+#   hdmi    : port type HDMI → sink name contains "hdmi".
+#   speaker : alias for hdmi (most desktop "speakers" are the monitor via
+#             HDMI/DP). Falls back to any non-headset analog sink.
+#   aux     : port type Aux|Line → any remaining analog sink that is not
+#             already claimed as headset or HDMI.
+#   bluetooth: any bluez_output.* sink (paired bluetooth audio device).
+#
+# Override any of the above with environment regexes (extended regex,
+# checked against both sink name and description):
+#   DOTCTL_AUDIO_HEADSET_MATCH, DOTCTL_AUDIO_HDMI_MATCH, DOTCTL_AUDIO_AUX_MATCH
 
 set -euo pipefail
 
@@ -11,7 +29,7 @@ PROFILE="${1:-}"
 notify() { notify-send "$@" 2>/dev/null || true; }
 
 if [ -z "$PROFILE" ]; then
-  notify "Audio" "Usage: audio-output {headset|hdmi|aux|toggle-mute}"
+  notify "Audio" "Usage: audio-output {headset|hdmi|speaker|aux|bluetooth|toggle-mute}"
   exit 1
 fi
 
@@ -26,50 +44,135 @@ if [ "$PROFILE" = "toggle-mute" ]; then
   exit 0
 fi
 
-case "$PROFILE" in
-  headset) want='^(Headphones|Headset)$'; allow_bluez=1; icon='🎧'; label='Headset' ;;
-  hdmi)    want='^HDMI$';                  allow_bluez=0; icon='🖥️'; label='HDMI Output' ;;
-  aux)     want='^(Speaker|Line)$';        allow_bluez=0; icon='🔊'; label='AUX / Analog' ;;
-  *) notify "Audio" "Unknown action: $PROFILE"; exit 1 ;;
-esac
+: "${DOTCTL_AUDIO_HEADSET_MATCH:=}"
+: "${DOTCTL_AUDIO_HDMI_MATCH:=}"
+: "${DOTCTL_AUDIO_AUX_MATCH:=}"
 
-# Emit "sink|port_id|port_type" rows for every port of every sink.
+# Brand names that indicate a real wireless/bluetooth headset rather than
+# a generic analog dongle. Extended regex, case-insensitive.
+HEADSET_BRANDS='Barracuda|Arctis|HyperX|SteelSeries|Kraken|BlackShark|Nari|Astro A[0-9]|AirPods|QuietComfort|Bose QC|WH-1000|WF-1000|Jabra (Evolve|Elite)|Corsair (HS|Void)|Logitech G[0-9]|Beats|Plantronics|Poly Voyager|JBL Quantum|Sennheiser|Turtle Beach|EPOS|Bluetooth'
+
+# Emit "sink|port_id|port_type|description" rows for every port of every sink.
 rows=$(pactl list sinks 2>/dev/null | awk '
-  /^Sink #/                   { sink=""; inports=0; next }
+  /^Sink #/                   { sink=""; desc=""; inports=0; next }
   $1=="Name:"                 { sink=$2; inports=0; next }
+  $1=="Description:"          { sub(/^[[:space:]]*Description:[[:space:]]*/, ""); desc=$0; next }
   /^[[:space:]]+Ports:/       { inports=1; next }
   $1=="Active" && $2=="Port:" { inports=0; next }
   inports && /type:/ {
     pid=$1; sub(/:$/, "", pid)
     if (match($0, /type: [A-Za-z-]+/)) {
       t=substr($0, RSTART+6, RLENGTH-6)
-      if (sink != "") print sink "|" pid "|" t
+      if (sink != "") print sink "|" pid "|" t "|" desc
     }
   }
 ')
 
-match_sink=""; match_port=""
+# ---- matchers ---------------------------------------------------------------
 
-# Bluetooth headsets: bluez sinks don't always report a useful port type,
-# so for the "headset" class we prefer any bluez_output.* if present.
-if [ "$allow_bluez" = "1" ]; then
-  match_sink=$(pactl list short sinks 2>/dev/null | awk '$2 ~ /^bluez_output\./ {print $2; exit}')
-fi
+# Case-insensitive extended-regex match on "$1 $2" (combined haystack).
+rx_ci() {
+  local hay="$1" pat="$2"
+  [ -z "$pat" ] && return 1
+  shopt -s nocasematch
+  if [[ "$hay" =~ $pat ]]; then shopt -u nocasematch; return 0; fi
+  shopt -u nocasematch
+  return 1
+}
 
-if [ -z "$match_sink" ] && [ -n "$rows" ]; then
-  while IFS='|' read -r s p t; do
+is_headset_row() {
+  local s="$1" t="$2" d="$3"
+  rx_ci "$s $d" "$DOTCTL_AUDIO_HEADSET_MATCH" && return 0
+  [[ "$s" =~ ^bluez_output\. ]] && return 0
+  [[ "$t" == "Headphones" || "$t" == "Headset" ]] && return 0
+  # Brand-name match on description, but skip USB "Headset Adapter" dongles.
+  rx_ci "$d" "Adapter" && return 1
+  rx_ci "$d" "$HEADSET_BRANDS" && return 0
+  return 1
+}
+
+is_hdmi_row() {
+  local s="$1" t="$2" d="$3"
+  rx_ci "$s $d" "$DOTCTL_AUDIO_HDMI_MATCH" && return 0
+  [[ "$t" == "HDMI" ]] && return 0
+  [[ "$s" == *hdmi* ]] && return 0
+  return 1
+}
+
+is_analog_row() {
+  local t="$1"
+  case "$t" in
+    Analog|Aux|Line|Speaker) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Iterate rows and return the first matching "sink|port_id". Caller provides
+# the predicate name. Extra predicate names prefixed with "!" mean "must NOT
+# match" — used to exclude headset/hdmi rows from the aux fallback.
+pick_row() {
+  local primary="$1"; shift
+  local excludes=("$@")
+  local s p t d ex
+  while IFS='|' read -r s p t d; do
     [ -z "$s" ] && continue
-    if [[ "$t" =~ $want ]]; then
-      match_sink="$s"; match_port="$p"
-      break
-    fi
+    "$primary" "$s" "$t" "$d" || continue
+    local skip=0
+    for ex in "${excludes[@]}"; do
+      if "$ex" "$s" "$t" "$d"; then skip=1; break; fi
+    done
+    [ "$skip" -eq 0 ] && { printf '%s|%s|%s\n' "$s" "$p" "$d"; return 0; }
   done <<<"$rows"
-fi
+  return 1
+}
 
-if [ -z "$match_sink" ]; then
+# aux predicate: analog port type, with env override allowed.
+is_aux_row() {
+  local s="$1" t="$2" d="$3"
+  rx_ci "$s $d" "$DOTCTL_AUDIO_AUX_MATCH" && return 0
+  is_analog_row "$t"
+}
+
+is_bluetooth_row() {
+  local s="$1"
+  [[ "$s" =~ ^bluez_output\. ]]
+}
+
+case "$PROFILE" in
+  headset)
+    label='Headset'; icon='🎧'
+    picked=$(pick_row is_headset_row || true)
+    ;;
+  hdmi)
+    label='HDMI Output'; icon='🖥️'
+    picked=$(pick_row is_hdmi_row || true)
+    ;;
+  speaker)
+    label='Speakers'; icon='🖥️'
+    picked=$(pick_row is_hdmi_row || true)
+    # Speaker fallback: any analog sink that is neither headset nor HDMI.
+    if [ -z "$picked" ]; then
+      picked=$(pick_row is_aux_row is_headset_row is_hdmi_row || true)
+    fi
+    ;;
+  aux)
+    label='AUX / Analog'; icon='🎚️'
+    picked=$(pick_row is_aux_row is_headset_row is_hdmi_row || true)
+    ;;
+  bluetooth|bluez|bt)
+    label='Bluetooth'; icon='🔵'
+    picked=$(pick_row is_bluetooth_row || true)
+    ;;
+  *)
+    notify "Audio" "Unknown action: $PROFILE"; exit 1 ;;
+esac
+
+if [ -z "${picked:-}" ]; then
   notify "Audio" "No sink matching '$label' on this system"
   exit 1
 fi
+
+IFS='|' read -r match_sink match_port match_desc <<<"$picked"
 
 if [ -n "$match_port" ]; then
   pactl set-sink-port "$match_sink" "$match_port" >/dev/null 2>&1 || true
@@ -80,4 +183,4 @@ pactl set-default-sink "$match_sink"
 pactl list short sink-inputs 2>/dev/null | awk '{print $1}' \
   | xargs -r -I{} pactl move-sink-input {} "$match_sink" 2>/dev/null || true
 
-notify "$icon $label" "$match_sink"
+notify "$icon $label" "${match_desc:-$match_sink}"

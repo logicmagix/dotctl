@@ -9,22 +9,24 @@ fi
 choice="$(
   printf '%s\n' \
     '🎧 Headset' \
-    '🖥️ HDMI Output' \
-    '🔊 AUX / Analog' |
+    '🖥️ Speakers (HDMI)' \
+    '🎚️ AUX / Analog' \
+    '🔵 Bluetooth' |
   wofi --dmenu \
        --prompt 'Audio output' \
        --location 3 \
        --insensitive \
        --width 420 \
-       --height 250 \
+       --height 280 \
        --xoffset -35 \
        --yoffset 15
 )"
 
 case "$choice" in
-  "🎧 Headset")      audio-output headset ;;
-  "🖥️ HDMI Output") audio-output hdmi ;;
-  "🔊 AUX / Analog") audio-output aux ;;
+  "🎧 Headset")        audio-output headset ;;
+  "🖥️ Speakers (HDMI)") audio-output speaker ;;
+  "🎚️ AUX / Analog")  audio-output aux ;;
+  "🔵 Bluetooth")      audio-output bluetooth ;;
   *) exit 0 ;;
 esac
 

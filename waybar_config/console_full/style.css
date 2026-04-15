@@ -100,7 +100,7 @@
 #memory,
 #mode,
 #network,
-/*#pulseaudio,*/
+/*#custom-audio,*/
 #temperature,
 /*#tray,*/
 #backlight,
@@ -279,7 +279,7 @@
 /* System modules (right side) */
 #tray        { background: @black; }
 #network     { background: @plum;  color: @white; }
-#pulseaudio  { background: @rose;  color: @black; }
+#custom-audio  { background: @rose;  color: @black; }
 #battery     { background: @teal;  color: @white; }
 #temperature { background: @lime;  color: @black; }
 
@@ -368,7 +368,7 @@
 #custom-browser,
 #battery,
 #network,
-#pulseaudio {
+#custom-audio {
   transition: background-color 0.18s ease-out, color 0.18s ease-out;
 }
 
@@ -401,7 +401,7 @@
 /* System module hover */
 #battery:hover    { background: shade(@teal, 1.22); }
 #network:hover    { background: shade(@plum, 1.22); color: @hover_fg; }
-#pulseaudio:hover { background: shade(@rose, 1.22); }
+#custom-audio:hover { background: shade(@rose, 1.22); }
 
 /* Center clock — keep its own opaque bg so it stays readable even when
    the bar is transparent (otherwise GTK's default hover leaks through). */

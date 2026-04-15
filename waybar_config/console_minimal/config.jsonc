@@ -25,7 +25,7 @@
     /* VPN:BEGIN */
     "custom/rsep-vpn",     "custom/vpn",
     /* VPN:END */
-    "custom/rsep-pulse",   "pulseaudio"
+    "custom/rsep-pulse",   "custom/audio"
   ],
   // ===== Separators (pointed chevrons — swapped to half-circles when WAYBAR_DECOR=round) =====
   "custom/rarrow1":         { "format": "", "tooltip": false },
@@ -107,20 +107,14 @@
     "spacing": 6,
     "reverse-direction": false
   },
-  "pulseaudio": {
-    "format": "{icon}{volume}%",
-    "format-muted": "🔇 {volume}%",
-    "scroll-step": 2,
+  "custom/audio": {
+    "format": "{}",
+    "return-type": "json",
+    "exec": "audio-output-status",
     "on-click": "audio-output-menu",
     "on-click-right": "pavucontrol",
-    "tooltip-format": "{icon} {volume}%",
-    "format-icons": {
-      "headphone": "🎧",
-      "headset": "🎧",
-      "hands-free": "🎧",
-      "hdmi": ["🔈","🔉","🔊"],
-      "default": ["🔈","🔉","🔊"]
-    }
+    "on-scroll-up":   "pactl set-sink-volume @DEFAULT_SINK@ +2%",
+    "on-scroll-down": "pactl set-sink-volume @DEFAULT_SINK@ -2%"
   },
   "hyprland/workspaces": {
     "disable-scroll": false,

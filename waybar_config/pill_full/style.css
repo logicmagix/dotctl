@@ -97,7 +97,7 @@
 /* VPN:BEGIN */
 #custom-vpn,
 /* VPN:END */
-#pulseaudio {
+#custom-audio {
   border-radius: 14px;
   margin: 5px 3px;
   padding: 0 12px;
@@ -248,7 +248,7 @@
   padding: 0 8px;
 }
 
-#pulseaudio {
+#custom-audio {
   color: @rose;
   border-color: @rose;
 }
@@ -277,7 +277,7 @@
 #custom-files:hover         { background: @blue;  color: @hover_fg; }
 #custom-editor:hover         { background: @olive; color: @hover_fg; }
 #custom-browser:hover         { background: @gold;  color: @hover_fg; }
-#pulseaudio:hover           { background: @rose;  color: @hover_fg; }
+#custom-audio:hover           { background: @rose;  color: @hover_fg; }
 #clock:hover                { background: @blue;  color: @hover_fg; }
 /* VPN:BEGIN */
 #custom-vpn.on:hover              { background: @green; color: @hover_fg; }

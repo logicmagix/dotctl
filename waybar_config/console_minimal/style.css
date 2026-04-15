@@ -90,7 +90,7 @@
 #memory,
 #mode,
 #network,
-/*#pulseaudio,*/
+/*#custom-audio,*/
 #temperature,
 /*#tray,*/
 #backlight,
@@ -261,7 +261,7 @@
 
 /* System modules (right side) */
 #tray        { background: @black; }
-#pulseaudio  { background: @rose;  color: @black; }
+#custom-audio  { background: @rose;  color: @black; }
 
 /* Right-side chevrons () — each bridges two adjacent blocks */
 #custom-rsep-browser  { color: @gold;  background: transparent; } /* bar bg  browser          */
@@ -333,7 +333,7 @@
 #custom-launcher,
 /* NOTE: gpu / cputemp intentionally NOT here */
 #custom-browser,
-#pulseaudio {
+#custom-audio {
   transition: background-color 0.18s ease-out, color 0.18s ease-out;
 }
 
@@ -348,7 +348,7 @@
 }
 
 /* System module hover */
-#pulseaudio:hover { background: shade(@rose, 1.22); }
+#custom-audio:hover { background: shade(@rose, 1.22); }
 
 /* Center clock — keep its own opaque bg so it stays readable even when
    the bar is transparent (otherwise GTK's default hover leaks through). */
