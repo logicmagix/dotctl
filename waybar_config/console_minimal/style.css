@@ -272,18 +272,23 @@
 #custom-vpn {
   padding-left: 8pt;
   padding-right: 8pt;
+  transition: background-color 0.18s ease-out, color 0.18s ease-out;
 }
-#custom-vpn.on              { background: @green; color: @white; }
-#custom-vpn.on.killswitch   { background: @mint;  color: @black; }
-#custom-vpn.off             { background: @red;   color: @white; }
+#custom-vpn.on              { background: @green; color: @hover_fg; }
+#custom-vpn.on.killswitch   { background: @mint;  color: @black;    }
+#custom-vpn.off             { background: @red;   color: @hover_fg; }
 #custom-vpn.off.killswitch {
   background: @red;
-  color: @white;
+  color: @hover_fg;
   animation-name: blink-critical;
   animation-duration: 1s;
   animation-iteration-count: infinite;
   animation-direction: alternate;
 }
+#custom-vpn.on:hover             { background: shade(@green, 1.22); }
+#custom-vpn.on.killswitch:hover  { background: shade(@mint,  1.22); }
+#custom-vpn.off:hover,
+#custom-vpn.off.killswitch:hover { background: shade(@red,   1.22); }
 #custom-rsep-vpn                 { color: @black; background: @black; } /* tray  vpn (state-overridden) */
 #custom-rsep-vpn.on              { color: @green; }
 #custom-rsep-vpn.on.killswitch   { color: @mint;  }

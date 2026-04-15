@@ -100,13 +100,13 @@ emit() {
   esac
 
   if [ "$mute" = "yes" ]; then
-    text="${type_icon} 🔇 ${vol}%"
+    text="${type_icon} 🔇 ${vol}% "
   else
     if   [ "$vol" -lt 34 ]; then vol_icon='🔈'
     elif [ "$vol" -lt 67 ]; then vol_icon='🔉'
     else                         vol_icon='🔊'
     fi
-    text="${type_icon} ${vol_icon} ${vol}%"
+    text="${type_icon} ${vol_icon} ${vol}% "
   fi
 
   tip=$(json_escape "${desc:-$sink}")
