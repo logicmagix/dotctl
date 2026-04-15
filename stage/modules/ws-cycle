@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+DIR="${1:-next}"     # "next" or "prev"
+MIN="${2:-1}"        # lowest workspace number
+MAX="${3:-10}"       # highest workspace number
+
+cur="$(hyprctl -j activeworkspace | jq -r '.id')"
+
+# If you are on a "special" workspace (negative id), go to MIN
+if [[ "$cur" -lt 0 ]]; then
+  hyprctl dispatch workspace "$MIN"
+  exit 0
+fi
+
+if [[ "$DIR" == "prev" ]]; then
+  nxt=$((cur - 1))
+  [[ "$nxt" -lt "$MIN" ]] && nxt="$MAX"
+else
+  nxt=$((cur + 1))
+  [[ "$nxt" -gt "$MAX" ]] && nxt="$MIN"
+fi
+
+hyprctl dispatch workspace "$nxt"
+

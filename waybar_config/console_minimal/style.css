@@ -70,6 +70,11 @@
   -gtk-icon-shadow: none;
 }
 
+/* -- Tooltips ----------------------------------------------------- */
+tooltip {
+  font-size: 14px;
+}
+
 /* -- Bar Container ------------------------------------------------ */
 #waybar {
   /* TRANSPARENT:BEGIN - replaced at apply time by dotctl */
@@ -77,8 +82,8 @@
   /* TRANSPARENT:END */
   color: @white;
   /* FONT:BEGIN - replaced at apply time by dotctl */
-  font-family: "MesloLGS NF", "Meslo LG S", monospace;
-  font-size: 11pt;
+  font-family: "MesloLGS NF", "Symbols Nerd Font", "Meslo LG S", monospace;
+  font-size: 15px;
   font-weight: 500;
   /* FONT:END */
 }
@@ -98,8 +103,8 @@
 #disk,
 #user,
 #mpris {
-  padding-left: 8pt;
-  padding-right: 8pt;
+  padding-left: 11px;
+  padding-right: 11px;
 }
 
 /* -- Warning States ----------------------------------------------- */
@@ -141,8 +146,8 @@
   background: @red;
   color: @hover_fg;   /* palette-aware */
   font-size: 26px;
-  padding-left: 8pt;
-  padding-right: 8pt;
+  padding-left: 11px;
+  padding-right: 11px;
 }
 
 /* App launcher */
@@ -150,8 +155,8 @@
   background: @teal;
   color: @hover_fg;   /* palette-aware */
   font-size: 32px;
-  padding-left: 8pt;
-  padding-right: 8pt;
+  padding-left: 11px;
+  padding-right: 11px;
 }
 
 /* Workspaces */
@@ -160,8 +165,8 @@
 }
 
 #workspaces button {
-  padding-left: 4pt;
-  padding-right: 4pt;
+  padding-left: 5px;
+  padding-right: 5px;
   color: @white;
   background: @ws-unfocused;
 }
@@ -200,8 +205,8 @@
 #custom-cputemp {
   background: @olive;
   color: @white;
-  padding-left: 10pt;
-  padding-right: 8pt;
+  padding-left: 13px;
+  padding-right: 11px;
 }
 
 /* RAM usage */
@@ -214,8 +219,8 @@
 #custom-gpu {
   background: @olive;
   color: @white;
-  padding-left: 10pt;
-  padding-right: 8pt;
+  padding-left: 13px;
+  padding-right: 11px;
 }
 
 /* Left-side chevrons () - each bridges two adjacent blocks */
@@ -228,8 +233,8 @@
    =================================================================== */
 
 #window {
-  margin-right: 45pt;
-  margin-left: 45pt;
+  margin-right: 60px;
+  margin-left: 60px;
 }
 
 /* Center chevrons - clickable workspace prev/next */
@@ -237,7 +242,7 @@
 #custom-rarrow-center-r {
   color: @gold;
   background: transparent;
-  padding: 0 4pt;
+  padding: 0 5px;
 }
 
 /* Clock - .date/.time classes from old dual-clock setup, kept for reuse */
@@ -270,8 +275,8 @@
 
 /* VPN:BEGIN - stripped when WAYBAR_VPN=off */
 #custom-vpn {
-  padding-left: 8pt;
-  padding-right: 8pt;
+  padding-left: 11px;
+  padding-right: 11px;
   transition: background-color 0.18s ease-out, color 0.18s ease-out;
 }
 #custom-vpn.on              { background: @green; color: @hover_fg; }
@@ -317,7 +322,7 @@
 #custom-rsep-vpn,
 /* VPN:END */
 #custom-rsep-pulse {
-  font-size: 20pt;
+  font-size: 27px;
   padding-top: 0px;
   padding-bottom: 0px;
   min-height: 33px;

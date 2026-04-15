@@ -502,7 +502,7 @@ apply_waybar() {
 
   # Override the bar font-size from state - scoped to `#waybar { ... }` so
   # larger chevron/separator font sizes elsewhere in the CSS stay authored.
-  sed -i -E "/^#waybar[[:space:]]*\{/,/^\}/ s/(font-size:[[:space:]]*)[0-9]+(\.[0-9]+)?pt/\1${WAYBAR_FONT_SIZE}pt/" "$WAYBAR_DIR/style.css"
+  sed -i -E "/^#waybar[[:space:]]*\{/,/^\}/ s/(font-size:[[:space:]]*)[0-9]+(\.[0-9]+)?(pt|px)/\1${WAYBAR_FONT_SIZE}px/" "$WAYBAR_DIR/style.css"
 
   # Transparent bar background toggle: the canonical `#waybar { background:
   # transparent; }` block is wrapped in `/* TRANSPARENT:BEGIN */ ... END */`.

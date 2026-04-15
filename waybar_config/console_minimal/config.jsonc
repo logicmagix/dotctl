@@ -35,13 +35,13 @@
     "format": "",
     "tooltip": true,
     "tooltip-format": "Previous workspace",
-    "on-click": "~/.config/hypr/ws-cycle.sh prev 1 10"
+    "on-click": "ws-cycle prev 1 10"
   },
   "custom/rarrow-center-r": {
     "format": "",
     "tooltip": true,
     "tooltip-format": "Next workspace",
-    "on-click": "~/.config/hypr/ws-cycle.sh next 1 10"
+    "on-click": "ws-cycle next 1 10"
   },
   "custom/rsep-browser":    { "format": "", "tooltip": false },
   "custom/rsep-tray":       { "format": "", "tooltip": false },

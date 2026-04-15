@@ -51,19 +51,21 @@ ${BOLD}dotctl installer${RST}
 
 This script will:
   1. Verify hyprland + hyprpaper are installed (hard requirement)
-  2. Optionally install runtime packages (waybar, cava, kitty, mako, wofi, …)
+  2. Optionally install runtime packages (waybar, cava, kitty, mako, wofi,
+     lm-sensors, libnotify, pavucontrol, …)
   3. Symlink ${BOLD}$SYS_BIN/${RST}{dotctl, power, launcher, cputemp, gputemp,
      audio-output, audio-output-menu, audio-hotplug-watch} → repo
   4. Optionally symlink ${BOLD}$SYS_BIN/${RST}{vpnctl, vpn-status-indicator} → repo
   5. Copy ${BOLD}~/.config/${RST}{cava, kitty, mako, wofi, waybar} from repo config dirs
-  6. Copy ${BOLD}~/.config/dotctl/cycle/${RST} (wallpaper cycle scripts + template)
-  7. Copy ${BOLD}~/.config/hypr/${RST}{dotctl-keybinds.conf, dotctl-colors.conf} snippets
+  6. Install bundled Nerd Fonts (MesloLGS NF, Phoenix) to ~/.local/share/fonts/
+  7. Copy ${BOLD}~/.config/dotctl/cycle/${RST} (wallpaper cycle scripts + template)
+  8. Copy ${BOLD}~/.config/hypr/${RST}{dotctl-keybinds.conf, dotctl-colors.conf} snippets
      (you wire them yourself with one-line source= directives)
-  8. Copy the man page to $SYS_MAN/dotctl.1.gz
-  9. Copy wallpapers to ~/Pictures/dotctl/wallpapers/ (~61 MB, required for
+  9. Copy the man page to $SYS_MAN/dotctl.1.gz
+ 10. Copy wallpapers to ~/Pictures/dotctl/wallpapers/ (~61 MB, required for
      dotctl configure to find at least one theme)
 
-${DIM}sudo is requested once for the system steps (3, 4, 8). Everything else runs as you.${RST}
+${DIM}sudo is requested once for the system steps (3, 4, 9). Everything else runs as you.${RST}
 
 BANNER
 
@@ -168,22 +170,48 @@ pkg_name() {
   case "$PKG_MANAGER" in
     emerge)
       case "$canonical" in
-        waybar)        printf 'gui-apps/waybar\n' ;;
-        cava)          printf 'media-sound/cava\n' ;;
-        kitty)         printf 'x11-terms/kitty\n' ;;
-        mako)          printf 'gui-apps/mako\n' ;;
-        wofi)          printf 'gui-apps/wofi\n' ;;
-        inotify-tools) printf 'sys-fs/inotify-tools\n' ;;
-        jq)            printf 'app-misc/jq\n' ;;
-        wl-clipboard)  printf 'gui-apps/wl-clipboard\n' ;;
+        waybar)           printf 'gui-apps/waybar\n' ;;
+        cava)             printf 'media-sound/cava\n' ;;
+        kitty)            printf 'x11-terms/kitty\n' ;;
+        mako)             printf 'gui-apps/mako\n' ;;
+        wofi)             printf 'gui-apps/wofi\n' ;;
+        inotify-tools)    printf 'sys-fs/inotify-tools\n' ;;
+        jq)               printf 'app-misc/jq\n' ;;
+        wl-clipboard)     printf 'gui-apps/wl-clipboard\n' ;;
+        lm-sensors)       printf 'sys-apps/lm-sensors\n' ;;
+        libnotify)        printf 'x11-libs/libnotify\n' ;;
+        pavucontrol)      printf 'media-sound/pavucontrol\n' ;;
+        noto-fonts-emoji)    printf 'media-fonts/noto-emoji\n' ;;
+        nerd-fonts-symbols)  printf 'media-fonts/nerd-fonts\n' ;;
       esac
       ;;
-    pacman|apt|dnf|zypper|xbps|slackpkg)
+    pacman)
+      case "$canonical" in
+        lm-sensors)         printf 'lm_sensors\n' ;;
+        nerd-fonts-symbols) printf 'ttf-nerd-fonts-symbols\n' ;;
+        *)                  printf '%s\n' "$canonical" ;;
+      esac
+      ;;
+    apt|dnf|zypper|xbps|slackpkg)
       printf '%s\n' "$canonical"
       ;;
     *)
       printf '%s\n' "$canonical"
       ;;
+  esac
+}
+
+# Canonical → check whether the package is already present.
+# Returns 0 (true) if installed, 1 (false) if missing.
+pkg_installed() {
+  case "$1" in
+    # Font packages: test via fontconfig instead of command -v
+    noto-fonts-emoji)     fc-list : family | grep -qi 'Noto Color Emoji' ;;
+    nerd-fonts-symbols)   fc-list : family | grep -qi 'Symbols Nerd Font' ;;
+    # Everything else: look for the binary it provides
+    *) local bin
+       bin="$(pkg_binary "$1")"
+       [[ -n "$bin" ]] && command -v "$bin" >/dev/null 2>&1 ;;
   esac
 }
 
@@ -198,10 +226,13 @@ pkg_binary() {
     inotify-tools) printf 'inotifywait\n' ;;
     jq)            printf 'jq\n' ;;
     wl-clipboard)  printf 'wl-copy\n' ;;
+    lm-sensors)    printf 'sensors\n' ;;
+    libnotify)     printf 'notify-send\n' ;;
+    pavucontrol)   printf 'pavucontrol\n' ;;
   esac
 }
 
-PKG_CANONICAL=( waybar cava kitty mako wofi inotify-tools jq wl-clipboard )
+PKG_CANONICAL=( waybar cava kitty mako wofi inotify-tools jq wl-clipboard lm-sensors libnotify pavucontrol noto-fonts-emoji nerd-fonts-symbols )
 
 # ── Gate: install packages ──────────────────────────────────────────────────
 
@@ -213,8 +244,7 @@ if confirm "Update package manager and install runtime deps?" n; then
 
   TO_INSTALL=()
   for canonical in "${PKG_CANONICAL[@]}"; do
-    bin="$(pkg_binary "$canonical")"
-    if command -v "$bin" >/dev/null 2>&1; then
+    if pkg_installed "$canonical"; then
       skip "$canonical already installed"
     else
       TO_INSTALL+=( "$(pkg_name "$canonical")" )
@@ -327,6 +357,71 @@ copy_config "$REPO/kitty_config"  "$CONFIG_HOME/kitty"
 copy_config "$REPO/mako_config"   "$CONFIG_HOME/mako"
 copy_config "$REPO/wofi_config"   "$CONFIG_HOME/wofi"
 copy_config "$REPO/waybar_config" "$CONFIG_HOME/waybar"
+
+# ── Fonts ──────────────────────────────────────────────────────────────────
+# Install bundled Nerd Fonts (MesloLGS NF, Phoenix) so waybar chevrons,
+# powerline glyphs, distro logos, and wofi menus render correctly.
+
+FONT_DIR="$DATA_HOME/fonts"
+info "Installing bundled fonts to $FONT_DIR/…"
+mkdir -p "$FONT_DIR"
+
+font_changed=0
+for ttf in "$REPO"/fonts/*/*.ttf; do
+  [[ -f "$ttf" ]] || continue
+  dest="$FONT_DIR/$(basename "$ttf")"
+  if [[ -f "$dest" ]] && cmp -s "$ttf" "$dest"; then
+    skip "$(basename "$ttf") (unchanged)"
+  else
+    cp "$ttf" "$dest"
+    ok "$(basename "$ttf")"
+    font_changed=1
+  fi
+done
+
+if (( font_changed )); then
+  if command -v fc-cache >/dev/null 2>&1; then
+    fc-cache -f "$FONT_DIR" 2>/dev/null
+    ok "font cache rebuilt"
+  else
+    warn "fc-cache not found - fonts installed but cache not rebuilt"
+    warn "install fontconfig and run: fc-cache -f $FONT_DIR"
+  fi
+else
+  skip "all fonts already up to date"
+fi
+
+# ── Fontconfig DPI ─────────────────────────────────────────────────────────
+# On pure Wayland (no X server), fontconfig falls back to 75 DPI, which
+# makes all fonts render ~22% smaller than the 96 DPI that X/desktop
+# environments normally set. If no user fontconfig exists and the current
+# DPI is below 96, install a user override so GTK/Pango apps (waybar,
+# wofi, mako) render fonts at the expected size.
+
+FC_USER_CONF="$CONFIG_HOME/fontconfig/fonts.conf"
+current_dpi=$(fc-match --format='%{dpi}' : 2>/dev/null || echo 0)
+current_dpi=${current_dpi%%.*}   # truncate decimal
+
+if (( current_dpi > 0 && current_dpi < 96 )) && [[ ! -f "$FC_USER_CONF" ]]; then
+  info "Fontconfig DPI is ${current_dpi} (Wayland default) - setting to 96…"
+  mkdir -p "$(dirname "$FC_USER_CONF")"
+  cat > "$FC_USER_CONF" <<'FCEOF'
+<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">
+<!-- dotctl: override Wayland's default 75 DPI so fonts render at standard
+     desktop size. Remove or edit this file if you prefer a different DPI. -->
+<fontconfig>
+  <match target="pattern">
+    <edit name="dpi" mode="assign"><double>96</double></edit>
+  </match>
+</fontconfig>
+FCEOF
+  ok "$FC_USER_CONF (DPI 75 → 96)"
+elif (( current_dpi >= 96 )); then
+  skip "fontconfig DPI already ${current_dpi}"
+elif [[ -f "$FC_USER_CONF" ]]; then
+  skip "user fontconfig already exists ($FC_USER_CONF)"
+fi
 
 # Cycle scripts (copies - user curates IMAGES=() per theme)
 info "Installing cycle scripts to $CONFIG_HOME/dotctl/cycle/…"
