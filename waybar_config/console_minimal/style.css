@@ -1,0 +1,355 @@
+/* ===================================================================
+   WAYBAR STYLE — console (chevron blocks), minimal module set
+   =================================================================== */
+
+/* -- Keyframe Animations ------------------------------------------ */
+@keyframes blink-critical {
+  to {
+    background-color: @critical;
+  }
+}
+
+/* PALETTE:BEGIN — replaced at apply time by dotctl */
+/* -- forest palette (canonical default — replaced at apply time) --- */
+@define-color black    #141410;
+@define-color red      #8b3a3a;  /* oxblood */
+@define-color green    #4b5320;  /* drab green */
+@define-color yellow   #a89152;  /* khaki */
+@define-color blue     #3e4a33;  /* field drab */
+@define-color purple   #6b4f2a;  /* leather brown */
+@define-color aqua     #5b6d3e;  /* drab sage */
+@define-color gray     #a89973;  /* dim tan */
+@define-color brgray   #6e6855;  /* olive gray */
+@define-color brred    #b85450;  /* rust red */
+@define-color brgreen  #8a9a3d;  /* brighter OD */
+@define-color bryellow #c3b091;  /* light khaki / tan */
+@define-color brblue   #5a6b52;  /* lighter field drab */
+@define-color brpurple #8b6f3f;  /* coyote brown */
+@define-color braqua   #9aa370;  /* pale sage */
+@define-color white    #d9cba4;  /* tan fg */
+@define-color bg2      #3d3a28;
+
+/* -- Bar Accent Colors --------------------------------------------
+   Name     Source     Hex       Used by
+   -------  ---------  -------   ---------------------------------
+   rose     brpurple   #8b6f3f   pulseaudio, calc  (coyote brown)
+   plum     purple     #6b4f2a   network, files   (leather)
+   mint     braqua     #9aa370   memory, kitty    (pale sage)
+   olive    green      #4b5320   gpu, cputemp, gedit (OD green)
+   lime     brgreen    #8a9a3d   cpu              (bright OD)
+   gold     bryellow   #c3b091   browser          (khaki / tan)
+   teal     aqua       #5b6d3e   launcher         (drab sage)
+   ------------------------------------------------------------ */
+@define-color rose   @brpurple;
+@define-color plum   @purple;
+@define-color mint   @braqua;
+@define-color olive  @green;
+@define-color lime   @brgreen;
+@define-color gold   @bryellow;
+@define-color teal   @aqua;
+
+/* Status colors */
+@define-color warning  @bryellow;
+@define-color critical @red;
+
+/* Workspace button states */
+@define-color ws-unfocused @bg2;
+@define-color ws-focused   @braqua;
+@define-color ws-visible   @purple;
+/* PALETTE:END */
+
+/* -- Global Reset ------------------------------------------------- */
+* {
+  border: none;
+  border-radius: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  box-shadow: none;
+  text-shadow: none;
+  -gtk-icon-shadow: none;
+}
+
+/* -- Bar Container ------------------------------------------------ */
+#waybar {
+  /* TRANSPARENT:BEGIN — replaced at apply time by dotctl */
+  background: transparent;
+  /* TRANSPARENT:END */
+  color: @white;
+  /* FONT:BEGIN — replaced at apply time by dotctl */
+  font-family: "MesloLGS NF", "Meslo LG S", monospace;
+  font-size: 11pt;
+  font-weight: 500;
+  /* FONT:END */
+}
+
+/* -- Shared Module Padding ---------------------------------------- */
+#battery,
+#clock,
+#cpu,
+#memory,
+#mode,
+#network,
+/*#pulseaudio,*/
+#temperature,
+/*#tray,*/
+#backlight,
+#idle_inhibitor,
+#disk,
+#user,
+#mpris {
+  padding-left: 8pt;
+  padding-right: 8pt;
+}
+
+/* -- Warning States ----------------------------------------------- */
+#network.disconnected,
+#memory.warning,
+#cpu.warning,
+#temperature.warning,
+#battery.warning.discharging {
+  color: @warning;
+}
+
+/* -- Critical States (blinking) ----------------------------------- */
+#mode,
+#memory.critical,
+#cpu.critical,
+#temperature.critical,
+#battery.critical.discharging {
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+  animation-name: blink-critical;
+  animation-duration: 1s;
+}
+
+/* -- Mode Indicator (hyprland submap / sway mode) ----------------- */
+#mode {
+  color: @white;
+  background: @black;
+}
+
+/* ===================================================================
+   LEFT SIDE — system info with right-pointing () chevrons
+   power  launcher  workspaces  cpu  cputemp
+   memory  gpu  (end)
+   =================================================================== */
+
+/* Power button (far left) */
+#custom-power {
+  background: @red;
+  color: @hover_fg;   /* palette-aware */
+  font-size: 26px;
+  padding-left: 8pt;
+  padding-right: 8pt;
+}
+
+/* App launcher */
+#custom-launcher {
+  background: @teal;
+  color: @hover_fg;   /* palette-aware */
+  font-size: 32px;
+  padding-left: 8pt;
+  padding-right: 8pt;
+}
+
+/* Workspaces */
+#workspaces {
+  /* no margin pull — kept distinct from the launcher block */
+}
+
+#workspaces button {
+  padding-left: 4pt;
+  padding-right: 4pt;
+  color: @white;
+  background: @ws-unfocused;
+}
+
+/* Visible on unfocused output */
+#workspaces button.visible {
+  color: @white;
+  background: @ws-visible;
+}
+
+/* Focused workspace */
+#workspaces button.focused {
+  color: @black;
+  background: @ws-focused;
+}
+
+/* Contains an urgent window */
+#workspaces button.urgent {
+  color: @black;
+  background: @warning;
+}
+
+/* Hover */
+#workspaces button:hover {
+  background: @plum;
+  color: @hover_fg;
+}
+
+/* CPU load */
+#cpu {
+  background: @lime;
+  color: @black;
+}
+
+/* CPU temperature */
+#custom-cputemp {
+  background: @olive;
+  color: @white;
+  padding-left: 10pt;
+  padding-right: 8pt;
+}
+
+/* RAM usage */
+#memory {
+  background: @mint;
+  color: @black;
+}
+
+/* GPU info */
+#custom-gpu {
+  background: @olive;
+  color: @white;
+  padding-left: 10pt;
+  padding-right: 8pt;
+}
+
+/* Left-side chevrons () — each bridges two adjacent blocks */
+#custom-rarrow1  { color: @red;   background: @teal;       } /* power  launcher       */
+#custom-rarrow2  { color: @teal;  background: @plum;       } /* launcher  workspace area  */
+#custom-rarrow3  { color: @plum;  background: transparent; } /* workspaces  (end)        */
+
+/* ===================================================================
+   CENTER — clock with decorative bookend arrows
+   =================================================================== */
+
+#window {
+  margin-right: 45pt;
+  margin-left: 45pt;
+}
+
+/* Center chevrons — clickable workspace prev/next */
+#custom-rarrow-center-l,
+#custom-rarrow-center-r {
+  color: @gold;
+  background: transparent;
+  padding: 0 4pt;
+}
+
+/* Clock — .date/.time classes from old dual-clock setup, kept for reuse */
+#clock.date {
+  background: @black;
+  color: @white;
+}
+#clock.time {
+  background: @white;
+  color: @black;
+}
+
+/* ===================================================================
+   RIGHT SIDE — app launchers + system tray + audio
+   Uses left-pointing () chevrons.
+   browser  tray  pulseaudio
+   =================================================================== */
+
+/* App launcher blocks */
+#custom-browser  { background: @gold;  color: @black; }
+
+/* System modules (right side) */
+#tray        { background: @black; }
+#pulseaudio  { background: @rose;  color: @black; }
+
+/* Right-side chevrons () — each bridges two adjacent blocks */
+#custom-rsep-browser  { color: @gold;  background: transparent; } /* bar bg  browser          */
+#custom-rsep-tray     { color: @black; background: @gold;       } /* browser  tray            */
+#custom-rsep-pulse    { color: @rose;  background: @black;      } /* tray  pulseaudio     */
+
+/* VPN:BEGIN — stripped when WAYBAR_VPN=off */
+#custom-vpn {
+  padding-left: 8pt;
+  padding-right: 8pt;
+}
+#custom-vpn.on              { background: @green; color: @white; }
+#custom-vpn.on.killswitch   { background: @mint;  color: @black; }
+#custom-vpn.off             { background: @red;   color: @white; }
+#custom-vpn.off.killswitch {
+  background: @red;
+  color: @white;
+  animation-name: blink-critical;
+  animation-duration: 1s;
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+}
+#custom-rsep-vpn                 { color: @black; background: @black; } /* tray  vpn (state-overridden) */
+#custom-rsep-vpn.on              { color: @green; }
+#custom-rsep-vpn.on.killswitch   { color: @mint;  }
+#custom-rsep-vpn.off,
+#custom-rsep-vpn.off.killswitch  { color: @red;   }
+#custom-rsep-pulse.on             { background: @green; }
+#custom-rsep-pulse.on.killswitch  { background: @mint;  }
+#custom-rsep-pulse.off,
+#custom-rsep-pulse.off.killswitch { background: @red;   }
+/* VPN:END */
+
+/* ===================================================================
+   CHEVRON SIZING & TRANSITIONS
+   Applied to all arrow/chevron glyphs for consistent height
+   and smooth color fading.
+   =================================================================== */
+
+#custom-rarrow1,
+#custom-rarrow2,
+#custom-rarrow3,
+#custom-rarrow-center-l,
+#custom-rarrow-center-r,
+#custom-rsep-browser,
+#custom-rsep-tray,
+/* VPN:BEGIN */
+#custom-rsep-vpn,
+/* VPN:END */
+#custom-rsep-pulse {
+  font-size: 20pt;
+  padding-top: 0px;
+  padding-bottom: 0px;
+  min-height: 33px;
+  transition-property: background-color, color;
+  transition-duration: 0.18s;
+  transition-timing-function: ease-out;
+}
+
+/* ===================================================================
+   HOVER EFFECTS
+   Smooth brighten on hover for interactive blocks.
+   System monitors (cpu, memory, temperature, gpu, cputemp)
+   are intentionally excluded — no hover on status readouts.
+   =================================================================== */
+
+/* Transition setup for interactive modules */
+#custom-power,
+#custom-launcher,
+/* NOTE: gpu / cputemp intentionally NOT here */
+#custom-browser,
+#pulseaudio {
+  transition: background-color 0.18s ease-out, color 0.18s ease-out;
+}
+
+/* Left-side hover */
+#custom-power:hover { background: shade(@red,  1.22); }
+#custom-launcher:hover  { background: shade(@teal, 1.22); }
+
+/* Right-side app launcher hover (block + its chevron brighten together) */
+#custom-browser:hover,
+#custom-browser:hover ~ #custom-rsep-browser {
+  background: shade(@gold, 1.22);
+}
+
+/* System module hover */
+#pulseaudio:hover { background: shade(@rose, 1.22); }
+
+/* Center clock — keep its own opaque bg so it stays readable even when
+   the bar is transparent (otherwise GTK's default hover leaks through). */
+#clock:hover { background: @black; color: @white; }

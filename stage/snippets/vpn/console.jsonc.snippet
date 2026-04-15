@@ -1,0 +1,30 @@
+// ─────────────────────────────────────────────────────────────────────────
+//  VPN module — drop-in snippet for waybar console variants
+//  (console_full/config.jsonc, console_minimal/config.jsonc)
+//
+//  Paste the two "modules-right" entries into your existing modules-right
+//  array, right before "custom/rsep-pulse", "pulseaudio". Paste the three
+//  module/separator objects into the module block that follows.
+// ─────────────────────────────────────────────────────────────────────────
+
+// In modules-right, insert BEFORE the pulseaudio pair:
+//     "custom/rsep-vpn", "custom/vpn",
+
+// Separator (left chevron). Note: exec runs vpn-status-indicator so the
+// separator picks up the same .on/.off/.killswitch classes as the button.
+"custom/rsep-vpn": {
+  "exec": "/usr/local/bin/vpn-status-indicator",
+  "interval": 5,
+  "return-type": "json",
+  "format": "",
+  "tooltip": false
+},
+
+// VPN button — text set by vpn-status-indicator (" VPN" / " VPN OFF").
+"custom/vpn": {
+  "exec": "/usr/local/bin/vpn-status-indicator",
+  "interval": 5,
+  "return-type": "json",
+  "format": "{}",
+  "on-click": "/usr/local/bin/vpnctl menu"
+},

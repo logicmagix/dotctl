@@ -1,0 +1,26 @@
+#!/bin/sh
+
+# Toggle: if any wofi is open, close it
+if pgrep -x wofi >/dev/null; then
+  pkill -x wofi
+  exit 0
+fi
+
+# Open a small power menu in the top-left
+choice="$(
+  printf '%s\n' " Poweroff" " Reboot" "󰒲 Logout" |
+  wofi --dmenu \
+       --prompt 'Power Menu' \
+       --location 1 \
+       --insensitive \
+       --width 300 \
+       --height 235 \
+       --xoffset 10 \
+       --yoffset 10
+)"
+
+case "$choice" in
+  " Poweroff") loginctl poweroff ;;
+  " Reboot")   loginctl reboot ;;
+  "󰒲 Logout")  hyprctl dispatch exit ;;
+esac

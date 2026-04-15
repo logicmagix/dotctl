@@ -1,0 +1,24 @@
+Meslo LGS Nerd Font
+===================
+
+Files in this directory (MesloLGS NF *.ttf) are the Meslo LG S typeface
+patched with the Nerd Fonts glyph set. They are bundled with dotctl for
+convenience and are NOT covered by dotctl's GPLv3 license — they retain
+their original upstream licenses as described below.
+
+Original typeface
+-----------------
+Meslo LG by André Berg, derived from Apple's Menlo.
+Licensed under the Apache License, Version 2.0.
+Full text: https://www.apache.org/licenses/LICENSE-2.0
+Upstream:  https://github.com/andreberg/Meslo-Font
+
+Nerd Font patches
+-----------------
+Patched with additional glyphs by the Nerd Fonts project
+(Ryan L. McIntyre and contributors).
+Licensed under the MIT License.
+Upstream:  https://github.com/ryanoasis/nerd-fonts
+
+No modifications have been made to the patched fonts by the dotctl
+project; the .ttf files are redistributed as obtained from upstream.

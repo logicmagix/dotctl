@@ -1,0 +1,12 @@
+# Minimal mako config that parses on old versions
+default-timeout=3000
+ignore-timeout=false
+max-visible=3
+anchor=top-right
+background-color=#1a1410
+text-color=#d4b483
+border-color=#c19a6b
+border-size=2
+padding=8
+margin=12
+font=MesloLGS NF 14

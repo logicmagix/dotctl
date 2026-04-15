@@ -1,0 +1,31 @@
+#!/sbin/openrc-run
+# OpenRC service for dotctl-watch. Install to /etc/init.d/dotctl-watch and
+# set DOTCTL_USER in /etc/conf.d/dotctl-watch to the target login user.
+#
+#   /etc/conf.d/dotctl-watch:
+#     DOTCTL_USER="yourname"
+#
+# Then: rc-update add dotctl-watch default && rc-service dotctl-watch start
+#
+# Notes: dotctl apply touches the user's Wayland/DBus session, so the user
+# must be logged in for the watcher's fired apply to actually take effect.
+# Consider running via a user-level supervisor (systemd --user or runit
+# runsvdir) instead if you want login-scoped lifetime.
+
+name="dotctl-watch"
+description="dotctl config watcher"
+
+: "${DOTCTL_USER:=root}"
+
+command="/usr/local/bin/dotctl"
+command_args="watch"
+command_user="${DOTCTL_USER}"
+command_background="yes"
+pidfile="/run/dotctl-watch-${DOTCTL_USER}.pid"
+output_log="/var/log/dotctl-watch.log"
+error_log="/var/log/dotctl-watch.log"
+
+depend() {
+    need localmount
+    after bootmisc
+}

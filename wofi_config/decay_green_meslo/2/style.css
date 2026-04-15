@@ -1,0 +1,81 @@
+@define-color bg rgba(13, 15, 24, 0.9);         /* Decay Green background */
+@define-color bg-alt rgba(37, 40, 54, 0.85);    /* Decay Green surface */
+@define-color border #c296eb;                   /* Decay Green purple */
+@define-color text #cbced3;                     /* Decay Green foreground */
+@define-color text-alt #dd6777;                 /* Decay Green red */
+@define-color accent #e8a987;                   /* Decay Green warm accent */
+@define-color accent-alt #90ceaa;               /* Decay Green green */
+
+
+
+* {
+    font-family: 'MesloLGS NF', 'Meslo LG S', monospace;
+    font-size: 26px;
+    border-radius: 26px;;
+}
+
+window {
+    margin: 0px;
+    padding: 8px;
+    border: 1px solid @border;
+    background-color: @bg;
+    border-radius: 16px;
+}
+
+#input {
+margin: 4px 8px;
+    padding: 8px;
+    border: none;
+    color: @text-alt;
+    background-color: @bg-alt;
+    border-radius: 12px;
+}
+
+#inner-box {
+    margin: 4px;
+    padding: 8px;
+    background-color: transparent;
+}
+
+#outer-box {
+    margin: 4px;
+    padding: 8px;
+    background-color: transparent;
+}
+
+#scroll {
+    margin: 0px;
+    padding: 8px;
+    background-color: transparent;
+}
+
+#entry {
+    padding: 6px 8px;
+    background-color: transparent;
+    border-radius: 8px;
+}
+
+#entry:selected {
+    background-color: @bg-alt;
+    border: 1px solid @accent;
+}
+
+#text {
+    color: @text;
+    margin: 2px;
+}
+
+#entry:selected #text {
+    color: @accent-alt;
+    font-weight: bold;
+}
+
+#input image {
+    color: @accent;
+}
+
+#input * {
+    outline: 2px solid @accent;
+    border-radius: 8px;
+}
+

@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+get_sinks() {
+  pactl list short sinks | awk '{print $2}'
+}
+
+# initial snapshot
+OLD_SINKS="$(get_sinks | sort)"
+
+while :; do
+  sleep 2
+
+  NEW_SINKS="$(get_sinks | sort)"
+
+  # if nothing changed, continue
+  if [ "$NEW_SINKS" = "$OLD_SINKS" ]; then
+    continue
+  fi
+
+  # find newly added sinks
+  ADDED=$(comm -13 <(printf '%s\n' "$OLD_SINKS") <(printf '%s\n' "$NEW_SINKS"))
+
+  if [ -n "$ADDED" ]; then
+    # optional: small delay so the device fully comes up
+    sleep 0.5
+    audio-output-menu &
+  fi
+
+  OLD_SINKS="$NEW_SINKS"
+done
+

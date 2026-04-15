@@ -1,0 +1,82 @@
+@define-color bg rgba(20, 20, 16, 0.9);        /* Mil background */
+@define-color bg-alt rgba(28, 28, 20, 0.8);    /* Mil bg_dark */
+@define-color border #3d3a28;                  /* Mil border / muted/dark-khaki */
+@define-color text #c3b091;                    /* Mil foreground */
+@define-color text-alt #a89973;                /* Mil fg_dark */
+/*@define-color accent #9289d9;*/                  /* Gentoo purple */
+@define-color accent #8a9a3d;                  /* Mil bright olive */
+@define-color accent-alt #b87333;              /* Mil copper (cooler highlight) */
+
+
+
+* {
+    font-family: 'MesloLGS NF', 'Meslo LG S', monospace;
+    font-size: 26px;
+    border-radius: 26px;;
+}
+
+window {
+    margin: 0px;
+    padding: 8px;
+    border: 1px solid @border;
+    background-color: @bg;
+    border-radius: 16px;
+}
+
+#input {
+margin: 4px 8px;
+    padding: 8px;
+    border: none;
+    color: @text-alt;
+    background-color: @bg-alt;
+    border-radius: 12px;
+}
+
+#inner-box {
+    margin: 4px;
+    padding: 8px;
+    background-color: transparent;
+}
+
+#outer-box {
+    margin: 4px;
+    padding: 8px;
+    background-color: transparent;
+}
+
+#scroll {
+    margin: 0px;
+    padding: 8px;
+    background-color: transparent;
+}
+
+#entry {
+    padding: 6px 8px;
+    background-color: transparent;
+    border-radius: 8px;
+}
+
+#entry:selected {
+    background-color: @bg-alt;
+    border: 1px solid @accent;
+}
+
+#text {
+    color: @text;
+    margin: 2px;
+}
+
+#entry:selected #text {
+    color: @accent-alt;
+    font-weight: bold;
+}
+
+#input image {
+    color: @accent;
+}
+
+#input * {
+    outline: 2px solid @accent;
+    border-radius: 8px;
+}
+

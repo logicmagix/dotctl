@@ -1,0 +1,13 @@
+[Unit]
+Description=dotctl config watcher — auto-apply ~/.config/dotctl/config on save
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/dotctl watch
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

@@ -1,0 +1,39 @@
+/* -- decay_green palette -------------------------------------------- */
+@define-color black    #0d0f18;
+@define-color red      #dd6777;
+@define-color green    #90ceaa;
+@define-color yellow   #ecd3a0;
+@define-color blue     #86aaec;
+@define-color purple   #c296eb;
+@define-color cyan     #93cee9;
+@define-color gray     #5d6476;
+@define-color magenta  #c79bf0;
+@define-color teal1    #7fc5b8;
+@define-color green1   #95d3af;
+@define-color green2   #6fa9a3;
+@define-color orange   #e8a987;
+@define-color white    #cbced3;
+@define-color fg_dark  #a5b6cf;
+@define-color bg0      #0d0f18;
+@define-color bg1      #080a12;
+@define-color bg2      #151720;
+@define-color bg3      #252836;
+
+/* -- Accent Aliases ----------------------------------------------- */
+@define-color rose   @magenta;
+@define-color plum   @purple;
+@define-color mint   @green1;
+@define-color olive  @green2;
+@define-color lime   #c4e8b5;   /* light spring, brighter than green */
+@define-color gold   @yellow;
+@define-color teal   @teal1;
+
+@define-color warning  @orange;
+@define-color critical @red;
+
+@define-color ws-unfocused @bg2;
+@define-color ws-focused   @cyan;
+@define-color ws-visible   @purple;
+
+/* -- Semantic tokens --------------------------------------------- */
+@define-color hover_fg @black;

@@ -1,0 +1,285 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+INCLUDE_TERMINAL=false
+FORCE_REBUILD=false
+for arg in "$@"; do
+  case "$arg" in
+    --rebuild) FORCE_REBUILD=true ;;
+    --include-terminal) INCLUDE_TERMINAL=true ;;
+  esac
+done
+
+# Toggle off if wofi is already up
+if pgrep -x wofi >/dev/null; then
+  pkill -x wofi
+  exit 0
+fi
+
+APP_DIRS=(
+  "$HOME/.local/share/applications"
+  "/usr/local/share/applications"
+  "/usr/share/applications"
+  "$HOME/.local/share/flatpak/exports/share/applications"
+  "/var/lib/flatpak/exports/share/applications"
+)
+
+CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/wofi"
+CACHE_FILE="$CACHE_DIR/gui_apps.tsv"
+STAMP_FILE="$CACHE_DIR/.stamp"
+mkdir -p "$CACHE_DIR"
+
+# Apps to always exclude by name (case-insensitive match)
+BLACKLIST=("Terminology")
+
+normalize_category() {
+  local cats="$1"
+  local order=( "Game" "Graphics" "AudioVideo" "Audio" "Video" "Development" "Utility" "System" "Settings" "Network" "Office" )
+  for c in "${order[@]}"; do
+    if grep -qiE "(^|;)$c(;|$)" <<<"$cats"; then
+      case "$c" in
+        AudioVideo|Audio|Video) echo "Media"; return ;;
+        *) echo "$c"; return ;;
+      esac
+    fi
+  done
+  echo "Other"
+}
+
+desktop_matches() {
+  local field="$1"
+  [[ -z "$field" ]] && return 1
+  [[ -z "${XDG_CURRENT_DESKTOP:-}" ]] && return 1
+  local IFS=':'
+  for desktop in $XDG_CURRENT_DESKTOP; do
+    [[ ";${field};" == *";${desktop};"* ]] && return 0
+  done
+  return 1
+}
+
+parse_desktop() {
+  local file="$1"
+  awk '
+    function trim(s){ sub(/^[[:space:]]+/, "", s); sub(/[[:space:]]+$/, "", s); return s }
+    BEGIN{
+      in_entry=0
+      name=""; exec=""; nodisplay=""; hidden=""; terminal=""
+      cats=""; tryexec=""; onlyshowin=""; notshowin=""
+    }
+
+    # tolerate UTF-8 BOM
+    NR==1 { sub(/^\xef\xbb\xbf/,"") }
+
+    # Only parse [Desktop Entry] section
+    /^\[Desktop Entry\]$/ { in_entry=1; next }
+    /^\[/ && $0 !~ /^\[Desktop Entry\]$/ { if(in_entry){ in_entry=0 } }
+
+    in_entry {
+      gsub(/\r$/, "")
+
+      # Only use plain Name= (ignore localized-only Name[xx]= entries)
+      if ($0 ~ /^Name=/ && name=="") {
+        sub(/^Name=/,"");  name=trim($0)
+      } else if ($0 ~ /^Exec=/ && exec=="") {
+        sub(/^Exec=/,"");  exec=trim($0)
+      } else if ($0 ~ /^TryExec=/ && tryexec=="") {
+        sub(/^TryExec=/,"");  tryexec=trim($0)
+      } else if ($0 ~ /^NoDisplay=/ && nodisplay=="") {
+        sub(/^NoDisplay=/,""); nodisplay=tolower(trim($0))
+      } else if ($0 ~ /^Hidden=/ && hidden=="") {
+        sub(/^Hidden=/,""); hidden=tolower(trim($0))
+      } else if ($0 ~ /^Terminal=/ && terminal=="") {
+        sub(/^Terminal=/,""); terminal=tolower(trim($0))
+      } else if ($0 ~ /^Categories=/ && cats=="") {
+        sub(/^Categories=/,""); cats=trim($0)
+      } else if ($0 ~ /^OnlyShowIn=/ && onlyshowin=="") {
+        sub(/^OnlyShowIn=/,""); onlyshowin=trim($0)
+      } else if ($0 ~ /^NotShowIn=/ && notshowin=="") {
+        sub(/^NotShowIn=/,""); notshowin=trim($0)
+      }
+    }
+
+    END{
+      if (name=="" || exec=="") exit
+      if (nodisplay=="true" || hidden=="true") exit
+      if (terminal=="") terminal="false"
+      printf("%s\t%s\t%s\t%s\t%s\t%s\t%s\n", cats, name, exec, terminal, tryexec, onlyshowin, notshowin)
+    }
+  ' "$file"
+}
+
+declare -A SEEN_DESKTOP
+
+build_cache() {
+    : > "$CACHE_FILE"
+  unset SEEN_DESKTOP
+  declare -A SEEN_DESKTOP
+
+  for d in "${APP_DIRS[@]}"; do
+    [[ -d "$d" ]] || continue
+    while IFS= read -r -d '' f; do
+      id="$(basename "$f")"
+      # keep the first one we see (local wins over system)
+      if [[ -n "${SEEN_DESKTOP[$id]:-}" ]]; then
+        continue
+      fi
+      SEEN_DESKTOP[$id]=1
+
+      line="$(parse_desktop "$f" || true)"
+      [[ -n "$line" ]] || continue
+      printf '%s\n' "$line" >> "$CACHE_FILE"
+    done < <(find "$d" -type f -name '*.desktop' -print0 2>/dev/null)
+  done
+
+
+  awk -F'\t' '
+    function strip_codes(s){ gsub(/%[fFuUdDnNickvm]/,"",s); return s }
+    { print $1 "\t" $2 "\t" strip_codes($3) "\t" $4 "\t" $5 "\t" $6 "\t" $7 }
+  ' "$CACHE_FILE" | while IFS=$'\t' read -r cats name exec term tryexec onlyshowin notshowin; do
+    # Skip if TryExec binary is not installed
+    if [[ -n "$tryexec" ]]; then
+      cmd="${tryexec%% *}"
+      command -v "$cmd" >/dev/null 2>&1 || continue
+    fi
+    # Skip if OnlyShowIn is set and current desktop is not listed
+    if [[ -n "$onlyshowin" ]] && ! desktop_matches "$onlyshowin"; then
+      continue
+    fi
+    # Skip if NotShowIn includes the current desktop
+    if [[ -n "$notshowin" ]] && desktop_matches "$notshowin"; then
+      continue
+    fi
+    # Skip blacklisted apps
+    for bl in "${BLACKLIST[@]}"; do
+      [[ "${name,,}" == "${bl,,}" ]] && continue 2
+    done
+    norm="$(normalize_category "$cats")"
+    printf '%s\t%s\t%s\t%s\n' "$norm" "$name" "$exec" "$term"
+  done | sort -f -k1,1 -k2,2 > "${CACHE_FILE}.tmp"
+
+    mv "${CACHE_FILE}.tmp" "$CACHE_FILE"
+
+  # --- Force-add Raspberry Pi Imager if it got skipped upstream ---
+  local imager_desktop="$HOME/.local/share/flatpak/exports/share/applications/org.raspberrypi.rpi-imager.desktop"
+  if [[ -f "$imager_desktop" ]] && ! grep -qi $'\tRaspberry Pi Imager\t' "$CACHE_FILE"; then
+    line="$(parse_desktop "$imager_desktop" || true)"
+    if [[ -n "${line:-}" ]]; then
+      IFS=$'\t' read -r cats name exec term tryexec <<< "$line"
+      norm="$(normalize_category "$cats")"
+
+      # Use a clean, known-good Exec instead of the crazy file-forwarding one
+      exec="flatpak run org.raspberrypi.rpi-imager"
+
+      printf '%s\t%s\t%s\t%s\n' "$norm" "$name" "$exec" "$term" >> "$CACHE_FILE"
+      # keep cache sorted by category, then name (case-insensitive)
+      sort -f -k1,1 -k2,2 "$CACHE_FILE" -o "$CACHE_FILE"
+    fi
+  fi
+  # --- end force-add block ---
+
+  date +%s > "$STAMP_FILE"
+}
+
+
+
+needs_rebuild() {
+  $FORCE_REBUILD && return 0
+  [[ -f "$CACHE_FILE" ]] || return 0
+  local cache_mtime
+  cache_mtime=$(stat -c %Y "$CACHE_FILE" 2>/dev/null || stat -f %m "$CACHE_FILE" 2>/dev/null || echo 0)
+  for d in "${APP_DIRS[@]}"; do
+    [[ -d "$d" ]] || continue
+    if find "$d" -type f -name '*.desktop' -newermt "@$cache_mtime" | read -r _; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+launch_exec() {
+  local cmd="$1" termflag="$2"
+  if [[ "$termflag" == "true" ]]; then
+    if command -v xdg-terminal-exec >/dev/null 2>&1; then
+      setsid xdg-terminal-exec bash -lc "$cmd" >/dev/null 2>&1 &
+    elif [[ -n "${TERMINAL:-}" ]] && command -v "$TERMINAL" >/dev/null 2>&1; then
+      setsid "$TERMINAL" -e bash -lc "$cmd" >/dev/null 2>&1 &
+    elif command -v kitty >/dev/null 2>&1; then
+      setsid kitty -e bash -lc "$cmd" >/dev/null 2>&1 &
+    elif command -v alacritty >/dev/null 2>&1; then
+      setsid alacritty -e bash -lc "$cmd" >/dev/null 2>&1 &
+    elif command -v gnome-terminal >/dev/null 2>&1; then
+      setsid gnome-terminal -- bash -lc "$cmd" >/dev/null 2>&1 &
+    else
+      setsid xterm -e bash -lc "$cmd" >/dev/null 2>&1 &
+    fi
+  else
+    setsid bash -lc "$cmd" >/dev/null 2>&1 &
+  fi
+}
+
+# Rebuild cache if needed
+needs_rebuild && build_cache
+
+# Build menu (single pass)
+RUNTIME_MAP="$(mktemp "${XDG_RUNTIME_DIR:-/tmp}/wofi-map.XXXXXX")"
+trap 'rm -f "$RUNTIME_MAP"' EXIT
+
+MENU_DISPLAY=()
+current_cat=""
+: > "$RUNTIME_MAP"
+
+while IFS=$'\t' read -r cat name exec term; do
+  # respect --include-terminal flag here
+  if [[ "$INCLUDE_TERMINAL" != "true" && "$term" == "true" ]]; then
+    continue
+  fi
+
+    # If this is a flatpak app, only allow Heroic and Pi Imager
+  if [[ "$exec" == *flatpak* ]]; then
+    case "$exec" in
+      *com.heroicgameslauncher.hgl*|*org.raspberrypi.rpi-imager*)
+        ;;  # allowed
+      *)
+        continue  # skip other flatpak apps
+        ;;
+    esac
+  fi
+
+
+ if [[ "$cat" != "$current_cat" ]]; then
+  current_cat="$cat"
+  header="== $current_cat ====================="
+  header_markup="<b><span foreground='#83a598'>$header</span></b>"  # gruvbox aqua; pick any
+  MENU_DISPLAY+=("$header_markup")
+fi
+  short="$name"; (( ${#short} > 60 )) && short="${short:0:60}…"
+  MENU_DISPLAY+=("$short")
+  printf '%s\t%s\t%s\n' "$short" "$exec" "$term" >> "$RUNTIME_MAP"
+
+done < "$CACHE_FILE"
+
+# Menu loop (ignore header clicks)
+while :; do
+  selection="$(
+  printf '%s\n' "${MENU_DISPLAY[@]}" \
+  | wofi --dmenu --allow-markup \
+       --prompt "Launch" \
+       --location 1 --width 500 --height 1000 \
+       --xoffset 10 --yoffset 10 \
+       --cache-file /dev/null \
+       --insensitive --matching fuzzy
+
+)" || exit 0
+
+# strip pango tags so header detection still works
+plain_sel="$(sed -E 's/<[^>]+>//g' <<< "$selection")"
+if [[ "$plain_sel" == "== "* ]]; then
+  continue
+fi
+
+  exec_part="$(awk -F'\t' -v sel="$selection" 'tolower($1)==tolower(sel){print $2; exit}' "$RUNTIME_MAP")"
+  term_flag="$(awk -F'\t' -v sel="$selection" 'tolower($1)==tolower(sel){print $3; exit}' "$RUNTIME_MAP")"
+  [[ -z "${exec_part// }" ]] && continue
+  launch_exec "$exec_part" "${term_flag:-false}"
+  exit 0
+done

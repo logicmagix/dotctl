@@ -1,0 +1,12 @@
+# dotctl waybar decorator — round (Powerline half circles)
+# Substitutes the canonical pointed chevrons with their round equivalents.
+#
+# Format: each non-comment line is  FROM TO  (whitespace-separated). At apply
+# time dotctl reads the file for the active WAYBAR_DECOR and substitutes
+# FROM → TO in the waybar config.jsonc.
+
+# U+E0B0 right chevron →  U+E0B4 right half-circle
+ 
+
+# U+E0B2 left chevron  →  U+E0B6 left half-circle
+ 

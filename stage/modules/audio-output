@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+# Unified audio control: switch outputs, toggle mute.
+# Output classes are resolved at runtime from the port type reported by
+# pactl — no hardcoded sink names. Works on any system with pulseaudio or
+# pipewire-pulse.
+
+set -euo pipefail
+
+PROFILE="${1:-}"
+
+notify() { notify-send "$@" 2>/dev/null || true; }
+
+if [ -z "$PROFILE" ]; then
+  notify "Audio" "Usage: audio-output {headset|hdmi|aux|toggle-mute}"
+  exit 1
+fi
+
+if [ "$PROFILE" = "toggle-mute" ]; then
+  pactl set-sink-mute @DEFAULT_SINK@ toggle
+  state=$(pactl get-sink-mute @DEFAULT_SINK@ | awk '{print $2}')
+  if [ "$state" = "yes" ]; then
+    notify "🔇 Muted" ""
+  else
+    notify "🔊 Unmuted" ""
+  fi
+  exit 0
+fi
+
+case "$PROFILE" in
+  headset) want='^(Headphones|Headset)$'; allow_bluez=1; icon='🎧'; label='Headset' ;;
+  hdmi)    want='^HDMI$';                  allow_bluez=0; icon='🖥️'; label='HDMI Output' ;;
+  aux)     want='^(Speaker|Line)$';        allow_bluez=0; icon='🔊'; label='AUX / Analog' ;;
+  *) notify "Audio" "Unknown action: $PROFILE"; exit 1 ;;
+esac
+
+# Emit "sink|port_id|port_type" rows for every port of every sink.
+rows=$(pactl list sinks 2>/dev/null | awk '
+  /^Sink #/                   { sink=""; inports=0; next }
+  $1=="Name:"                 { sink=$2; inports=0; next }
+  /^[[:space:]]+Ports:/       { inports=1; next }
+  $1=="Active" && $2=="Port:" { inports=0; next }
+  inports && /type:/ {
+    pid=$1; sub(/:$/, "", pid)
+    if (match($0, /type: [A-Za-z-]+/)) {
+      t=substr($0, RSTART+6, RLENGTH-6)
+      if (sink != "") print sink "|" pid "|" t
+    }
+  }
+')
+
+match_sink=""; match_port=""
+
+# Bluetooth headsets: bluez sinks don't always report a useful port type,
+# so for the "headset" class we prefer any bluez_output.* if present.
+if [ "$allow_bluez" = "1" ]; then
+  match_sink=$(pactl list short sinks 2>/dev/null | awk '$2 ~ /^bluez_output\./ {print $2; exit}')
+fi
+
+if [ -z "$match_sink" ] && [ -n "$rows" ]; then
+  while IFS='|' read -r s p t; do
+    [ -z "$s" ] && continue
+    if [[ "$t" =~ $want ]]; then
+      match_sink="$s"; match_port="$p"
+      break
+    fi
+  done <<<"$rows"
+fi
+
+if [ -z "$match_sink" ]; then
+  notify "Audio" "No sink matching '$label' on this system"
+  exit 1
+fi
+
+if [ -n "$match_port" ]; then
+  pactl set-sink-port "$match_sink" "$match_port" >/dev/null 2>&1 || true
+fi
+
+pactl set-default-sink "$match_sink"
+
+pactl list short sink-inputs 2>/dev/null | awk '{print $1}' \
+  | xargs -r -I{} pactl move-sink-input {} "$match_sink" 2>/dev/null || true
+
+notify "$icon $label" "$match_sink"

@@ -1,0 +1,25 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   VPN module — bubble variant styles
+   Append to bubble_full/style.css (and/or bubble_minimal/style.css)
+
+   Also add `#custom-vpn,` to the shared outlined-pill selector list near
+   the top so the button picks up the bubble shape/border/padding.
+   ─────────────────────────────────────────────────────────────────────── */
+
+#custom-vpn.on              { color: @green;  border-color: @green;  }
+#custom-vpn.on.killswitch   { color: @mint;   border-color: @mint;   }
+#custom-vpn.off             { color: @red;    border-color: @red;    }
+
+/* VPN OFF but killswitch still active — blink to warn */
+#custom-vpn.off.killswitch {
+  color: @red;
+  border-color: @red;
+  animation-name: blink-critical;
+  animation-duration: 1s;
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+}
+
+#custom-vpn:hover.on            { background: @green; color: @hover_fg; }
+#custom-vpn:hover.on.killswitch { background: @mint;  color: @hover_fg; }
+#custom-vpn:hover.off           { background: @red;   color: @hover_fg; }

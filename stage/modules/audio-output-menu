@@ -1,0 +1,30 @@
+#!/bin/sh
+
+# Toggle: if any wofi is open, close it
+if pgrep -x wofi >/dev/null; then
+  pkill -x wofi
+  exit 0
+fi
+
+choice="$(
+  printf '%s\n' \
+    '🎧 Headset' \
+    '🖥️ HDMI Output' \
+    '🔊 AUX / Analog' |
+  wofi --dmenu \
+       --prompt 'Audio output' \
+       --location 3 \
+       --insensitive \
+       --width 420 \
+       --height 250 \
+       --xoffset -35 \
+       --yoffset 15
+)"
+
+case "$choice" in
+  "🎧 Headset")      audio-output headset ;;
+  "🖥️ HDMI Output") audio-output hdmi ;;
+  "🔊 AUX / Analog") audio-output aux ;;
+  *) exit 0 ;;
+esac
+

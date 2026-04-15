@@ -1,0 +1,725 @@
+.TH DOTCTL 1 "April 2026" "dotctl 1.0" "User Commands"
+.SH NAME
+dotctl \- unified theme controller for cava, kitty, mako, wofi, waybar, hyprland, hyprpaper
+.SH SYNOPSIS
+.B dotctl
+.I command
+.RI [ args ...]
+.br
+.B dotctl
+.I command
+.BR \-h | \-\-help
+.SH DESCRIPTION
+.B dotctl
+is a shell CLI that changes the color, font, font size, and other presentation
+axes of five user-interface elements, one hyprland color/effect axis, and one
+wallpaper axis in a single command against a coordinated state file. It reads
+themed source configurations from standard locations under
+.IR ~/.config/ ,
+copies or palette-injects the selected variant into the live config slot each
+app reads, and signals the running daemon where applicable.
+.PP
+The seven controlled axes are:
+.TP
+.B cava
+Color-only axis. Active file:
+.IR ~/.config/cava/config .
+.TP
+.B kitty
+Color, font, font size. Active file:
+.IR ~/.config/kitty/kitty.conf .
+Font size is applied by
+.BR sed (1)
+against the active copy only; themed sources stay canonical.
+.TP
+.B mako
+Color, font, font size. Active file:
+.IR ~/.config/mako/config .
+Reloaded via
+.BR makoctl (1).
+.TP
+.B wofi
+Color, font, font size, subvariant
+.RB ( 1
+or
+.BR 2 ).
+Active file:
+.IR ~/.config/wofi/style.css .
+.TP
+.B waybar
+Color, font, font size, style
+.RB ( pill
+or
+.BR console ),
+scope
+.RB ( full
+or
+.BR minimal ),
+decorator glyph set
+.RB ( pointed
+or
+.BR round ,
+console-only),
+VPN module toggle, transparent-bar toggle, explicit bar opacity (used when
+transparent is off), and launcher logo (the distro glyph in the
+.B custom/launcher
+module). Active files:
+.IR ~/.config/waybar/config.jsonc
+and
+.IR ~/.config/waybar/style.css .
+Font size is rewritten by
+.BR sed (1)
+inside the
+.B #waybar
+block, the palette is injected into the
+.B @define-color
+block on every apply, the launcher glyph is rewritten inside the
+.B custom/launcher
+block, and the VPN module is stripped from both files when disabled. Reloaded
+with
+.BR "pkill -SIGUSR2 waybar" .
+.TP
+.B hypr
+Color + window effect
+.RB ( shadow
+or
+.BR glow ).
+Writes
+.I ~/.config/hypr/dotctl-colors.conf
+from the hypr color template and the active waybar palette. Hot-reloaded via
+.BR "hyprctl reload" .
+Sourced by the user's
+.I hyprland.conf
+via a one-line
+.B source =
+directive.
+.TP
+.B wallpaper
+An independent axis whose themes are directories under
+.IR ~/Pictures/dotctl/wallpapers/
+each paired with a
+.B cycle-hyprpaper-<name>
+script in
+.IR ~/.config/dotctl/cycle/ .
+.PP
+A separate cycle script per wallpaper theme lets
+.B dotctl
+drop in new wallpaper collections without code changes.
+.B "dotctl scan"
+can auto-generate those scripts from existing directories.
+.SH COMMANDS
+Every command below accepts
+.B \-h
+or
+.B \-\-help
+for detailed usage.
+.TP
+.BI "configure [--preset " name ]
+Interactive wizard that walks every element in turn, offering numbered choices
+for each axis with the current value marked. With
+.B --preset
+the wizard uses the preset's values as defaults instead of the current state.
+Running
+.B configure
+is required before any other command on first use.
+.TP
+.B show
+Pretty-print current state, show drift if any element has a color or font that
+differs from the others, flag whether the active wallpaper has a matching UI
+color theme, and surface warnings about orphan wallpaper dirs or cycle scripts
+missing their counterpart.
+.TP
+.BI "set [" flags ...]
+Change one or more axes. With no flags, prints current state (equivalent to
+.BR "dotctl show" ).
+See
+.B OPTIONS
+below for the full flag list.
+.TP
+.B apply
+Re-read
+.I ~/.config/dotctl/config
+and re-apply every element. Use after hand-editing the state file, or as a
+catch-up if a live config drifted. Does not write state.
+.TP
+.B watch
+Watch
+.I ~/.config/dotctl/config
+and auto-apply on save. Uses
+.BR inotifywait (1)
+when available; falls back to 1-second mtime polling otherwise. Ctrl-C to
+stop.
+.TP
+.BI "cycle " "target direction"
+Step a cycle. The two entry points intended for keybinds.
+.RS
+.TP
+.B "cycle wallpaper next|prev"
+Delegates to
+.IB ~/.config/dotctl/cycle/cycle-hyprpaper- $WALLPAPER
+with verb
+.B forward
+or
+.BR backward .
+.TP
+.B "cycle waybar next|prev"
+Rotates through 4 waybar variants within the current
+.BR WAYBAR_COLOR , " WAYBAR_FONT" ,
+and every other waybar axis:
+.BR pill_full ,
+.BR pill_minimal ,
+.BR console_full ,
+.BR console_minimal .
+Wraps around at either end.
+.RE
+.TP
+.BI "sync " "target source"
+Copy color (and font where both elements have a font axis) from source to
+target. Never copies style, scope, variant, decor, vpn, transparent, or
+opacity.
+.I target
+may be any single element or the keyword
+.BR all ;
+.I source
+must be a single element.
+.sp
+Examples:
+.RS
+.IP
+.B "dotctl sync wallpaper waybar"
+.br
+.B "dotctl sync all kitty"
+.br
+.B "dotctl sync waybar cava"
+.RE
+.TP
+.BI "list " axis
+List valid values for one axis. Axes:
+.BR colors ,
+.BR cava-colors ,
+.BR kitty-colors ,
+.BR mako-colors ,
+.BR wofi-colors ,
+.BR waybar-colors ,
+.BR fonts ,
+.BR kitty-fonts ,
+.BR mako-fonts ,
+.BR wofi-fonts ,
+.BR waybar-fonts ,
+.BR styles ,
+.BR scopes ,
+.BR waybar-decors ,
+.BR waybar-vpns ,
+.BR waybar-transparents ,
+.BR waybar-opacities ,
+.BR hypr-effects ,
+.BR launcher-logos ,
+.BR wofi-variants ,
+.BR waybar-variants ,
+.BR wallpapers ,
+.BR presets .
+.BR "dotctl list help"
+prints this axis list.
+.TP
+.BI "preset " "sub [name]"
+Named snapshots of the full state. Subcommands:
+.RS
+.TP
+.BI "save " name
+Snapshot current state to
+.IB ~/.config/dotctl/presets/ name .conf \fR.
+.TP
+.BI "load " name
+Apply a preset (same effect as
+.B "dotctl set --preset"
+.IR name ).
+.TP
+.B list
+List saved presets.
+.TP
+.BI "show " name
+Print a preset's contents.
+.TP
+.BI "delete " name
+Remove a preset.
+.RE
+.TP
+.BI "new wallpaper " name
+Scaffold
+.IB ~/Pictures/dotctl/wallpapers/ name /
+and
+.IB ~/.config/dotctl/cycle/cycle-hyprpaper- name
+from the 4-verb template. Edit the new script's
+.B IMAGES=()
+array to set the cycle order (or drop images in and run
+.B "dotctl scan"
+to auto-populate), then
+.BI "dotctl set -w " name \fR.
+Name must match
+.BR [a-z0-9_]+ .
+.TP
+.BR "scan [--dry-run] [--force] [--prefix " \fIpath\fR ]
+Walk the wallpaper root and generate
+.B cycle-hyprpaper-*
+scripts for any directory that doesn't already have one. Image lists are
+populated from disk contents in alphabetical order (case-insensitive glob for
+.BR .jpg ,
+.BR .jpeg ,
+.BR .png ,
+.BR .webp ,
+.BR .gif ,
+.BR .bmp ,
+.BR .jxl ).
+Directory names must match
+.BR [a-z0-9_]+ ;
+others are reported as
+.B invalid
+and skipped. Existing scripts are preserved unless
+.B --force
+is passed.
+.B --dry-run
+previews without writing.
+.B --prefix
+scans a non-canonical directory and hardcodes that path into the generated
+scripts so a wallpaper pack can be used in place without moving it. Default
+prefix is
+.IR ~/Pictures/dotctl/wallpapers/ .
+.TP
+.B help
+Print a top-level usage summary. Use
+.BI "dotctl " "command " "--help"
+for per-command help.
+.SH OPTIONS
+.B dotctl set
+accepts these flags. Shortcut flags fan out across the elements they affect;
+per-element flags take precedence. Precedence order is preset < shortcut <
+per-element.
+.SS Shortcut flags
+.TP
+.BI "-c, --color " color
+Set color for cava, kitty, mako, wofi, and waybar.
+.TP
+.BI "-f, --font " font
+Set font for kitty, mako, wofi, and waybar. Cava has no font axis.
+.TP
+.BI "--font-size " N
+Set font size for kitty, mako, wofi, and waybar. Accepts integer or decimal
+in the range
+.BR "[4, 72]" .
+.SS Per-element flags
+.TP
+.BI "--cava-color " color
+.TP
+.BI "--kitty-color " color
+.TP
+.BI "--kitty-font " font
+.TP
+.BI "--kitty-font-size " N
+.TP
+.BI "--mako-color " color
+.TP
+.BI "--mako-font " font
+.TP
+.BI "--mako-font-size " N
+.TP
+.BI "--wofi-color " color
+.TP
+.BI "--wofi-font " font
+.TP
+.BI "--wofi-font-size " N
+.TP
+.BI "--wofi-variant " N
+.B 1
+or
+.BR 2 .
+.TP
+.BI "--waybar-color " color
+.TP
+.BI "--waybar-font " font
+.TP
+.BI "--waybar-font-size " N
+.TP
+.BI "-s, --waybar-style " style
+.B pill
+or
+.BR console .
+.TP
+.BI "--waybar-scope " scope
+.B full
+or
+.BR minimal .
+.TP
+.BI "--waybar-decor " decor
+Console decorator glyph set.
+.B pointed
+or
+.BR round .
+Swaps the chevron / separator glyphs in
+.B console_*
+variants; has no effect on
+.B pill_*
+variants.
+.TP
+.BI "--waybar-vpn " on|off
+Toggle the waybar VPN module. When
+.BR on ,
+.B vpnctl
+and
+.B vpn-status-indicator
+must be available on
+.BR PATH .
+When
+.BR off ,
+the VPN block is stripped from both
+.I config.jsonc
+and
+.IR style.css
+on apply.
+.TP
+.BI "--waybar-transparent " on|off
+Waybar bar background.
+.B on
+uses a fully transparent bar;
+.B off
+uses an opaque palette fill at the opacity given by
+.BR --waybar-opacity .
+.TP
+.BI "--waybar-opacity " N
+Waybar bar opacity, a decimal in
+.BR "[0.0, 1.0]" .
+Only takes effect when
+.B --waybar-transparent
+is
+.BR off .
+Wizard ladder:
+.BR 0.05 ,
+.BR 0.10 ,
+.BR 0.15 ,
+.BR 0.20 ,
+.BR 0.30 ,
+.BR 0.40 ,
+.BR 0.50 ,
+.BR 0.60 ,
+.BR 0.70 ,
+.BR 0.80 ,
+.BR 0.90 ,
+.BR 1.00 .
+.TP
+.BI "--hypr-effect " effect
+Hyprland window effect.
+.B shadow
+draws a dark drop-shadow;
+.B glow
+replaces it with a colored glow matching the active border start color. Writes
+.IR ~/.config/hypr/dotctl-colors.conf .
+.TP
+.BI "--launcher-logo " logo
+Distro glyph for the waybar
+.B custom/launcher
+module. One of
+.BR tux ,
+.BR arch ,
+.BR gentoo ,
+.BR debian ,
+.BR void ,
+.BR nixos ,
+.BR fedora ,
+.BR fedora_inverse ,
+.BR endeavouros ,
+.BR cachyos ,
+.BR opensuse ,
+.BR artix ,
+.BR slackware ,
+.BR slackware_inverse .
+The glyph is rewritten into the active
+.I config.jsonc
+on every waybar apply, including cycles, so the choice sticks across
+.B "dotctl cycle waybar"
+rotations. Long alias:
+.BR --waybar-launcher-logo .
+.TP
+.BI "-w, --wallpaper " theme
+.TP
+.BI "--preset " name
+Load a preset as the baseline, then apply any other flags on top.
+.SH HYPRLAND INTEGRATION
+.B install.sh
+drops two sourceable snippets into
+.IR ~/.config/hypr/ :
+.TP
+.I dotctl-keybinds.conf
+Ships the cycle and audio-output binds. Uses hardcoded
+.B SUPER
+.RB ( Mod4 )
+and calls
+.B dotctl
+directly (no
+.B ~/.local/bin
+prefix) so placement in
+.I hyprland.conf
+does not matter.
+.TP
+.I dotctl-colors.conf
+A neutral-grey stub on install; overwritten by
+.B dotctl apply
+with palette-driven values that include border colors and the active
+shadow/glow effect.
+.PP
+Add these two lines to the
+.B bottom
+of
+.I ~/.config/hypr/hyprland.conf
+(later sources override earlier ones):
+.PP
+.EX
+source = ~/.config/hypr/dotctl-keybinds.conf
+source = ~/.config/hypr/dotctl-colors.conf
+.EE
+.PP
+Then
+.BR "hyprctl reload" .
+The shipped binds are:
+.PP
+.EX
+bind = SUPER ALT, Right, exec, dotctl cycle wallpaper next
+bind = SUPER ALT, Left,  exec, dotctl cycle wallpaper prev
+bind = SUPER ALT, Up,    exec, dotctl cycle waybar    next
+bind = SUPER ALT, Down,  exec, dotctl cycle waybar    prev
+bind = ALT SHIFT, A,     exec, audio-output aux
+bind = ALT SHIFT, S,     exec, audio-output headset
+bind = ALT SHIFT, H,     exec, audio-output hdmi
+bind = ALT SHIFT, M,     exec, audio-output toggle-mute
+.EE
+.PP
+All other theme changes go through the CLI.
+.B dotctl
+never edits
+.I hyprland.conf
+itself.
+.SH FILES
+.TP
+.I ~/.config/dotctl/config
+23-field
+.B KEY=value
+state file, hand-editable, flock-guarded on writes. Regenerate with
+.BR "dotctl configure" .
+Older state files at
+.I ~/.cache/dotctl/state
+are automatically migrated to the new location on first run; older state
+files without the
+.BR *_FONT_SIZE ,
+.BR WAYBAR_DECOR ,
+.BR WAYBAR_VPN ,
+.BR WAYBAR_TRANSPARENT ,
+.BR WAYBAR_OPACITY ,
+.BR WAYBAR_LAUNCHER_LOGO ,
+or
+.B HYPR_EFFECT
+fields are soft-migrated to defaults on load.
+.TP
+.I ~/.config/dotctl/presets/<name>.conf
+Saved presets.
+.TP
+.I ~/.config/dotctl/cycle/cycle-hyprpaper-<theme>
+Per-theme wallpaper cycle scripts, rendered from
+.BR _cycle-hyprpaper.template .
+Invoked by
+.B "dotctl cycle wallpaper next|prev"
+and regenerated on demand by
+.BR "dotctl scan" .
+.TP
+.I ~/.config/dotctl/cycle/_cycle-hyprpaper.template
+Template used by
+.B "dotctl new wallpaper"
+and
+.BR "dotctl scan" .
+.TP
+.I ~/.cache/dotctl/lock
+Lock file held during state writes and cycle operations.
+.TP
+.I ~/.cache/hyprpaper-cycle/index_<theme>
+Per-wallpaper-theme current image index, maintained by cycle-hyprpaper-*
+scripts.
+.TP
+.I ~/.local/share/dotctl/dotctl-colors.conf.tmpl
+Hyprland color template used by
+.BR "apply_hypr" .
+.TP
+.I /tmp/dotctl.log
+Event log for
+.B dotctl
+(apply, cycle, sync, watch).
+.TP
+.I /tmp/cycle_hyprpaper.log
+Event log for wallpaper cycle scripts.
+.TP
+.I ~/.config/<element>/<color>(_<font>)(/<variant>)/<file>
+Themed source files, read-only from
+.BR dotctl 's
+perspective. Directory names are the canonical axes; a new color or variant is
+available to
+.B dotctl
+simply by dropping the matching directory into place.
+.TP
+.I ~/Pictures/dotctl/wallpapers/<theme>/
+Wallpaper image directories, auto-discovered at runtime. A wallpaper theme is
+considered installed when both this directory and a matching
+.B cycle-hyprpaper-<theme>
+script under
+.I ~/.config/dotctl/cycle/
+exist. Orphans in either direction are reported by
+.BR "dotctl show" .
+.SH EXAMPLES
+.PP
+First-time setup:
+.PP
+.EX
+dotctl configure
+.EE
+.PP
+Unified theme switch:
+.PP
+.EX
+dotctl set -c tokyo_night -f phoenix
+.EE
+.PP
+Scale every font for a 4K display, then save as a preset:
+.PP
+.EX
+dotctl set --font-size 22
+dotctl preset save tv
+.EE
+.PP
+Keep the UI on forest but drift only waybar to gruvbox:
+.PP
+.EX
+dotctl set --waybar-color gruvbox
+.EE
+.PP
+Switch waybar to console style, full scope, round decorators:
+.PP
+.EX
+dotctl set --waybar-style console --waybar-scope full --waybar-decor round
+.EE
+.PP
+Opaque bar at 60% opacity:
+.PP
+.EX
+dotctl set --waybar-transparent off --waybar-opacity 0.60
+.EE
+.PP
+Enable the VPN module (requires vpnctl + vpn-status-indicator on PATH):
+.PP
+.EX
+dotctl set --waybar-vpn on
+.EE
+.PP
+Swap hyprland to a colored glow instead of a drop shadow:
+.PP
+.EX
+dotctl set --hypr-effect glow
+.EE
+.PP
+Change only the waybar launcher distro glyph (persists across cycles):
+.PP
+.EX
+dotctl set --launcher-logo nixos
+.EE
+.PP
+Re-unify after drift:
+.PP
+.EX
+dotctl sync all kitty
+.EE
+.PP
+Wallpaper-only change, UI untouched:
+.PP
+.EX
+dotctl set -w gentoo
+.EE
+.PP
+Load a display preset:
+.PP
+.EX
+dotctl preset load laptop
+.EE
+.PP
+Hand-edit the state file live:
+.PP
+.EX
+dotctl watch &
+$EDITOR ~/.config/dotctl/config
+.EE
+.PP
+Add a new wallpaper theme by hand (curated cycle order):
+.PP
+.EX
+dotctl new wallpaper forest
+cp ~/Downloads/*.jpg ~/Pictures/dotctl/wallpapers/forest/
+$EDITOR ~/.config/dotctl/cycle/cycle-hyprpaper-forest   # populate IMAGES=( )
+dotctl set -w forest
+.EE
+.PP
+Bulk-import several wallpaper themes (alphabetical cycle order):
+.PP
+.EX
+mkdir ~/Pictures/dotctl/wallpapers/forest ~/Pictures/dotctl/wallpapers/retrowave
+cp ~/Downloads/forest/*    ~/Pictures/dotctl/wallpapers/forest/
+cp ~/Downloads/retrowave/* ~/Pictures/dotctl/wallpapers/retrowave/
+dotctl scan                                   # generates both cycle scripts
+dotctl set -w forest
+.EE
+.PP
+Preview a scan without writing anything:
+.PP
+.EX
+dotctl scan --dry-run
+.EE
+.PP
+Scan a wallpaper pack in place from a non-canonical location:
+.PP
+.EX
+dotctl scan --prefix ~/Downloads/wallpaper-pack
+.EE
+.SH EXIT STATUS
+.TP
+.B 0
+Success.
+.TP
+.B 1
+Error: invalid arguments, missing source files, missing state, validation
+failure, or subprocess failure.
+.SH ENVIRONMENT
+.TP
+.B XDG_CONFIG_HOME
+Overrides the default
+.I ~/.config
+location.
+.B dotctl
+places its state directory (and every themed source dir it reads) under this
+root.
+.TP
+.B XDG_CACHE_HOME
+Overrides the default
+.I ~/.cache
+location.
+.B dotctl
+places its cache directory (lockfile) there.
+.TP
+.B EDITOR
+Used in documentation examples for hand-editing cycle scripts and the state
+file.
+.SH SEE ALSO
+.BR hyprland (1),
+.BR hyprctl (1),
+.BR hyprpaper (1),
+.BR waybar (5),
+.BR makoctl (1),
+.BR kitty (1),
+.BR wofi (1),
+.BR cava (1),
+.BR sed (1),
+.BR flock (1),
+.BR inotifywait (1)
+.SH BUGS
+Report issues and feedback to the project maintainer.

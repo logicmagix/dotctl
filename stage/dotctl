@@ -1,0 +1,2038 @@
+#!/bin/bash
+# dotctl — unified theme controller for cava, kitty, mako, wofi, waybar, hyprpaper.
+#
+#   dotctl help            for full usage
+#   dotctl configure       first-time interactive setup (required before any other command)
+#   dotctl show            pretty-print current state
+#   dotctl set [flags]     change one or more axes
+#   dotctl cycle ...       step a wallpaper or waybar cycle (keybind entry points)
+#   dotctl sync ...        copy color/font from one element to another
+#   dotctl preset ...      save / load / list named presets
+#   dotctl list <axis>     list valid values for an axis
+#   dotctl new wallpaper N scaffold a new wallpaper theme (dir + cycle script)
+
+set -euo pipefail
+
+# Ensure per-color cycle scripts are reachable when invoked from Hyprland
+# keybinds (whose environment doesn't inherit ~/.local/bin from shell init).
+export PATH="$HOME/.local/bin:$PATH"
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  Paths / constants
+# ──────────────────────────────────────────────────────────────────────────────
+
+readonly CONFIG_ROOT="$HOME/.config"
+readonly CAVA_DIR="$CONFIG_ROOT/cava"
+readonly KITTY_DIR="$CONFIG_ROOT/kitty"
+readonly MAKO_DIR="$CONFIG_ROOT/mako"
+readonly WOFI_DIR="$CONFIG_ROOT/wofi"
+readonly WAYBAR_DIR="$CONFIG_ROOT/waybar"
+readonly HYPR_DIR="$CONFIG_ROOT/hypr"
+readonly HYPR_COLORS_FILE="$HYPR_DIR/dotctl-colors.conf"
+readonly HYPR_COLORS_TEMPLATE="$HOME/.local/share/dotctl/dotctl-colors.conf.tmpl"
+readonly WALLPAPER_ROOT="$HOME/Pictures/dotctl/wallpapers"
+
+readonly CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/dotctl"
+readonly STATE_DIR="$CONFIG_ROOT/dotctl"
+readonly STATE_FILE="$STATE_DIR/config"
+readonly STATE_LOCK="$CACHE_DIR/lock"
+readonly LEGACY_STATE_FILE="$CACHE_DIR/state"
+readonly PRESET_DIR="$STATE_DIR/presets"
+readonly CYCLE_DIR="$STATE_DIR/cycle"
+readonly CYCLE_TEMPLATE="$CYCLE_DIR/_cycle-hyprpaper.template"
+readonly LOG_FILE="/tmp/dotctl.log"
+
+# Resolve the absolute path to cycle-hyprpaper-<theme> for the current
+# install. Scripts live under ~/.config/dotctl/cycle/ and are NOT on PATH
+# by default — always call them via this helper.
+cycle_script() { printf '%s/cycle-hyprpaper-%s\n' "$CYCLE_DIR" "$1"; }
+
+readonly STATE_KEYS=(
+  CAVA_COLOR
+  KITTY_COLOR   KITTY_FONT   KITTY_FONT_SIZE
+  MAKO_COLOR    MAKO_FONT    MAKO_FONT_SIZE
+  WOFI_COLOR    WOFI_FONT    WOFI_FONT_SIZE  WOFI_VARIANT
+  WAYBAR_COLOR  WAYBAR_FONT  WAYBAR_FONT_SIZE WAYBAR_STYLE WAYBAR_SCOPE WAYBAR_DECOR WAYBAR_VPN WAYBAR_TRANSPARENT WAYBAR_OPACITY WAYBAR_LAUNCHER_LOGO
+  HYPR_EFFECT
+  WALLPAPER
+)
+
+# Defaults used when first-run has no state yet AND when older state files
+# don't yet have the font-size fields (soft migration).
+readonly DEFAULT_KITTY_FONT_SIZE=18
+readonly DEFAULT_MAKO_FONT_SIZE=14
+readonly DEFAULT_WOFI_FONT_SIZE=26
+readonly DEFAULT_WAYBAR_FONT_SIZE=10
+readonly DEFAULT_WAYBAR_DECOR=pointed
+readonly DEFAULT_WAYBAR_VPN=off
+readonly DEFAULT_WAYBAR_TRANSPARENT=on
+readonly DEFAULT_WAYBAR_OPACITY=0.6
+readonly DEFAULT_WAYBAR_LAUNCHER_LOGO=tux
+readonly DEFAULT_HYPR_EFFECT=shadow
+
+# Opacity picker ladder — 10% increments. `custom` drops to free-form input.
+readonly OPACITY_LADDER=( 0.05 0.10 0.15 0.20 0.30 0.40 0.50 0.60 0.70 0.80 0.90 1.00 )
+
+# Launcher logo axis — distro glyphs from the Nerd Fonts "Linux" range
+# (plus Gentoo from devicons). The sed in apply_waybar rewrites the active
+# `"format": "\uXXXX"` line inside the `custom/launcher` block on every
+# apply, so cycling waybar variants preserves the chosen logo.
+# Keyed values must match WAYBAR_LAUNCHER_LOGOS; fix a codepoint here if
+# your Nerd Fonts version maps a distro to a different glyph.
+readonly WAYBAR_LAUNCHER_LOGOS=(
+  tux arch gentoo debian void nixos
+  fedora fedora_inverse
+  endeavouros cachyos opensuse artix
+  slackware slackware_inverse
+)
+declare -A WAYBAR_LAUNCHER_GLYPHS=(
+  [tux]=f17c
+  [arch]=f303
+  [gentoo]=e7e6
+  [debian]=f306
+  [void]=f32e
+  [nixos]=f313
+  [fedora]=f30a
+  [fedora_inverse]=f30b
+  [endeavouros]=f322
+  [cachyos]=f303
+  [opensuse]=f314
+  [artix]=f31f
+  [slackware]=f318
+  [slackware_inverse]=f319
+)
+declare -A WAYBAR_LAUNCHER_NAMES=(
+  [tux]='Tux'
+  [arch]='Arch Linux'
+  [gentoo]='Gentoo'
+  [debian]='Debian'
+  [void]='Void Linux'
+  [nixos]='NixOS'
+  [fedora]='Fedora'
+  [fedora_inverse]='Fedora (inverse)'
+  [endeavouros]='EndeavourOS'
+  [cachyos]='CachyOS'
+  [opensuse]='openSUSE'
+  [artix]='Artix'
+  [slackware]='Slackware'
+  [slackware_inverse]='Slackware (inverse)'
+)
+
+# Wizard ladder for font-size pickers — custom... drops to free-form input.
+# Denser at the low end (1-point steps 6-12) where differences matter most for
+# dense fonts like Meslo; coarser at the top for hi-DPI / TV viewing distances.
+readonly FONT_SIZE_LADDER=( 6 7 8 9 10 11 12 14 16 18 20 24 28 36 48 )
+
+# Populated by load_state / cmd_set / wizard
+for k in "${STATE_KEYS[@]}"; do declare -g "$k="; done
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  Helpers
+# ──────────────────────────────────────────────────────────────────────────────
+
+die()   { printf 'dotctl: %s\n' "$*" >&2; exit 1; }
+warn()  { printf 'dotctl: %s\n' "$*" >&2; }
+info()  { printf '%s\n' "$*"; }
+log()   { printf '[%s] %s\n' "$(date '+%F %T')" "$*" >> "$LOG_FILE" 2>/dev/null || true; }
+
+contains() {
+  local needle="$1"; shift
+  local item
+  for item in "$@"; do [[ "$item" == "$needle" ]] && return 0; done
+  return 1
+}
+
+confirm() {
+  local prompt="${1:-Continue?}" default="${2:-n}" reply
+  local hint='[y/N]'
+  [[ "$default" == "y" ]] && hint='[Y/n]'
+  read -r -p "$prompt $hint " reply || true
+  reply="${reply:-$default}"
+  [[ "$reply" =~ ^[Yy] ]]
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  State I/O
+# ──────────────────────────────────────────────────────────────────────────────
+
+state_exists() { [[ -f "$STATE_FILE" ]]; }
+
+# One-time migration: older dotctl versions kept state at ~/.cache/dotctl/state.
+# If the new config file is missing but the legacy one exists, move it in place.
+migrate_legacy_state() {
+  [[ -f "$STATE_FILE" ]] && return 0
+  [[ -f "$LEGACY_STATE_FILE" ]] || return 0
+  mkdir -p "$STATE_DIR"
+  cp -f "$LEGACY_STATE_FILE" "$STATE_FILE"
+  log "migrated legacy state $LEGACY_STATE_FILE -> $STATE_FILE"
+  info "dotctl: migrated legacy state to $STATE_FILE"
+}
+
+load_state() {
+  migrate_legacy_state
+  state_exists || die "no state found. Run \`dotctl configure\` first."
+  # shellcheck disable=SC1090
+  source "$STATE_FILE"
+  # Soft migration: font-size fields added after first release — if a state
+  # file predates them, fall back to the hardcoded defaults so we don't die.
+  : "${KITTY_FONT_SIZE:=$DEFAULT_KITTY_FONT_SIZE}"
+  : "${MAKO_FONT_SIZE:=$DEFAULT_MAKO_FONT_SIZE}"
+  : "${WOFI_FONT_SIZE:=$DEFAULT_WOFI_FONT_SIZE}"
+  : "${WAYBAR_FONT_SIZE:=$DEFAULT_WAYBAR_FONT_SIZE}"
+  : "${WAYBAR_DECOR:=$DEFAULT_WAYBAR_DECOR}"
+  : "${WAYBAR_VPN:=$DEFAULT_WAYBAR_VPN}"
+  : "${WAYBAR_TRANSPARENT:=$DEFAULT_WAYBAR_TRANSPARENT}"
+  : "${WAYBAR_OPACITY:=$DEFAULT_WAYBAR_OPACITY}"
+  : "${WAYBAR_LAUNCHER_LOGO:=$DEFAULT_WAYBAR_LAUNCHER_LOGO}"
+  : "${HYPR_EFFECT:=$DEFAULT_HYPR_EFFECT}"
+  # Style axis renames: zsh → console, bubble → pill. Auto-migrate old state.
+  [[ "$WAYBAR_STYLE" == "zsh" ]]    && WAYBAR_STYLE="console"
+  [[ "$WAYBAR_STYLE" == "bubble" ]] && WAYBAR_STYLE="pill"
+  local k
+  for k in "${STATE_KEYS[@]}"; do
+    [[ -n "${!k:-}" ]] || die "state file is missing key: $k. Run \`dotctl configure\` to repair."
+  done
+}
+
+save_state() {
+  mkdir -p "$STATE_DIR" "$CACHE_DIR"
+  exec 8>"$STATE_LOCK"
+  flock -w 2 8 || die "state lock busy"
+  {
+    printf '# dotctl config — hand-edit, then run `dotctl apply` (or let `dotctl watch` do it).\n'
+    printf '# Regenerate with `dotctl configure`. Managed keys:\n'
+    local k
+    for k in "${STATE_KEYS[@]}"; do
+      printf '%s=%q\n' "$k" "${!k}"
+    done
+  } > "$STATE_FILE"
+  exec 8>&-
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  Discovery — scan filesystem for available options
+# ──────────────────────────────────────────────────────────────────────────────
+
+_unique_sorted() { printf '%s\n' "$@" | awk 'NF' | sort -u; }
+
+# Colors for cava = any top-level dir that contains a `config` file
+detect_cava_colors() {
+  local d
+  for d in "$CAVA_DIR"/*/; do
+    [[ -f "${d}config" ]] || continue
+    basename "$d"
+  done | sort -u
+}
+
+# Colors for kitty/mako = any <color>_<font> dir — we extract the leading color
+# part (everything before the last _<font> suffix).
+_detect_color_font_colors() {
+  local base="$1" fonts=("${@:2}") d name color f
+  for d in "$base"/*/; do
+    [[ -d "$d" ]] || continue
+    name=$(basename "$d")
+    for f in "${fonts[@]}"; do
+      if [[ "$name" == *_"$f" ]]; then
+        color="${name%_$f}"
+        printf '%s\n' "$color"
+        break
+      fi
+    done
+    :
+  done | sort -u
+}
+
+detect_kitty_colors() { _detect_color_font_colors "$KITTY_DIR" meslo phoenix; }
+detect_mako_colors()  { _detect_color_font_colors "$MAKO_DIR"  meslo phoenix; }
+detect_wofi_colors()  { _detect_color_font_colors "$WOFI_DIR"  meslo phoenix; }
+
+# Waybar colors come from palette files in ~/.config/waybar/palettes/<name>.palette.
+detect_waybar_colors() {
+  local f
+  for f in "$WAYBAR_DIR"/palettes/*.palette; do
+    [[ -f "$f" ]] || continue
+    local name; name=$(basename "$f")
+    printf '%s\n' "${name%.palette}"
+  done | sort -u
+}
+
+# Font axis per element — scan dirs and collect suffixes.
+_detect_fonts_for() {
+  local base="$1" d name
+  for d in "$base"/*/; do
+    name=$(basename "$d")
+    case "$name" in
+      *_meslo)   printf 'meslo\n';;
+      *_phoenix) printf 'phoenix\n';;
+    esac
+  done | sort -u
+}
+
+detect_kitty_fonts()  { _detect_fonts_for "$KITTY_DIR"; }
+detect_mako_fonts()   { _detect_fonts_for "$MAKO_DIR"; }
+detect_wofi_fonts()   { _detect_fonts_for "$WOFI_DIR"; }
+detect_waybar_fonts() {
+  local f
+  for f in "$WAYBAR_DIR"/fonts/*.fontdef; do
+    [[ -f "$f" ]] || continue
+    local name; name=$(basename "$f")
+    printf '%s\n' "${name%.fontdef}"
+  done | sort -u
+}
+
+# Wofi variant subdirs inside each <color>_<font> dir — usually "1" and "2".
+detect_wofi_variants() {
+  local d sub
+  declare -A seen=()
+  for d in "$WOFI_DIR"/*/; do
+    [[ -d "$d" ]] || continue
+    for sub in "$d"*/; do
+      [[ -d "$sub" ]] || continue
+      name=$(basename "$sub")
+      [[ "$name" =~ ^[0-9]+$ ]] || continue
+      seen[$name]=1
+    done
+  done
+  printf '%s\n' "${!seen[@]}" | sort -n
+}
+
+detect_waybar_styles()         { printf '%s\n' pill console; }
+detect_waybar_scopes()         { printf '%s\n' full minimal; }
+detect_waybar_vpns()           { printf '%s\n' off on; }
+detect_waybar_transparents()   { printf '%s\n' on off; }
+detect_waybar_opacities()      { printf '%s\n' "${OPACITY_LADDER[@]}"; }
+detect_hypr_effects()          { printf '%s\n' shadow glow; }
+detect_waybar_decors() {
+  local f
+  for f in "$WAYBAR_DIR"/decorators/*.glyphs; do
+    [[ -f "$f" ]] || continue
+    local name; name=$(basename "$f")
+    printf '%s\n' "${name%.glyphs}"
+  done | sort -u
+}
+detect_waybar_launcher_logos() { printf '%s\n' "${WAYBAR_LAUNCHER_LOGOS[@]}"; }
+
+# Wallpaper themes = dirs in ~/Pictures/dotctl/wallpapers that have a matching cycle script in PATH.
+detect_wallpapers() {
+  local d name
+  for d in "$WALLPAPER_ROOT"/*/; do
+    [[ -d "$d" ]] || continue
+    name=$(basename "$d")
+    if [[ -x "$(cycle_script "$name")" ]]; then
+      printf '%s\n' "$name"
+    fi
+  done | sort -u
+}
+
+detect_wallpapers_orphan_dirs() {
+  local d name
+  for d in "$WALLPAPER_ROOT"/*/; do
+    [[ -d "$d" ]] || continue
+    name=$(basename "$d")
+    if [[ ! -x "$(cycle_script "$name")" ]]; then
+      printf '%s\n' "$name"
+    fi
+  done | sort -u
+}
+
+detect_wallpapers_orphan_scripts() {
+  local f name
+  for f in "$CYCLE_DIR"/cycle-hyprpaper-*; do
+    [[ -f "$f" ]] || continue
+    name="${f##*/cycle-hyprpaper-}"
+    [[ -d "$WALLPAPER_ROOT/$name" ]] || printf '%s\n' "$name"
+  done
+}
+
+# Intersection of UI colors (cava ∩ kitty ∩ mako ∩ wofi ∩ waybar) — candidates for --color.
+detect_ui_colors() {
+  local f tmp=$(mktemp)
+  {
+    detect_cava_colors
+    detect_kitty_colors
+    detect_mako_colors
+    detect_wofi_colors
+    detect_waybar_colors
+  } | sort | uniq -c | awk '$1==5 {print $2}'
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  Validation
+# ──────────────────────────────────────────────────────────────────────────────
+
+_in_list() {
+  local needle="$1" item
+  shift
+  for item in "$@"; do [[ "$item" == "$needle" ]] && return 0; done
+  return 1
+}
+
+validate_cava_color()   { _in_list "$1" $(detect_cava_colors); }
+validate_kitty_color()  { _in_list "$1" $(detect_kitty_colors); }
+validate_mako_color()   { _in_list "$1" $(detect_mako_colors); }
+validate_wofi_color()   { _in_list "$1" $(detect_wofi_colors); }
+validate_waybar_color() { _in_list "$1" $(detect_waybar_colors); }
+validate_wallpaper()    { _in_list "$1" $(detect_wallpapers); }
+
+validate_kitty_font()   { _in_list "$1" $(detect_kitty_fonts); }
+validate_mako_font()    { _in_list "$1" $(detect_mako_fonts); }
+validate_wofi_font()    { _in_list "$1" $(detect_wofi_fonts); }
+validate_waybar_font()  { _in_list "$1" $(detect_waybar_fonts); }
+
+validate_wofi_variant()         { _in_list "$1" $(detect_wofi_variants); }
+validate_waybar_style()         { _in_list "$1" pill console; }
+validate_waybar_scope()         { _in_list "$1" full minimal; }
+validate_waybar_decor()         { _in_list "$1" $(detect_waybar_decors); }
+validate_waybar_vpn()           { _in_list "$1" on off; }
+# Is the VPN module actually usable? Both scripts must be resolvable.
+waybar_vpn_available() {
+  command -v vpnctl >/dev/null 2>&1 && command -v vpn-status-indicator >/dev/null 2>&1
+}
+validate_waybar_transparent()   { _in_list "$1" on off; }
+validate_waybar_opacity() {
+  local v="$1"
+  [[ -n "$v" ]] || return 1
+  [[ "$v" =~ ^[0-9]+(\.[0-9]+)?$ ]] || return 1
+  awk -v n="$v" 'BEGIN { exit !(n >= 0 && n <= 1) }'
+}
+validate_hypr_effect()          { _in_list "$1" shadow glow; }
+validate_waybar_launcher_logo() { _in_list "$1" "${WAYBAR_LAUNCHER_LOGOS[@]}"; }
+
+# Accepts positive integer or decimal in [4, 72]. Empty value rejected.
+validate_font_size() {
+  local v="$1"
+  [[ -n "$v" ]] || return 1
+  [[ "$v" =~ ^[0-9]+(\.[0-9]+)?$ ]] || return 1
+  awk -v n="$v" 'BEGIN { exit !(n >= 4 && n <= 72) }'
+}
+
+# Resolve paths for each element given its current state values
+path_cava()     { printf '%s/%s/config\n' "$CAVA_DIR" "$1"; }
+path_kitty()    { printf '%s/%s_%s/kitty.conf\n' "$KITTY_DIR" "$1" "$2"; }
+path_mako()     { printf '%s/%s_%s/config\n' "$MAKO_DIR" "$1" "$2"; }
+path_wofi()     { printf '%s/%s_%s/%s/style.css\n' "$WOFI_DIR" "$1" "$2" "$3"; }
+path_waybar()   { printf '%s/%s_%s\n' "$WAYBAR_DIR" "$1" "$2"; }  # args: style, scope
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  Apply functions — copy themed source into the live slot, reload the daemon
+# ──────────────────────────────────────────────────────────────────────────────
+
+apply_cava() {
+  local src; src=$(path_cava "$CAVA_COLOR")
+  [[ -f "$src" ]] || die "cava source missing: $src"
+  cp -f "$src" "$CAVA_DIR/config"
+  log "apply cava: $CAVA_COLOR"
+  # cava doesn't hot-reload; user restarts it manually if running.
+}
+
+apply_kitty() {
+  local src; src=$(path_kitty "$KITTY_COLOR" "$KITTY_FONT")
+  [[ -f "$src" ]] || die "kitty source missing: $src"
+  cp -f "$src" "$KITTY_DIR/kitty.conf"
+  # Replace `font_size        18.0` with the current state value. The sed
+  # targets the active copy only — themed sources stay canonical.
+  sed -i -E "s/^(font_size[[:space:]]+).*/\1${KITTY_FONT_SIZE}/" "$KITTY_DIR/kitty.conf"
+  log "apply kitty: ${KITTY_COLOR}_${KITTY_FONT} size=${KITTY_FONT_SIZE}"
+  # Existing kitty windows pick up changes on next launch — no reload.
+}
+
+apply_mako() {
+  local src; src=$(path_mako "$MAKO_COLOR" "$MAKO_FONT")
+  [[ -f "$src" ]] || die "mako source missing: $src"
+  cp -f "$src" "$MAKO_DIR/config"
+  # Replace trailing size in `font=<family> <size>` — family may contain spaces.
+  sed -i -E "s/^(font=.* )[0-9]+(\.[0-9]+)?$/\1${MAKO_FONT_SIZE}/" "$MAKO_DIR/config"
+  makoctl reload >/dev/null 2>&1 || warn "makoctl reload failed (mako running?)"
+  log "apply mako: ${MAKO_COLOR}_${MAKO_FONT} size=${MAKO_FONT_SIZE}"
+}
+
+apply_wofi() {
+  local src; src=$(path_wofi "$WOFI_COLOR" "$WOFI_FONT" "$WOFI_VARIANT")
+  [[ -f "$src" ]] || die "wofi source missing: $src"
+  cp -f "$src" "$WOFI_DIR/style.css"
+  # Replace `font-size: 26px;` — preserves the px unit and surrounding text.
+  sed -i -E "s/(font-size:[[:space:]]*)[0-9]+(\.[0-9]+)?px/\1${WOFI_FONT_SIZE}px/g" "$WOFI_DIR/style.css"
+  log "apply wofi: ${WOFI_COLOR}_${WOFI_FONT}/$WOFI_VARIANT size=${WOFI_FONT_SIZE}"
+  # wofi is launched on demand — next invocation picks up new CSS.
+}
+
+apply_waybar() {
+  local src palette font decor
+  src=$(path_waybar "$WAYBAR_STYLE" "$WAYBAR_SCOPE")
+  palette="$WAYBAR_DIR/palettes/${WAYBAR_COLOR}.palette"
+  font="$WAYBAR_DIR/fonts/${WAYBAR_FONT}.fontdef"
+  decor="$WAYBAR_DIR/decorators/${WAYBAR_DECOR}.glyphs"
+
+  [[ -d "$src" ]] || die "waybar source missing: $src"
+  [[ -f "$src/config.jsonc" && -f "$src/style.css" ]] || die "waybar source incomplete: $src"
+  [[ -f "$palette" ]] || die "waybar palette missing: $palette"
+  [[ -f "$font" ]]    || die "waybar font missing: $font"
+  [[ -f "$decor" ]]   || die "waybar decorator missing: $decor"
+
+  cp -f "$src/config.jsonc" "$WAYBAR_DIR/config.jsonc"
+  cp -f "$src/style.css"   "$WAYBAR_DIR/style.css"
+
+  # Palette injection: replace the block between `/* PALETTE:BEGIN */` and
+  # `/* PALETTE:END */` with the contents of the active palette file.
+  awk -v palette_file="$palette" '
+    /\/\* PALETTE:BEGIN/ {
+      print
+      while ((getline line < palette_file) > 0) print line
+      close(palette_file)
+      inside = 1
+      next
+    }
+    /\/\* PALETTE:END/ { inside = 0 }
+    !inside { print }
+  ' "$WAYBAR_DIR/style.css" > "$WAYBAR_DIR/style.css.tmp" && mv -f "$WAYBAR_DIR/style.css.tmp" "$WAYBAR_DIR/style.css"
+
+  # Font injection: same pattern, but inside the `#waybar { ... }` block, so
+  # indent each injected line with 2 spaces.
+  awk -v font_file="$font" '
+    /\/\* FONT:BEGIN/ {
+      print
+      while ((getline line < font_file) > 0) print "  " line
+      close(font_file)
+      inside = 1
+      next
+    }
+    /\/\* FONT:END/ { inside = 0 }
+    !inside { print }
+  ' "$WAYBAR_DIR/style.css" > "$WAYBAR_DIR/style.css.tmp" && mv -f "$WAYBAR_DIR/style.css.tmp" "$WAYBAR_DIR/style.css"
+
+  # Override the bar font-size from state — scoped to `#waybar { ... }` so
+  # larger chevron/separator font sizes elsewhere in the CSS stay authored.
+  sed -i -E "/^#waybar[[:space:]]*\{/,/^\}/ s/(font-size:[[:space:]]*)[0-9]+(\.[0-9]+)?pt/\1${WAYBAR_FONT_SIZE}pt/" "$WAYBAR_DIR/style.css"
+
+  # Transparent bar background toggle: the canonical `#waybar { background:
+  # transparent; }` block is wrapped in `/* TRANSPARENT:BEGIN */ ... END */`.
+  # When WAYBAR_TRANSPARENT=off, replace the inner `background:` rule with an
+  # opaque palette-aware fill. Marker comments are always stripped.
+  awk -v want="$WAYBAR_TRANSPARENT" -v op="$WAYBAR_OPACITY" '
+    /\/\* TRANSPARENT:BEGIN/ {
+      if (want == "off") {
+        printf "  background: alpha(@bg0, %s);\n", op
+      } else {
+        print "  background: transparent;"
+      }
+      skip = 1
+      next
+    }
+    /\/\* TRANSPARENT:END/ { skip = 0; next }
+    !skip { print }
+  ' "$WAYBAR_DIR/style.css" > "$WAYBAR_DIR/style.css.tmp" && mv -f "$WAYBAR_DIR/style.css.tmp" "$WAYBAR_DIR/style.css"
+
+  # VPN gate: the canonical files always contain VPN blocks wrapped in
+  # `/* VPN:BEGIN */ ... /* VPN:END */`. At apply time we always strip the
+  # marker comment lines themselves. When WAYBAR_VPN != on we additionally
+  # drop everything between them.
+  local _f _vpn_on=0
+  [[ "$WAYBAR_VPN" == "on" ]] && _vpn_on=1
+  for _f in "$WAYBAR_DIR/config.jsonc" "$WAYBAR_DIR/style.css"; do
+    awk -v keep="$_vpn_on" '
+      /\/\* VPN:BEGIN/ { if (keep != 1) skip = 1; next }
+      /\/\* VPN:END/   { skip = 0; next }
+      !skip { print }
+    ' "$_f" > "$_f.tmp" && mv -f "$_f.tmp" "$_f"
+  done
+
+  # Decorator injection: for console style, swap the canonical pointed glyphs
+  # with the active decorator's target glyphs in config.jsonc. The decorator
+  # file holds one `FROM TO` pair per non-comment line.
+  if [[ "$WAYBAR_STYLE" == "console" ]]; then
+    local _from _to _rest
+    while IFS= read -r _line || [[ -n "$_line" ]]; do
+      _line="${_line%%#*}"
+      [[ -z "${_line// }" ]] && continue
+      read -r _from _to _rest <<<"$_line"
+      [[ -n "$_from" && -n "$_to" ]] || continue
+      sed -i "s/$_from/$_to/g" "$WAYBAR_DIR/config.jsonc"
+    done < "$decor"
+  fi
+
+  # Rewrite the active launcher glyph inside the `custom/launcher` block.
+  # Targets only the uncommented `"format": "\uXXXX"` line (leading quote,
+  # no `//` prefix) so commented alternatives stay as reference.
+  local glyph_hex pretty_name
+  glyph_hex="${WAYBAR_LAUNCHER_GLYPHS[$WAYBAR_LAUNCHER_LOGO]:-f17c}"
+  pretty_name="${WAYBAR_LAUNCHER_NAMES[$WAYBAR_LAUNCHER_LOGO]:-Tux}"
+  sed -i -E '/"custom\/launcher":/,/^[[:space:]]*\},?[[:space:]]*$/ {
+    /^[[:space:]]+"format":[[:space:]]*"\\u[0-9a-fA-F]{4}"/ s|^([[:space:]]+)"format":[[:space:]]*"\\u[0-9a-fA-F]{4}",.*|\1"format": "\\u'"$glyph_hex"'",  // '"$pretty_name"'|
+  }' "$WAYBAR_DIR/config.jsonc"
+
+  pkill -SIGUSR2 -x waybar 2>/dev/null || warn "waybar reload signal failed (waybar running?)"
+  log "apply waybar: ${WAYBAR_STYLE}_${WAYBAR_SCOPE} color=${WAYBAR_COLOR} font=${WAYBAR_FONT}/${WAYBAR_FONT_SIZE} decor=${WAYBAR_DECOR} vpn=${WAYBAR_VPN} transparent=${WAYBAR_TRANSPARENT}/opacity=${WAYBAR_OPACITY} logo=${WAYBAR_LAUNCHER_LOGO}"
+}
+
+apply_wallpaper() {
+  local script; script=$(cycle_script "$WALLPAPER")
+  [[ -x "$script" ]] || die "wallpaper cycle script missing: $script"
+  "$script" current
+  log "apply wallpaper: $WALLPAPER (current image)"
+}
+
+# Resolve the hyprland color template — installed copy first, then the
+# source tree copy next to this script (for uninstalled testing).
+_hypr_template_path() {
+  [[ -f "$HYPR_COLORS_TEMPLATE" ]] && { printf '%s\n' "$HYPR_COLORS_TEMPLATE"; return 0; }
+  local self_dir
+  self_dir=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
+  if [[ -f "$self_dir/hypr/dotctl-colors.conf.tmpl" ]]; then
+    printf '%s\n' "$self_dir/hypr/dotctl-colors.conf.tmpl"
+    return 0
+  fi
+  return 1
+}
+
+# Parse a waybar `.palette` file into stdout as `NAME<space>HEX` lines,
+# resolving `@other_name` aliases one pass deep. Chained aliases (rare in
+# these palettes) are resolved in a second pass.
+_parse_palette() {
+  local file="$1"
+  awk '
+    /^@define-color[[:space:]]+/ {
+      name = $2
+      val  = $3
+      sub(/;.*$/, "", val)
+      print name, val
+    }
+  ' "$file"
+}
+
+apply_hypr() {
+  local palette="$WAYBAR_DIR/palettes/${WAYBAR_COLOR}.palette"
+  local template
+  template=$(_hypr_template_path) || { warn "hypr colors template missing — skipping apply_hypr"; return 0; }
+  [[ -f "$palette" ]] || { warn "hypr: palette missing: $palette"; return 0; }
+  [[ -d "$HYPR_DIR" ]] || { log "hypr: $HYPR_DIR absent — skipping"; return 0; }
+
+  # Build a name→hex map. Two-pass alias resolution handles `gold → @yellow`
+  # style indirection; we bail out after 4 passes to avoid cycles.
+  declare -A pal
+  local name val
+  while read -r name val; do
+    [[ -z "$name" ]] && continue
+    pal[$name]="$val"
+  done < <(_parse_palette "$palette")
+
+  local pass resolved=0
+  for pass in 1 2 3 4; do
+    resolved=1
+    for name in "${!pal[@]}"; do
+      val="${pal[$name]}"
+      if [[ "$val" == @* ]]; then
+        local ref="${val#@}"
+        if [[ -n "${pal[$ref]:-}" ]]; then
+          pal[$name]="${pal[$ref]}"
+          [[ "${pal[$ref]}" == @* ]] && resolved=0
+        fi
+      fi
+    done
+    (( resolved == 1 )) && break
+  done
+
+  # Extract the slots we care about; strip leading `#` and lowercase.
+  local cyan yellow bg3 black
+  cyan=$(  printf '%s\n' "${pal[cyan]:-}"   | sed 's/^#//' | tr 'A-F' 'a-f')
+  yellow=$(printf '%s\n' "${pal[yellow]:-}" | sed 's/^#//' | tr 'A-F' 'a-f')
+  bg3=$(   printf '%s\n' "${pal[bg3]:-}"    | sed 's/^#//' | tr 'A-F' 'a-f')
+  black=$( printf '%s\n' "${pal[black]:-}"  | sed 's/^#//' | tr 'A-F' 'a-f')
+  # Fallbacks — any palette missing a slot gets a neutral grey so hyprland
+  # doesn't choke on a literal placeholder.
+  : "${cyan:=8888aa}"
+  : "${yellow:=aaaa88}"
+  : "${bg3:=333333}"
+  : "${black:=111111}"
+
+  # Shadow effect: `shadow` → dark drop shadow (@black, heavy alpha).
+  #                `glow`   → colored glow matching the active border start (@cyan, softer alpha).
+  local shadow_color shadow_alpha
+  case "${HYPR_EFFECT:-shadow}" in
+    glow)   shadow_color="$cyan";  shadow_alpha="88" ;;
+    shadow|*) shadow_color="$black"; shadow_alpha="cc" ;;
+  esac
+
+  sed \
+    -e "s/__CYAN__/${cyan}/g" \
+    -e "s/__YELLOW__/${yellow}/g" \
+    -e "s/__BG3__/${bg3}/g" \
+    -e "s/__SHADOW_COLOR__/${shadow_color}/g" \
+    -e "s/__SHADOW_ALPHA__/${shadow_alpha}/g" \
+    "$template" > "$HYPR_COLORS_FILE.tmp" && mv -f "$HYPR_COLORS_FILE.tmp" "$HYPR_COLORS_FILE"
+
+  # Reload hyprland in place if running. Silent on failure — the user may
+  # not yet have sourced the file from their hyprland.conf.
+  hyprctl reload >/dev/null 2>&1 || true
+  log "apply hypr: colors from ${WAYBAR_COLOR}.palette → $HYPR_COLORS_FILE (effect=${HYPR_EFFECT:-shadow})"
+}
+
+apply_all() {
+  apply_cava
+  apply_kitty
+  apply_mako
+  apply_wofi
+  apply_waybar
+  apply_hypr
+  apply_wallpaper
+}
+
+# Apply only the named elements (space-separated).
+apply_subset() {
+  local el
+  for el in "$@"; do
+    case "$el" in
+      cava)      apply_cava;;
+      kitty)     apply_kitty;;
+      mako)      apply_mako;;
+      wofi)      apply_wofi;;
+      waybar)    apply_waybar;;
+      hypr)      apply_hypr;;
+      wallpaper) apply_wallpaper;;
+      *) warn "unknown element: $el";;
+    esac
+  done
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  `show` — pretty-print state + drift
+# ──────────────────────────────────────────────────────────────────────────────
+
+cmd_show() {
+  case "${1:-}" in
+    -h|--help|help)
+      cat <<'EOF'
+dotctl show
+
+Pretty-print the current state, flag UI drift (colors or fonts diverging
+across elements), indicate whether the active wallpaper has a matching UI
+color theme, and warn about orphan wallpaper dirs or cycle scripts.
+
+No arguments. Same output as `dotctl set` with no flags.
+EOF
+      return 0;;
+  esac
+
+  if ! state_exists; then
+    info "dotctl: no state yet. Run \`dotctl configure\` to set up."
+    return 0
+  fi
+  load_state
+
+  info "dotctl state  ($STATE_FILE)"
+  info ""
+  printf '  %-10s color=%s\n' "cava"      "$CAVA_COLOR"
+  printf '  %-10s color=%s  font=%s  size=%s\n' "kitty" "$KITTY_COLOR" "$KITTY_FONT" "$KITTY_FONT_SIZE"
+  printf '  %-10s color=%s  font=%s  size=%s\n' "mako"  "$MAKO_COLOR" "$MAKO_FONT" "$MAKO_FONT_SIZE"
+  printf '  %-10s color=%s  font=%s  size=%s  variant=%s\n' \
+    "wofi" "$WOFI_COLOR" "$WOFI_FONT" "$WOFI_FONT_SIZE" "$WOFI_VARIANT"
+  printf '  %-10s color=%s  font=%s  size=%s  style=%s  scope=%s  decor=%s  vpn=%s  transparent=%s  opacity=%s  logo=%s\n' \
+    "waybar" "$WAYBAR_COLOR" "$WAYBAR_FONT" "$WAYBAR_FONT_SIZE" "$WAYBAR_STYLE" "$WAYBAR_SCOPE" "$WAYBAR_DECOR" "$WAYBAR_VPN" "$WAYBAR_TRANSPARENT" "$WAYBAR_OPACITY" "$WAYBAR_LAUNCHER_LOGO"
+  printf '  %-10s effect=%s\n' "hypr" "$HYPR_EFFECT"
+  printf '  %-10s %s\n' "wallpaper" "$WALLPAPER"
+
+  # Drift detection
+  local ui_colors=( "$CAVA_COLOR" "$KITTY_COLOR" "$MAKO_COLOR" "$WOFI_COLOR" "$WAYBAR_COLOR" )
+  local ui_fonts=( "$KITTY_FONT" "$MAKO_FONT" "$WOFI_FONT" "$WAYBAR_FONT" )
+  local unique_colors unique_fonts
+  unique_colors=$(printf '%s\n' "${ui_colors[@]}" | sort -u | wc -l)
+  unique_fonts=$(printf '%s\n' "${ui_fonts[@]}" | sort -u | wc -l)
+
+  info ""
+  if (( unique_colors == 1 )) && (( unique_fonts == 1 )); then
+    info "  drift:     none — UI is unified"
+  else
+    (( unique_colors > 1 )) && info "  drift:     UI colors differ across elements"
+    (( unique_fonts  > 1 )) && info "  drift:     UI fonts differ across elements"
+  fi
+
+  # Wallpaper combo check
+  if validate_waybar_color "$WALLPAPER" 2>/dev/null; then
+    info "  wallpaper: $WALLPAPER — UI combo available"
+  else
+    info "  wallpaper: $WALLPAPER — wallpaper-only (no matching UI theme)"
+  fi
+
+  # Discovery warnings
+  local orphan
+  while IFS= read -r orphan; do
+    [[ -z "$orphan" ]] && continue
+    warn "wallpaper dir \`$orphan\` has no cycle-hyprpaper-$orphan script"
+  done < <(detect_wallpapers_orphan_dirs)
+  while IFS= read -r orphan; do
+    [[ -z "$orphan" ]] && continue
+    warn "cycle-hyprpaper-$orphan script has no matching ~/Pictures/dotctl/wallpapers/$orphan dir"
+  done < <(detect_wallpapers_orphan_scripts)
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  `list` — print valid values for an axis
+# ──────────────────────────────────────────────────────────────────────────────
+
+cmd_list() {
+  local axis="${1:-}"
+  case "$axis" in
+    colors|ui-colors)   detect_ui_colors;;
+    cava-colors)        detect_cava_colors;;
+    kitty-colors)       detect_kitty_colors;;
+    mako-colors)        detect_mako_colors;;
+    wofi-colors)        detect_wofi_colors;;
+    waybar-colors)      detect_waybar_colors;;
+    fonts)              detect_kitty_fonts;;
+    kitty-fonts)        detect_kitty_fonts;;
+    mako-fonts)         detect_mako_fonts;;
+    wofi-fonts)         detect_wofi_fonts;;
+    waybar-fonts)       detect_waybar_fonts;;
+    styles)             detect_waybar_styles;;
+    scopes)             detect_waybar_scopes;;
+    waybar-decors|decors) detect_waybar_decors;;
+    waybar-vpns|vpns) detect_waybar_vpns;;
+    waybar-transparents|transparents) detect_waybar_transparents;;
+    waybar-opacities|opacities) detect_waybar_opacities;;
+    hypr-effects|effects) detect_hypr_effects;;
+    launcher-logos|logos) detect_waybar_launcher_logos;;
+    wofi-variants)      detect_wofi_variants;;
+    waybar-variants)
+      local s sc
+      for s in pill console; do for sc in full minimal; do
+        printf '%s_%s\n' "$s" "$sc"
+      done; done
+      ;;
+    wallpapers)         detect_wallpapers;;
+    presets)            [[ -d "$PRESET_DIR" ]] && ls -1 "$PRESET_DIR" 2>/dev/null | sed 's/\.conf$//';;
+    ''|help)
+      cat <<'EOF'
+dotctl list <axis>
+
+axes:
+  colors           UI colors present across all 5 UI elements
+  cava-colors      colors available for cava
+  kitty-colors     colors available for kitty
+  mako-colors      colors available for mako
+  wofi-colors      colors available for wofi
+  waybar-colors    colors available for waybar
+  fonts            fonts available (kitty)
+  kitty-fonts
+  mako-fonts
+  wofi-fonts
+  waybar-fonts
+  styles           waybar style axis  (pill | console)
+  scopes           waybar scope axis  (full | minimal)
+  waybar-decors    waybar decorator glyph sets (pointed | round)
+  waybar-vpns      waybar vpn module toggle (off | on)
+  waybar-transparents  waybar transparent bar bg toggle (on | off)
+  waybar-opacities     waybar bar opacity ladder [0.0-1.0]
+  hypr-effects         hyprland window effect (shadow | glow)
+  launcher-logos   waybar launcher distro glyphs
+  wofi-variants    wofi subvariants (1 | 2)
+  waybar-variants  canonical waybar style_scope combos
+  wallpapers       wallpaper themes with a matching cycle script
+  presets          saved presets under ~/.config/dotctl/presets
+EOF
+      ;;
+    *) die "unknown axis: $axis — try \`dotctl list help\`";;
+  esac
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  `set` — flag parser and applier
+# ──────────────────────────────────────────────────────────────────────────────
+
+cmd_set() {
+  if (( $# == 0 )); then
+    cmd_show
+    return 0
+  fi
+
+  # Handle --help before loading state so help works without a state file.
+  local arg
+  for arg in "$@"; do
+    case "$arg" in -h|--help) _help_set; return 0;; esac
+  done
+
+  # State is required for all other set invocations.
+  load_state
+
+  # Shortcuts
+  local new_color='' new_font='' new_font_size=''
+  # Per-element
+  local new_cava_color=''
+  local new_kitty_color='' new_kitty_font='' new_kitty_font_size=''
+  local new_mako_color='' new_mako_font='' new_mako_font_size=''
+  local new_wofi_color='' new_wofi_font='' new_wofi_font_size='' new_wofi_variant=''
+  local new_waybar_color='' new_waybar_font='' new_waybar_font_size='' new_waybar_style='' new_waybar_scope='' new_waybar_decor='' new_waybar_vpn='' new_waybar_transparent='' new_waybar_opacity='' new_waybar_launcher_logo='' new_hypr_effect=''
+  local new_wallpaper=''
+  local preset_name=''
+
+  while (( $# > 0 )); do
+    case "$1" in
+      -c|--color)            new_color="$2"; shift 2;;
+      -f|--font)             new_font="$2"; shift 2;;
+      --font-size)           new_font_size="$2"; shift 2;;
+      --cava-color)          new_cava_color="$2"; shift 2;;
+      --kitty-color)         new_kitty_color="$2"; shift 2;;
+      --kitty-font)          new_kitty_font="$2"; shift 2;;
+      --kitty-font-size)     new_kitty_font_size="$2"; shift 2;;
+      --mako-color)          new_mako_color="$2"; shift 2;;
+      --mako-font)           new_mako_font="$2"; shift 2;;
+      --mako-font-size)      new_mako_font_size="$2"; shift 2;;
+      --wofi-color)          new_wofi_color="$2"; shift 2;;
+      --wofi-font)           new_wofi_font="$2"; shift 2;;
+      --wofi-font-size)      new_wofi_font_size="$2"; shift 2;;
+      --wofi-variant)        new_wofi_variant="$2"; shift 2;;
+      --waybar-color)        new_waybar_color="$2"; shift 2;;
+      --waybar-font)         new_waybar_font="$2"; shift 2;;
+      --waybar-font-size)    new_waybar_font_size="$2"; shift 2;;
+      --waybar-style|-s)     new_waybar_style="$2"; shift 2;;
+      --waybar-scope)        new_waybar_scope="$2"; shift 2;;
+      --waybar-decor)        new_waybar_decor="$2"; shift 2;;
+      --waybar-vpn)          new_waybar_vpn="$2"; shift 2;;
+      --waybar-transparent)  new_waybar_transparent="$2"; shift 2;;
+      --waybar-opacity)      new_waybar_opacity="$2"; shift 2;;
+      --waybar-launcher-logo|--launcher-logo)
+                             new_waybar_launcher_logo="$2"; shift 2;;
+      --hypr-effect)         new_hypr_effect="$2"; shift 2;;
+      -w|--wallpaper)        new_wallpaper="$2"; shift 2;;
+      --preset)              preset_name="$2"; shift 2;;
+      -h|--help)             _help_set; return 0;;
+      *) die "set: unknown flag \`$1\` — try \`dotctl set --help\`";;
+    esac
+  done
+
+  # Precedence: preset < shortcut < per-element
+  # 1. Apply preset
+  if [[ -n "$preset_name" ]]; then
+    _load_preset_into_state "$preset_name"
+  fi
+
+  # 2. Apply shortcuts (--color fans out to all 5 UI elements; --font to 4 font-bearing)
+  if [[ -n "$new_color" ]]; then
+    validate_cava_color   "$new_color" || die "--color: $new_color has no cava dir"
+    validate_kitty_color  "$new_color" || die "--color: $new_color has no kitty dirs"
+    validate_mako_color   "$new_color" || die "--color: $new_color has no mako dirs"
+    validate_wofi_color   "$new_color" || die "--color: $new_color has no wofi dirs"
+    validate_waybar_color "$new_color" || die "--color: $new_color has no waybar dirs"
+    CAVA_COLOR="$new_color"
+    KITTY_COLOR="$new_color"
+    MAKO_COLOR="$new_color"
+    WOFI_COLOR="$new_color"
+    WAYBAR_COLOR="$new_color"
+  fi
+  if [[ -n "$new_font" ]]; then
+    validate_kitty_font  "$new_font" || die "--font: $new_font not available for kitty"
+    validate_mako_font   "$new_font" || die "--font: $new_font not available for mako"
+    validate_wofi_font   "$new_font" || die "--font: $new_font not available for wofi"
+    validate_waybar_font "$new_font" || die "--font: $new_font not available for waybar"
+    KITTY_FONT="$new_font"
+    MAKO_FONT="$new_font"
+    WOFI_FONT="$new_font"
+    WAYBAR_FONT="$new_font"
+  fi
+  if [[ -n "$new_font_size" ]]; then
+    validate_font_size "$new_font_size" || die "--font-size: $new_font_size must be a number in [4, 72]"
+    KITTY_FONT_SIZE="$new_font_size"
+    MAKO_FONT_SIZE="$new_font_size"
+    WOFI_FONT_SIZE="$new_font_size"
+    WAYBAR_FONT_SIZE="$new_font_size"
+  fi
+
+  # 3. Apply per-element overrides
+  [[ -n "$new_cava_color" ]]        && { validate_cava_color   "$new_cava_color"   || die "invalid cava color: $new_cava_color";     CAVA_COLOR="$new_cava_color"; }
+  [[ -n "$new_kitty_color" ]]       && { validate_kitty_color  "$new_kitty_color"  || die "invalid kitty color: $new_kitty_color";   KITTY_COLOR="$new_kitty_color"; }
+  [[ -n "$new_kitty_font" ]]        && { validate_kitty_font   "$new_kitty_font"   || die "invalid kitty font: $new_kitty_font";     KITTY_FONT="$new_kitty_font"; }
+  [[ -n "$new_kitty_font_size" ]]   && { validate_font_size    "$new_kitty_font_size"  || die "invalid kitty font size: $new_kitty_font_size";   KITTY_FONT_SIZE="$new_kitty_font_size"; }
+  [[ -n "$new_mako_color" ]]        && { validate_mako_color   "$new_mako_color"   || die "invalid mako color: $new_mako_color";     MAKO_COLOR="$new_mako_color"; }
+  [[ -n "$new_mako_font" ]]         && { validate_mako_font    "$new_mako_font"    || die "invalid mako font: $new_mako_font";       MAKO_FONT="$new_mako_font"; }
+  [[ -n "$new_mako_font_size" ]]    && { validate_font_size    "$new_mako_font_size"   || die "invalid mako font size: $new_mako_font_size";    MAKO_FONT_SIZE="$new_mako_font_size"; }
+  [[ -n "$new_wofi_color" ]]        && { validate_wofi_color   "$new_wofi_color"   || die "invalid wofi color: $new_wofi_color";     WOFI_COLOR="$new_wofi_color"; }
+  [[ -n "$new_wofi_font" ]]         && { validate_wofi_font    "$new_wofi_font"    || die "invalid wofi font: $new_wofi_font";       WOFI_FONT="$new_wofi_font"; }
+  [[ -n "$new_wofi_font_size" ]]    && { validate_font_size    "$new_wofi_font_size"   || die "invalid wofi font size: $new_wofi_font_size";    WOFI_FONT_SIZE="$new_wofi_font_size"; }
+  [[ -n "$new_wofi_variant" ]]      && { validate_wofi_variant "$new_wofi_variant" || die "invalid wofi variant: $new_wofi_variant"; WOFI_VARIANT="$new_wofi_variant"; }
+  [[ -n "$new_waybar_color" ]]      && { validate_waybar_color "$new_waybar_color" || die "invalid waybar color: $new_waybar_color"; WAYBAR_COLOR="$new_waybar_color"; }
+  [[ -n "$new_waybar_font" ]]       && { validate_waybar_font  "$new_waybar_font"  || die "invalid waybar font: $new_waybar_font";   WAYBAR_FONT="$new_waybar_font"; }
+  [[ -n "$new_waybar_font_size" ]]  && { validate_font_size    "$new_waybar_font_size" || die "invalid waybar font size: $new_waybar_font_size"; WAYBAR_FONT_SIZE="$new_waybar_font_size"; }
+  [[ -n "$new_waybar_style" ]]      && { validate_waybar_style "$new_waybar_style" || die "invalid waybar style: $new_waybar_style"; WAYBAR_STYLE="$new_waybar_style"; }
+  [[ -n "$new_waybar_scope" ]]      && { validate_waybar_scope "$new_waybar_scope" || die "invalid waybar scope: $new_waybar_scope"; WAYBAR_SCOPE="$new_waybar_scope"; }
+  [[ -n "$new_waybar_decor" ]]      && { validate_waybar_decor "$new_waybar_decor" || die "invalid waybar decor: $new_waybar_decor (try \`dotctl list waybar-decors\`)"; WAYBAR_DECOR="$new_waybar_decor"; }
+  if [[ -n "$new_waybar_vpn" ]]; then
+    validate_waybar_vpn "$new_waybar_vpn" || die "invalid waybar vpn: $new_waybar_vpn (must be on|off)"
+    if [[ "$new_waybar_vpn" == "on" ]] && ! waybar_vpn_available; then
+      die "waybar vpn module not installed. Re-run install.sh with the VPN option, or install vpnctl + vpn-status-indicator manually."
+    fi
+    WAYBAR_VPN="$new_waybar_vpn"
+  fi
+  [[ -n "$new_waybar_transparent" ]]&& { validate_waybar_transparent "$new_waybar_transparent" || die "invalid waybar transparent: $new_waybar_transparent (must be on|off)"; WAYBAR_TRANSPARENT="$new_waybar_transparent"; }
+  [[ -n "$new_waybar_opacity" ]]    && { validate_waybar_opacity "$new_waybar_opacity" || die "invalid waybar opacity: $new_waybar_opacity (must be a number in [0, 1])"; WAYBAR_OPACITY="$new_waybar_opacity"; }
+  [[ -n "$new_waybar_launcher_logo" ]] && { validate_waybar_launcher_logo "$new_waybar_launcher_logo" || die "invalid waybar launcher logo: $new_waybar_launcher_logo (try \`dotctl list launcher-logos\`)"; WAYBAR_LAUNCHER_LOGO="$new_waybar_launcher_logo"; }
+  [[ -n "$new_hypr_effect" ]]       && { validate_hypr_effect "$new_hypr_effect" || die "invalid hypr effect: $new_hypr_effect (must be shadow|glow)"; HYPR_EFFECT="$new_hypr_effect"; }
+  [[ -n "$new_wallpaper" ]]         && { validate_wallpaper    "$new_wallpaper"    || die "invalid wallpaper theme: $new_wallpaper"; WALLPAPER="$new_wallpaper"; }
+
+  save_state
+  apply_all
+  info "dotctl: applied."
+}
+
+_help_set() {
+  cat <<'EOF'
+dotctl set [FLAGS]
+
+  -c, --color <C>          Set color for cava, kitty, mako, wofi, waybar
+  -f, --font <F>           Set font for kitty, mako, wofi, waybar (cava unaffected)
+      --font-size <N>      Set font size for kitty, mako, wofi, waybar  (4–72)
+
+  --cava-color <C>
+  --kitty-color <C>
+  --kitty-font <F>
+  --kitty-font-size <N>
+  --mako-color <C>
+  --mako-font <F>
+  --mako-font-size <N>
+  --wofi-color <C>
+  --wofi-font <F>
+  --wofi-font-size <N>
+  --wofi-variant <N>
+  --waybar-color <C>
+  --waybar-font <F>
+  --waybar-font-size <N>
+  -s, --waybar-style <S>   pill | console
+  --waybar-scope <SC>      full | minimal
+  --waybar-decor <D>       console decorator glyphs (pointed | round)
+  --waybar-vpn <S>         waybar vpn module (on | off) — requires vpnctl + vpn-status-indicator on PATH
+  --waybar-transparent <S> waybar bar background (on = transparent, off = opaque palette fill)
+  --waybar-opacity <N>     waybar bar opacity [0.0-1.0] — only applies when transparent=off
+  --hypr-effect <E>        hyprland window effect (shadow | glow)
+  --launcher-logo <L>      waybar launcher distro glyph
+                           (tux | arch | gentoo | debian | void | nixos |
+                            fedora | fedora_inverse | endeavouros | cachyos |
+                            opensuse | artix | slackware | slackware_inverse)
+  -w, --wallpaper <C>
+
+  --preset <NAME>          Load preset as base, then apply flags on top
+
+With no flags, prints current state (same as `dotctl show`).
+
+Precedence: preset < --color / --font / --font-size < per-element flags.
+Font sizes are written by sed into the active config files only — themed
+source dirs stay canonical. Accepts integer or decimal (e.g. 14, 18.5).
+
+Examples:
+  dotctl set -c forest -f meslo                # unified switch
+  dotctl set --font-size 22                   # scale all fonts at once
+  dotctl set --kitty-font-size 14             # only kitty shrinks
+  dotctl set --waybar-color gruvbox           # only waybar drifts
+  dotctl set --preset laptop                  # snapshot for this display
+  dotctl set --preset tv -w gentoo            # load preset, override wallpaper
+EOF
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  `cycle` — the 4 keybind entry points
+# ──────────────────────────────────────────────────────────────────────────────
+
+cmd_cycle() {
+  local target="${1:-}" direction="${2:-}"
+
+  case "$target" in
+    -h|--help|help|'')
+      cat <<'EOF'
+dotctl cycle <wallpaper|waybar> <next|prev>
+
+  wallpaper next|prev   Step to the next/previous image within the active
+                        wallpaper theme. Delegates to cycle-hyprpaper-<theme>.
+  waybar    next|prev   Rotate WAYBAR_STYLE × WAYBAR_SCOPE through:
+                          pill_full → pill_minimal → console_full → console_minimal
+                        and wrap. Color, font, decor, vpn, transparent, opacity,
+                        and launcher-logo are preserved across the rotation.
+
+These are the keybind entry points; see `dotctl help` for the
+hyprland.conf snippet.
+EOF
+      return 0;;
+  esac
+
+  [[ -n "$target" && -n "$direction" ]] || die "usage: dotctl cycle <wallpaper|waybar> <next|prev>  (try \`dotctl cycle --help\`)"
+
+  load_state
+
+  case "$target" in
+    wallpaper)
+      local verb
+      case "$direction" in
+        next) verb=forward;;
+        prev) verb=backward;;
+        *) die "cycle wallpaper: direction must be next|prev";;
+      esac
+      local script; script=$(cycle_script "$WALLPAPER")
+      [[ -x "$script" ]] || die "missing $script"
+      "$script" "$verb"
+      log "cycle wallpaper $direction ($WALLPAPER)"
+      ;;
+    waybar)
+      # 4-wide variant cycle within (WAYBAR_COLOR, WAYBAR_FONT); rotates STYLE × SCOPE
+      local combos=(
+        "pill full"
+        "pill minimal"
+        "console full"
+        "console minimal"
+      )
+      local current="${WAYBAR_STYLE} ${WAYBAR_SCOPE}" i idx=0
+      for i in "${!combos[@]}"; do
+        [[ "${combos[$i]}" == "$current" ]] && { idx=$i; break; }
+      done
+      local count=${#combos[@]} next
+      case "$direction" in
+        next) next=$(( (idx + 1) % count ));;
+        prev) next=$(( (idx - 1 + count) % count ));;
+        *) die "cycle waybar: direction must be next|prev";;
+      esac
+      read -r WAYBAR_STYLE WAYBAR_SCOPE <<<"${combos[$next]}"
+      save_state
+      apply_waybar
+      log "cycle waybar $direction → ${WAYBAR_STYLE}_${WAYBAR_SCOPE}"
+      ;;
+    *) die "cycle: target must be wallpaper|waybar";;
+  esac
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  `sync` — copy color (and font where applicable) from source to target
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Accessors for an element's color/font; "-" if axis doesn't apply.
+_element_color() {
+  case "$1" in
+    cava)      printf '%s\n' "$CAVA_COLOR";;
+    kitty)     printf '%s\n' "$KITTY_COLOR";;
+    mako)      printf '%s\n' "$MAKO_COLOR";;
+    wofi)      printf '%s\n' "$WOFI_COLOR";;
+    waybar)    printf '%s\n' "$WAYBAR_COLOR";;
+    wallpaper) printf '%s\n' "$WALLPAPER";;
+    *) return 1;;
+  esac
+}
+
+_element_font() {
+  case "$1" in
+    kitty)  printf '%s\n' "$KITTY_FONT";;
+    mako)   printf '%s\n' "$MAKO_FONT";;
+    wofi)   printf '%s\n' "$WOFI_FONT";;
+    waybar) printf '%s\n' "$WAYBAR_FONT";;
+    cava|wallpaper) printf '-\n';;
+    *) return 1;;
+  esac
+}
+
+_set_element_color() {
+  local el="$1" color="$2"
+  case "$el" in
+    cava)
+      validate_cava_color "$color" || die "sync: cava has no color $color"
+      CAVA_COLOR="$color";;
+    kitty)
+      validate_kitty_color "$color" || die "sync: kitty has no color $color"
+      KITTY_COLOR="$color";;
+    mako)
+      validate_mako_color "$color" || die "sync: mako has no color $color"
+      MAKO_COLOR="$color";;
+    wofi)
+      validate_wofi_color "$color" || die "sync: wofi has no color $color"
+      WOFI_COLOR="$color";;
+    waybar)
+      validate_waybar_color "$color" || die "sync: waybar has no color $color"
+      WAYBAR_COLOR="$color";;
+    wallpaper)
+      validate_wallpaper "$color" || die "sync: no wallpaper theme \`$color\`"
+      WALLPAPER="$color";;
+    *) die "sync: unknown element $el";;
+  esac
+}
+
+_set_element_font() {
+  local el="$1" font="$2"
+  [[ "$font" == "-" ]] && return 0
+  case "$el" in
+    kitty)
+      validate_kitty_font "$font" || die "sync: kitty has no font $font"
+      KITTY_FONT="$font";;
+    mako)
+      validate_mako_font "$font" || die "sync: mako has no font $font"
+      MAKO_FONT="$font";;
+    wofi)
+      validate_wofi_font "$font" || die "sync: wofi has no font $font"
+      WOFI_FONT="$font";;
+    waybar)
+      validate_waybar_font "$font" || die "sync: waybar has no font $font"
+      WAYBAR_FONT="$font";;
+    cava|wallpaper) ;;  # no font axis
+    *) die "sync: unknown element $el";;
+  esac
+}
+
+cmd_sync() {
+  local target="${1:-}" source="${2:-}"
+
+  case "$target" in
+    -h|--help|help|'')
+      cat <<'EOF'
+dotctl sync <target> <source>
+
+Copy color (and font, where both have a font axis) from <source> to <target>.
+Never copies style, scope, variant, decor, vpn, transparent, or opacity —
+those stay on the target.
+
+  target ∈ { cava, kitty, mako, wofi, waybar, wallpaper, all }
+  source ∈ { cava, kitty, mako, wofi, waybar, wallpaper }
+
+Elements without a font axis (cava, wallpaper) are sync-color-only. When
+<target> is `all`, the <source> element itself is left untouched.
+
+Examples:
+  dotctl sync wallpaper waybar    # wallpaper follows waybar color
+  dotctl sync all kitty           # all five UI elements + wallpaper take kitty's color+font
+  dotctl sync waybar cava         # waybar color ← cava color (cava has no font)
+EOF
+      return 0;;
+  esac
+
+  [[ -n "$target" && -n "$source" ]] || die "usage: dotctl sync <target> <source>  (try \`dotctl sync --help\`)"
+
+  load_state
+
+  local src_color src_font
+  src_color=$(_element_color "$source") || die "sync: unknown source element \`$source\`"
+  src_font=$(_element_font "$source")
+
+  if [[ "$target" == "all" ]]; then
+    local el
+    for el in cava kitty mako wofi waybar wallpaper; do
+      [[ "$el" == "$source" ]] && continue
+      _set_element_color "$el" "$src_color" || warn "sync: skip $el (no match for $src_color)"
+      _set_element_font  "$el" "$src_font"  || true
+    done
+  else
+    _element_color "$target" >/dev/null || die "sync: unknown target element \`$target\`"
+    _set_element_color "$target" "$src_color"
+    _set_element_font  "$target" "$src_font"
+  fi
+
+  save_state
+
+  if [[ "$target" == "all" ]]; then
+    apply_all
+  else
+    apply_subset "$target"
+  fi
+  info "dotctl: synced $target ← $source ($src_color${src_font:+ / $src_font})"
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  `configure` — p10k-style interactive wizard
+# ──────────────────────────────────────────────────────────────────────────────
+
+# prompt_select LABEL DEFAULT OPTION...
+# Prints chosen value to stdout. Empty DEFAULT → first option.
+# Each OPTION may be a plain value ("phoenix") or a "value|description"
+# pair ("1|subtle — muted border, cool highlights") — the description is
+# shown next to the number but is NOT part of the returned value.
+prompt_select() {
+  local label="$1" default="$2"; shift 2
+  local raw=( "$@" )
+  local values=() descs=() i opt choice default_idx=1
+
+  for opt in "${raw[@]}"; do
+    if [[ "$opt" == *"|"* ]]; then
+      values+=( "${opt%%|*}" )
+      descs+=(  "${opt#*|}" )
+    else
+      values+=( "$opt" )
+      descs+=(  "" )
+    fi
+  done
+
+  for i in "${!values[@]}"; do
+    [[ "${values[$i]}" == "$default" ]] && default_idx=$(( i + 1 ))
+  done
+
+  # Top-level element prompts (label starts with "[") get a blank line of
+  # breathing room above them; sub-prompts stay tight under their parent.
+  [[ "$label" == \[* ]] && printf '\n' >&2
+  printf '  %s\n' "$label" >&2
+  for i in "${!values[@]}"; do
+    opt="${values[$i]}"
+    local suffix=''
+    [[ -n "${descs[$i]}" ]] && suffix="  — ${descs[$i]}"
+    if [[ "$opt" == "$default" ]]; then
+      printf '    %2d) %s%s  (current)\n' $(( i + 1 )) "$opt" "$suffix" >&2
+    else
+      printf '    %2d) %s%s\n' $(( i + 1 )) "$opt" "$suffix" >&2
+    fi
+  done
+
+  local count=${#values[@]}
+  while :; do
+    read -r -p "  pick 1-${count} [enter = ${default_idx}]: " choice
+    choice="${choice:-$default_idx}"
+    if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= count )); then
+      printf '%s\n' "${values[$((choice - 1))]}"
+      return 0
+    fi
+    printf '    invalid — enter a number between 1 and %d\n' "$count" >&2
+  done
+}
+
+# prompt_font_size LABEL DEFAULT
+# Walks the FONT_SIZE_LADDER plus a "custom..." entry. Custom opens a free-form
+# read loop validated by validate_font_size. Returns the chosen numeric value.
+prompt_font_size() {
+  local label="$1" default="$2"
+  local opts=( "${FONT_SIZE_LADDER[@]}" "custom|enter a different value" )
+  local picked
+  picked=$(prompt_select "$label" "$default" "${opts[@]}")
+  if [[ "$picked" == "custom" ]]; then
+    local val
+    while :; do
+      read -r -p "  custom font size [4-72]: " val
+      if validate_font_size "$val"; then
+        printf '%s\n' "$val"
+        return 0
+      fi
+      printf '    invalid — must be a number in [4, 72]\n' >&2
+    done
+  else
+    printf '%s\n' "$picked"
+  fi
+}
+
+# prompt_opacity LABEL DEFAULT — picker from OPACITY_LADDER plus custom
+prompt_opacity() {
+  local label="$1" default="$2"
+  local opts=( "${OPACITY_LADDER[@]}" "custom|enter a different value" )
+  local picked
+  picked=$(prompt_select "$label" "$default" "${opts[@]}")
+  if [[ "$picked" == "custom" ]]; then
+    local val
+    while :; do
+      read -r -p "  custom opacity [0.0-1.0]: " val
+      if validate_waybar_opacity "$val"; then
+        printf '%s\n' "$val"
+        return 0
+      fi
+      printf '    invalid — must be a number in [0, 1]\n' >&2
+    done
+  else
+    printf '%s\n' "$picked"
+  fi
+}
+
+cmd_configure() {
+  local preset_name='' arg
+  while (( $# > 0 )); do
+    case "$1" in
+      --preset) preset_name="${2:-}"; shift 2;;
+      -h|--help)
+        cat <<'EOF'
+dotctl configure [--preset <name>]
+
+Interactive wizard. Walks all 6 elements:
+  cava → kitty → mako → wofi → waybar → wallpaper
+
+Each prompt defaults to the current value (or preset value with --preset).
+Ends with a summary, an apply confirmation, and an optional save-as-preset step.
+EOF
+        return 0;;
+      *) die "configure: unknown flag \`$1\`";;
+    esac
+  done
+
+  info ""
+  info "  dotctl configure"
+  info "  ───────────────────"
+
+  if state_exists; then
+    load_state
+    info "  Current state loaded as defaults."
+  else
+    info "  First-time setup — no current state."
+    # Seed empty defaults; first option in each prompt will be picked.
+    local k; for k in "${STATE_KEYS[@]}"; do declare -g "$k="; done
+    # Font sizes need numeric defaults so the ladder highlights a sensible pick.
+    KITTY_FONT_SIZE="$DEFAULT_KITTY_FONT_SIZE"
+    MAKO_FONT_SIZE="$DEFAULT_MAKO_FONT_SIZE"
+    WOFI_FONT_SIZE="$DEFAULT_WOFI_FONT_SIZE"
+    WAYBAR_FONT_SIZE="$DEFAULT_WAYBAR_FONT_SIZE"
+    WAYBAR_DECOR="$DEFAULT_WAYBAR_DECOR"
+    WAYBAR_VPN="$DEFAULT_WAYBAR_VPN"
+    WAYBAR_TRANSPARENT="$DEFAULT_WAYBAR_TRANSPARENT"
+    WAYBAR_OPACITY="$DEFAULT_WAYBAR_OPACITY"
+    WAYBAR_LAUNCHER_LOGO="$DEFAULT_WAYBAR_LAUNCHER_LOGO"
+    HYPR_EFFECT="$DEFAULT_HYPR_EFFECT"
+  fi
+
+  if [[ -n "$preset_name" ]]; then
+    _load_preset_into_state "$preset_name"
+    info "  Preset \`$preset_name\` loaded as defaults."
+  fi
+
+  # Discover options per element
+  local cava_colors kitty_colors kitty_fonts mako_colors mako_fonts
+  local wofi_colors wofi_fonts wofi_variants
+  local waybar_colors waybar_fonts waybar_styles waybar_scopes waybar_decors waybar_vpns waybar_transparents waybar_opacities hypr_effects
+  local wallpapers
+
+  mapfile -t cava_colors    < <(detect_cava_colors)
+  mapfile -t kitty_colors   < <(detect_kitty_colors)
+  mapfile -t kitty_fonts    < <(detect_kitty_fonts)
+  mapfile -t mako_colors    < <(detect_mako_colors)
+  mapfile -t mako_fonts     < <(detect_mako_fonts)
+  mapfile -t wofi_colors    < <(detect_wofi_colors)
+  mapfile -t wofi_fonts     < <(detect_wofi_fonts)
+  mapfile -t wofi_variants  < <(detect_wofi_variants)
+  mapfile -t waybar_colors  < <(detect_waybar_colors)
+  mapfile -t waybar_fonts   < <(detect_waybar_fonts)
+  mapfile -t waybar_styles  < <(detect_waybar_styles)
+  mapfile -t waybar_scopes  < <(detect_waybar_scopes)
+  mapfile -t waybar_decors  < <(detect_waybar_decors)
+  mapfile -t waybar_vpns    < <(detect_waybar_vpns)
+  mapfile -t waybar_transparents < <(detect_waybar_transparents)
+  mapfile -t waybar_opacities    < <(detect_waybar_opacities)
+  mapfile -t hypr_effects        < <(detect_hypr_effects)
+  mapfile -t wallpapers     < <(detect_wallpapers)
+
+  (( ${#cava_colors[@]}   > 0 )) || die "no cava colors detected in $CAVA_DIR"
+  (( ${#kitty_colors[@]}  > 0 )) || die "no kitty colors detected in $KITTY_DIR"
+  (( ${#mako_colors[@]}   > 0 )) || die "no mako colors detected in $MAKO_DIR"
+  (( ${#wofi_colors[@]}   > 0 )) || die "no wofi colors detected in $WOFI_DIR"
+  (( ${#waybar_colors[@]} > 0 )) || die "no waybar colors detected in $WAYBAR_DIR"
+  (( ${#wallpapers[@]}    > 0 )) || die "no wallpaper themes detected in $WALLPAPER_ROOT (with matching cycle scripts)"
+
+  CAVA_COLOR=$(prompt_select      "[1/6] cava color"               "$CAVA_COLOR"   "${cava_colors[@]}")
+
+  KITTY_COLOR=$(prompt_select     "[2/6] kitty color"              "$KITTY_COLOR"  "${kitty_colors[@]}")
+  KITTY_FONT=$(prompt_select      "      kitty font"               "$KITTY_FONT"   "${kitty_fonts[@]}")
+  KITTY_FONT_SIZE=$(prompt_font_size "      kitty font size"          "$KITTY_FONT_SIZE")
+
+  MAKO_COLOR=$(prompt_select      "[3/6] mako color"               "$MAKO_COLOR"   "${mako_colors[@]}")
+  MAKO_FONT=$(prompt_select       "      mako font"                "$MAKO_FONT"    "${mako_fonts[@]}")
+  MAKO_FONT_SIZE=$(prompt_font_size  "      mako font size"           "$MAKO_FONT_SIZE")
+
+  WOFI_COLOR=$(prompt_select      "[4/6] wofi color"               "$WOFI_COLOR"   "${wofi_colors[@]}")
+  WOFI_FONT=$(prompt_select       "      wofi font"                "$WOFI_FONT"    "${wofi_fonts[@]}")
+  WOFI_FONT_SIZE=$(prompt_font_size  "      wofi font size"           "$WOFI_FONT_SIZE")
+
+  # Build wofi variant options with descriptions. detect_wofi_variants returns
+  # plain numbers; we tag known variants with a human-readable hint and leave
+  # anything else (if someone adds a third) undescribed.
+  local wv_opts=() v desc
+  for v in "${wofi_variants[@]}"; do
+    case "$v" in
+      1) desc="subtle — muted border, cool/neutral accent";;
+      2) desc="punchy — bold border, warm/contrast accent";;
+      *) desc="";;
+    esac
+    if [[ -n "$desc" ]]; then
+      wv_opts+=( "${v}|${desc}" )
+    else
+      wv_opts+=( "$v" )
+    fi
+  done
+  WOFI_VARIANT=$(prompt_select    "      wofi variant"             "$WOFI_VARIANT" "${wv_opts[@]}")
+
+  WAYBAR_COLOR=$(prompt_select      "[5/6] waybar color"             "$WAYBAR_COLOR" "${waybar_colors[@]}")
+  WAYBAR_FONT=$(prompt_select       "      waybar font"              "$WAYBAR_FONT"  "${waybar_fonts[@]}")
+  WAYBAR_FONT_SIZE=$(prompt_font_size  "      waybar font size"         "$WAYBAR_FONT_SIZE")
+  WAYBAR_STYLE=$(prompt_select      "      waybar style"             "$WAYBAR_STYLE" "${waybar_styles[@]}")
+  WAYBAR_SCOPE=$(prompt_select      "      waybar scope"             "$WAYBAR_SCOPE" "${waybar_scopes[@]}")
+  WAYBAR_DECOR=$(prompt_select      "      waybar decor"             "$WAYBAR_DECOR" "${waybar_decors[@]}")
+  if waybar_vpn_available; then
+    WAYBAR_VPN=$(prompt_select      "      waybar vpn module"        "$WAYBAR_VPN"   "${waybar_vpns[@]}")
+  else
+    WAYBAR_VPN=off
+    info "      waybar vpn module: skipped — vpnctl / vpn-status-indicator not on PATH"
+  fi
+  WAYBAR_TRANSPARENT=$(prompt_select "      waybar transparent bg"    "$WAYBAR_TRANSPARENT" "${waybar_transparents[@]}")
+  WAYBAR_OPACITY=$(prompt_opacity   "      waybar bg opacity"         "$WAYBAR_OPACITY")
+  HYPR_EFFECT=$(prompt_select       "      hypr window effect"        "$HYPR_EFFECT"  "${hypr_effects[@]}")
+
+  # Launcher logo — tagged with distro pretty-names so the prompt reads
+  # like a distro picker, but the stored value is the bare key.
+  local wl_opts=() l
+  for l in "${WAYBAR_LAUNCHER_LOGOS[@]}"; do
+    wl_opts+=( "${l}|${WAYBAR_LAUNCHER_NAMES[$l]}" )
+  done
+  WAYBAR_LAUNCHER_LOGO=$(prompt_select "      waybar launcher logo" "$WAYBAR_LAUNCHER_LOGO" "${wl_opts[@]}")
+
+  WALLPAPER=$(prompt_select       "[6/6] wallpaper theme"          "$WALLPAPER"    "${wallpapers[@]}")
+
+  # Summary
+  info ""
+  info "  ── summary ──"
+  printf '  %-10s %s\n' "cava"      "$CAVA_COLOR"
+  printf '  %-10s %s / %s / size %s\n' "kitty" "$KITTY_COLOR" "$KITTY_FONT" "$KITTY_FONT_SIZE"
+  printf '  %-10s %s / %s / size %s\n' "mako"  "$MAKO_COLOR" "$MAKO_FONT" "$MAKO_FONT_SIZE"
+  printf '  %-10s %s / %s / size %s / variant %s\n' "wofi" "$WOFI_COLOR" "$WOFI_FONT" "$WOFI_FONT_SIZE" "$WOFI_VARIANT"
+  printf '  %-10s %s / %s / size %s / %s_%s / decor %s / vpn %s / transparent %s (%s) / logo %s\n' "waybar" "$WAYBAR_COLOR" "$WAYBAR_FONT" "$WAYBAR_FONT_SIZE" "$WAYBAR_STYLE" "$WAYBAR_SCOPE" "$WAYBAR_DECOR" "$WAYBAR_VPN" "$WAYBAR_TRANSPARENT" "$WAYBAR_OPACITY" "$WAYBAR_LAUNCHER_LOGO"
+  printf '  %-10s effect %s\n' "hypr" "$HYPR_EFFECT"
+  printf '  %-10s %s\n' "wallpaper" "$WALLPAPER"
+  info ""
+
+  if confirm "  Apply now and save state?" y; then
+    save_state
+    apply_all
+    info "  dotctl: applied."
+  else
+    info "  Aborted. State not written."
+    return 0
+  fi
+
+  if confirm "  Save as preset?" n; then
+    local name
+    read -r -p "  preset name: " name
+    [[ -n "$name" ]] || { warn "empty name, skipping"; return 0; }
+    _save_preset "$name"
+    info "  preset saved: $name"
+  fi
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  Presets
+# ──────────────────────────────────────────────────────────────────────────────
+
+_preset_path() { printf '%s/%s.conf\n' "$PRESET_DIR" "$1"; }
+
+_save_preset() {
+  local name="$1" path
+  path=$(_preset_path "$name")
+  mkdir -p "$PRESET_DIR"
+  {
+    printf '# dotctl preset — %s\n' "$name"
+    printf '# created %s\n' "$(date '+%F %T')"
+    local k
+    for k in "${STATE_KEYS[@]}"; do
+      printf '%s=%q\n' "$k" "${!k}"
+    done
+  } > "$path"
+}
+
+_load_preset_into_state() {
+  local name="$1" path
+  path=$(_preset_path "$name")
+  [[ -f "$path" ]] || die "preset not found: $name  ($path)"
+  # shellcheck disable=SC1090
+  source "$path"
+  # Presets written before a key was added are missing it — fall back to
+  # defaults so apply_* doesn't see an empty variable.
+  : "${KITTY_FONT_SIZE:=$DEFAULT_KITTY_FONT_SIZE}"
+  : "${MAKO_FONT_SIZE:=$DEFAULT_MAKO_FONT_SIZE}"
+  : "${WOFI_FONT_SIZE:=$DEFAULT_WOFI_FONT_SIZE}"
+  : "${WAYBAR_FONT_SIZE:=$DEFAULT_WAYBAR_FONT_SIZE}"
+  : "${WAYBAR_DECOR:=$DEFAULT_WAYBAR_DECOR}"
+  : "${WAYBAR_VPN:=$DEFAULT_WAYBAR_VPN}"
+  : "${WAYBAR_TRANSPARENT:=$DEFAULT_WAYBAR_TRANSPARENT}"
+  : "${WAYBAR_OPACITY:=$DEFAULT_WAYBAR_OPACITY}"
+  : "${WAYBAR_LAUNCHER_LOGO:=$DEFAULT_WAYBAR_LAUNCHER_LOGO}"
+  : "${HYPR_EFFECT:=$DEFAULT_HYPR_EFFECT}"
+  case "$WAYBAR_STYLE" in zsh) WAYBAR_STYLE="console";; bubble) WAYBAR_STYLE="pill";; esac
+}
+
+cmd_preset() {
+  local sub="${1:-}"
+  case "$sub" in
+    save)
+      local name="${2:-}"
+      [[ -n "$name" ]] || die "usage: dotctl preset save <name>"
+      load_state
+      _save_preset "$name"
+      info "preset saved: $(_preset_path "$name")"
+      ;;
+    load)
+      local name="${2:-}"
+      [[ -n "$name" ]] || die "usage: dotctl preset load <name>"
+      load_state
+      _load_preset_into_state "$name"
+      save_state
+      apply_all
+      info "preset loaded: $name"
+      ;;
+    list)
+      if [[ -d "$PRESET_DIR" ]]; then
+        ls -1 "$PRESET_DIR" 2>/dev/null | sed 's/\.conf$//'
+      fi
+      ;;
+    show)
+      local name="${2:-}"
+      [[ -n "$name" ]] || die "usage: dotctl preset show <name>"
+      local path; path=$(_preset_path "$name")
+      [[ -f "$path" ]] || die "preset not found: $name"
+      cat "$path"
+      ;;
+    delete|rm)
+      local name="${2:-}"
+      [[ -n "$name" ]] || die "usage: dotctl preset delete <name>"
+      local path; path=$(_preset_path "$name")
+      [[ -f "$path" ]] || die "preset not found: $name"
+      rm -f "$path"
+      info "preset deleted: $name"
+      ;;
+    ''|help|-h|--help)
+      cat <<'EOF'
+dotctl preset <save|load|list|show|delete> [name]
+
+  save <name>     Snapshot current state as a preset
+  load <name>     Apply a preset (same effect as set --preset <name>)
+  list            List saved presets
+  show <name>     Print a preset's contents
+  delete <name>   Remove a preset
+
+Presets live under ~/.config/dotctl/presets/<name>.conf
+EOF
+      ;;
+    *) die "preset: unknown subcommand \`$sub\`";;
+  esac
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  Cycle script generation — shared by `new wallpaper` and `scan`
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Resolve the cycle-hyprpaper template path. Installed location is
+# $CYCLE_DIR/_cycle-hyprpaper.template. Falls back to the source dir next to
+# this script when running uninstalled (stage/cycle/_cycle-hyprpaper.template).
+_template_path() {
+  [[ -f "$CYCLE_TEMPLATE" ]] && { printf '%s\n' "$CYCLE_TEMPLATE"; return 0; }
+  local self_dir
+  self_dir=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
+  if [[ -f "$self_dir/cycle/_cycle-hyprpaper.template" ]]; then
+    printf '%s\n' "$self_dir/cycle/_cycle-hyprpaper.template"
+    return 0
+  fi
+  die "cycle template not found. Run install.sh, or place it at $CYCLE_TEMPLATE"
+}
+
+# Render a cycle-hyprpaper-<color> script to stdout.
+#   $1 — color (theme name)
+#   $2 — optional images block. When provided, the IMAGES=( ) lines from the
+#        template are replaced with this block. The block must NOT include the
+#        opening `IMAGES=(` or closing `)` — just the inner lines, one per line.
+#        When empty (or omitted), the template's placeholder comment is left in
+#        place for human editing.
+_render_cycle_script() {
+  local color="$1" images_block="${2:-}"
+  local template
+  template=$(_template_path)
+
+  if [[ -z "$images_block" ]]; then
+    sed "s/__COLOR__/$color/g" "$template"
+    return 0
+  fi
+
+  sed "s/__COLOR__/$color/g" "$template" | awk -v block="$images_block" '
+    /^IMAGES=\(/ { print; print block; in_block=1; next }
+    in_block && /^\)/ { print; in_block=0; next }
+    in_block { next }
+    { print }
+  '
+}
+
+# Build an IMAGES=( ) inner block from the contents of a wallpaper directory.
+# Globs common image extensions (case-insensitive), sorts alphabetically, emits
+# one quoted basename per line indented two spaces. Empty dir → placeholder
+# comment.
+_build_images_block() {
+  local dir="$1"
+  local -a found=()
+  local f
+  shopt -s nullglob nocaseglob
+  for f in "$dir"/*.jpg "$dir"/*.jpeg "$dir"/*.png "$dir"/*.webp "$dir"/*.gif "$dir"/*.bmp "$dir"/*.jxl; do
+    [[ -f "$f" ]] && found+=( "$(basename "$f")" )
+  done
+  shopt -u nullglob nocaseglob
+
+  if (( ${#found[@]} == 0 )); then
+    printf '  # no images found at scan time — drop files into the wallpaper dir then re-run dotctl scan\n'
+    return 0
+  fi
+
+  # Sort alphabetically (LC_ALL=C for stable byte order).
+  local sorted
+  sorted=$(printf '%s\n' "${found[@]}" | LC_ALL=C sort)
+  printf '%s\n' "$sorted" | sed 's/^/  "/; s/$/"/'
+}
+
+# Number of image files _build_images_block would emit (used for status output).
+_count_images() {
+  local dir="$1" n=0 f
+  shopt -s nullglob nocaseglob
+  for f in "$dir"/*.jpg "$dir"/*.jpeg "$dir"/*.png "$dir"/*.webp "$dir"/*.gif "$dir"/*.bmp "$dir"/*.jxl; do
+    [[ -f "$f" ]] && (( ++n ))
+  done
+  shopt -u nullglob nocaseglob
+  printf '%d\n' "$n"
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  `new wallpaper` — scaffold a new wallpaper theme
+# ──────────────────────────────────────────────────────────────────────────────
+
+cmd_new() {
+  local kind="${1:-}" name="${2:-}"
+
+  case "$kind" in
+    -h|--help|help|'')
+      cat <<'EOF'
+dotctl new wallpaper <name>
+
+Scaffold a new wallpaper theme. Creates:
+  ~/Pictures/dotctl/wallpapers/<name>/
+  ~/.config/dotctl/cycle/cycle-hyprpaper-<name>
+
+The cycle script is rendered from the 4-verb template with __COLOR__
+replaced by <name>. Populate IMAGES=( ) by hand for curated ordering, or
+drop images into the directory and run `dotctl scan` to auto-populate in
+alphabetical order.
+
+<name> must match [a-z0-9_]+. The script refuses to overwrite an existing
+cycle script; delete or rename it first if you want a fresh scaffold.
+
+Examples:
+  dotctl new wallpaper forest
+  cp ~/Downloads/*.jpg ~/Pictures/dotctl/wallpapers/forest/
+  $EDITOR ~/.config/dotctl/cycle/cycle-hyprpaper-forest   # edit IMAGES=()
+  dotctl set -w forest
+EOF
+      return 0;;
+  esac
+
+  [[ "$kind" == "wallpaper" && -n "$name" ]] || die "usage: dotctl new wallpaper <name>  (try \`dotctl new --help\`)"
+  [[ "$name" =~ ^[a-z0-9_]+$ ]] || die "wallpaper name must match [a-z0-9_]+"
+
+  local dir="$WALLPAPER_ROOT/$name"
+  local script; script=$(cycle_script "$name")
+
+  [[ -e "$script" ]] && die "$script already exists"
+  mkdir -p "$dir" "$CYCLE_DIR"
+  _render_cycle_script "$name" > "$script"
+  chmod +x "$script"
+
+  info "created:"
+  info "  $dir/"
+  info "  $script"
+  info ""
+  info "next:"
+  info "  1. drop image files into $dir/"
+  info "  2. edit $script and populate the IMAGES=( ) array with the desired cycle order"
+  info "     (or run \`dotctl scan\` once images are in place to auto-populate)"
+  info "  3. dotctl set -w $name   (or pick it in configure)"
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  `scan` — auto-generate cycle scripts for any wallpaper dirs missing them
+# ──────────────────────────────────────────────────────────────────────────────
+
+cmd_scan() {
+  local prefix="$WALLPAPER_ROOT" dry_run='' force=''
+  while (( $# > 0 )); do
+    case "$1" in
+      --dry-run)  dry_run=1; shift;;
+      --force)    force=1; shift;;
+      --prefix)   prefix="$2"; shift 2;;
+      -h|--help)
+        cat <<'EOF'
+dotctl scan [OPTIONS]
+
+Walks the wallpaper root looking for theme directories without a matching
+cycle-hyprpaper-<dir> script. Generates the missing scripts from the template
+and populates IMAGES=( ) from the directory's contents (alphabetical order).
+
+Directory names must match [a-z0-9_]+. Anything else is skipped with a
+warning. Existing scripts are preserved unless --force is given.
+
+OPTIONS
+  --prefix <path>   Scan this directory instead of $WALLPAPER_ROOT.
+                    Generated scripts will hardcode this prefix as
+                    WALLPAPER_DIR, so you can scan a non-canonical location
+                    and have the scripts work there directly.
+  --dry-run         Print what would be created, write nothing.
+  --force           Regenerate scripts even if they already exist
+                    (replaces hand-curated IMAGES=() ordering — be careful).
+
+EXAMPLES
+  dotctl scan
+  dotctl scan --dry-run
+  dotctl scan --prefix ~/Downloads/wallpaper-pack
+  dotctl scan --force
+EOF
+        return 0;;
+      *) die "scan: unknown flag \`$1\` — try \`dotctl scan --help\`";;
+    esac
+  done
+
+  [[ -d "$prefix" ]] || die "scan: $prefix does not exist or is not a directory"
+
+  info "scanning $prefix/"
+  local created=0 skipped=0 invalid=0 forced=0
+  local dir name target images_block n existed
+
+  for dir in "$prefix"/*/; do
+    [[ -d "$dir" ]] || continue
+    name=$(basename "$dir")
+
+    if [[ ! "$name" =~ ^[a-z0-9_]+$ ]]; then
+      printf '  %-20s skip — invalid name (must match [a-z0-9_]+)\n' "$name" >&2
+      (( ++invalid ))
+      continue
+    fi
+
+    mkdir -p "$CYCLE_DIR"
+    target=$(cycle_script "$name")
+    existed=0
+    [[ -e "$target" ]] && existed=1
+
+    if (( existed == 1 )) && [[ -z "$force" ]]; then
+      printf '  %-20s skip — script exists\n' "$name"
+      (( ++skipped ))
+      continue
+    fi
+
+    n=$(_count_images "$dir")
+
+    if [[ -n "$dry_run" ]]; then
+      if (( existed == 1 )); then
+        printf '  %-20s DRY-RUN would REGENERATE cycle-hyprpaper-%s (%s images)\n' "$name" "$name" "$n"
+      else
+        printf '  %-20s DRY-RUN would create cycle-hyprpaper-%s (%s images)\n' "$name" "$name" "$n"
+      fi
+      continue
+    fi
+
+    images_block=$(_build_images_block "$dir")
+    _render_cycle_script "$name" "$images_block" > "$target"
+
+    # When --prefix is non-default, rewrite WALLPAPER_DIR in the generated
+    # script so it points to the literal scan path rather than the canonical
+    # WALLPAPER_ROOT/<name>.
+    if [[ "$prefix" != "$WALLPAPER_ROOT" ]]; then
+      sed -i -E "s|^WALLPAPER_DIR=.*|WALLPAPER_DIR=\"$prefix/$name\"|" "$target"
+    fi
+
+    chmod +x "$target"
+
+    if (( existed == 1 )); then
+      printf '  %-20s regenerated cycle-hyprpaper-%s (%s images)\n' "$name" "$name" "$n"
+      (( ++forced ))
+    else
+      printf '  %-20s created cycle-hyprpaper-%s (%s images)\n' "$name" "$name" "$n"
+      (( ++created ))
+    fi
+  done
+
+  info ""
+  if [[ -n "$dry_run" ]]; then
+    info "dry-run complete (no files written)"
+  else
+    info "created $created, regenerated $forced, skipped $skipped, invalid $invalid"
+  fi
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  apply / watch — re-apply from (a possibly hand-edited) config file
+# ──────────────────────────────────────────────────────────────────────────────
+
+cmd_apply() {
+  case "${1:-}" in
+    -h|--help|help)
+      cat <<'EOF'
+dotctl apply
+
+Re-read ~/.config/dotctl/config and re-apply every element (cava, kitty,
+mako, wofi, waybar, hypr, wallpaper). Use after hand-editing the state
+file, or as a catch-up when something in the live configs drifted.
+
+Equivalent to `dotctl set` with no behavior change; does not write state.
+EOF
+      return 0;;
+  esac
+
+  load_state
+  apply_all
+  log "apply: full config from $STATE_FILE"
+  info "dotctl: applied"
+}
+
+cmd_watch() {
+  case "${1:-}" in
+    -h|--help|help)
+      cat <<'EOF'
+dotctl watch
+
+Watch ~/.config/dotctl/config and auto-apply on save. Uses inotifywait(1)
+when available; falls back to 1-second mtime polling otherwise. Handy for
+editing the state file in a second terminal and seeing changes live.
+
+Ctrl-C to stop. No arguments.
+EOF
+      return 0;;
+  esac
+
+  local watch_dir watch_base
+  watch_dir=$(dirname "$STATE_FILE")
+  watch_base=$(basename "$STATE_FILE")
+  mkdir -p "$watch_dir"
+
+  info "dotctl: watching $STATE_FILE (Ctrl-C to stop)"
+
+  _watch_apply() {
+    if load_state 2>/dev/null; then
+      if apply_all >/dev/null 2>&1; then
+        log "watch: applied from $STATE_FILE"
+        info "dotctl: applied $(date '+%H:%M:%S')"
+      else
+        warn "watch: apply failed"
+      fi
+    else
+      warn "watch: invalid or incomplete $STATE_FILE — edit and save again"
+    fi
+  }
+
+  if command -v inotifywait >/dev/null 2>&1; then
+    # Monitor the dir (not the file) so atomic editor saves (temp + rename)
+    # survive inode changes. Filter events by filename.
+    inotifywait -qq -m -e close_write,moved_to "$watch_dir" \
+      | while read -r _ _ file; do
+          [[ "$file" == "$watch_base" ]] || continue
+          _watch_apply
+        done
+  else
+    warn "inotifywait not found — using 1s mtime polling"
+    local last=0 cur=0
+    [[ -f "$STATE_FILE" ]] && last=$(stat -c %Y "$STATE_FILE" 2>/dev/null || echo 0)
+    while :; do
+      sleep 1
+      [[ -f "$STATE_FILE" ]] || continue
+      cur=$(stat -c %Y "$STATE_FILE" 2>/dev/null || echo 0)
+      if [[ "$cur" != "$last" ]]; then
+        last="$cur"
+        _watch_apply
+      fi
+    done
+  fi
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  Help
+# ──────────────────────────────────────────────────────────────────────────────
+
+cmd_help() {
+  cat <<'EOF'
+dotctl — unified theme controller for cava, kitty, mako, wofi, waybar, hyprland, hyprpaper
+
+USAGE
+  dotctl <action> [args...]
+  dotctl <action> -h|--help    Detailed help for a single action
+
+ACTIONS
+  configure [--preset NAME]        Interactive wizard (required first run)
+  show                             Pretty-print current state + drift + warnings
+  set [FLAGS]                      Change one or more axes; no flags → same as show
+  apply                            Re-apply ~/.config/dotctl/config (run after hand-edits)
+  watch                            Watch the config file and auto-apply on save
+                                   (uses inotifywait if installed; mtime poll otherwise)
+  cycle <wallpaper|waybar> <next|prev>
+                                   Keybind entry points
+  sync <target> <source>           Copy color/font from one element to another
+                                   target ∈ {cava,kitty,mako,wofi,waybar,wallpaper,all}
+                                   source ∈ {cava,kitty,mako,wofi,waybar,wallpaper}
+  list <axis>                      List valid values for an axis  (try `dotctl list help`)
+  preset <save|load|list|show|delete> [name]
+  new wallpaper <name>             Scaffold ~/Pictures/dotctl/wallpapers/<name>/
+                                   and ~/.config/dotctl/cycle/cycle-hyprpaper-<name>
+  scan [--dry-run] [--force] [--prefix PATH]
+                                   Auto-generate cycle scripts for any wallpaper
+                                   dirs that don't have one yet. Populates
+                                   IMAGES=( ) from disk contents.
+  help                             This message
+
+QUICK REFERENCE
+  dotctl configure                 First-time setup
+  dotctl set -c forest -f meslo    Unified switch to forest / meslo
+  dotctl set --font-size 22        Scale every font at once (display swap)
+  dotctl set --kitty-font-size 14  Only kitty shrinks
+  dotctl set --waybar-color gruvbox
+  dotctl set --waybar-style console --waybar-scope full
+  dotctl set --waybar-decor round
+  dotctl set --waybar-transparent on --waybar-opacity 0.30
+  dotctl set --waybar-vpn on       Requires vpnctl + vpn-status-indicator on PATH
+  dotctl set --hypr-effect glow    Hyprland shadow/border color effect
+  dotctl set --launcher-logo nixos
+  dotctl set -w gentoo
+  dotctl cycle wallpaper next      (keybind: Super+Alt Right)
+  dotctl cycle waybar    next      (keybind: Super+Alt Up)
+  dotctl sync wallpaper waybar     Wallpaper follows waybar color
+  dotctl sync all kitty            All elements take kitty's color+font
+  dotctl preset save laptop        Snapshot current state
+  dotctl preset load tv            Restore snapshot
+  dotctl scan                      Auto-generate cycle scripts for new wallpaper dirs
+  dotctl scan --dry-run            Preview what scan would create
+  dotctl new wallpaper forest      Scaffold one new wallpaper theme by hand
+
+STATE
+  ~/.config/dotctl/config       23-field KEY=value, hand-editable, flock-guarded
+  ~/.config/dotctl/presets/     Saved presets (one .conf per preset)
+  ~/.config/dotctl/cycle/       cycle-hyprpaper-<theme> scripts + _cycle-hyprpaper.template
+  ~/.cache/dotctl/lock          Runtime lockfile
+  /tmp/dotctl.log               Event log (apply, cycle, sync, watch)
+
+SOURCES (read-only from dotctl's perspective)
+  ~/.config/cava/<color>/config
+  ~/.config/kitty/<color>_<font>/kitty.conf
+  ~/.config/mako/<color>_<font>/config
+  ~/.config/wofi/<color>_<font>/<variant>/style.css
+  ~/.config/waybar/<style>_<scope>/{config.jsonc,style.css}   (canonical, palette-injected)
+  ~/.config/waybar/palettes/<color>.palette
+  ~/.config/waybar/fonts/<font>.fontdef
+  ~/.config/waybar/decorators/<decor>.glyphs
+  ~/.local/share/dotctl/dotctl-colors.conf.tmpl               (hyprland color template)
+  ~/Pictures/dotctl/wallpapers/<theme>/   + ~/.config/dotctl/cycle/cycle-hyprpaper-<theme>
+
+HYPRLAND INTEGRATION
+  Install drops two sourceable snippets into ~/.config/hypr/. Add both to
+  the BOTTOM of your hyprland.conf (later sources override earlier ones):
+
+    source = ~/.config/hypr/dotctl-keybinds.conf   # cycle + audio binds
+    source = ~/.config/hypr/dotctl-colors.conf     # palette-driven colors + shadow/glow
+
+  Then: hyprctl reload
+
+  The keybinds snippet ships with:
+    bind = SUPER ALT, Right, exec, dotctl cycle wallpaper next
+    bind = SUPER ALT, Left,  exec, dotctl cycle wallpaper prev
+    bind = SUPER ALT, Up,    exec, dotctl cycle waybar    next
+    bind = SUPER ALT, Down,  exec, dotctl cycle waybar    prev
+
+  dotctl never edits hyprland.conf itself.
+EOF
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  Dispatcher
+# ──────────────────────────────────────────────────────────────────────────────
+
+main() {
+  local action="${1:-help}"
+  [[ $# -gt 0 ]] && shift
+  case "$action" in
+    configure)        cmd_configure "$@";;
+    show)             cmd_show "$@";;
+    set)              cmd_set "$@";;
+    cycle)            cmd_cycle "$@";;
+    sync)             cmd_sync "$@";;
+    list)             cmd_list "$@";;
+    preset)           cmd_preset "$@";;
+    new)              cmd_new "$@";;
+    scan)             cmd_scan "$@";;
+    apply)            cmd_apply "$@";;
+    watch)            cmd_watch "$@";;
+    help|-h|--help|'') cmd_help;;
+    *) die "unknown action \`$action\` — try \`dotctl help\`";;
+  esac
+}
+
+main "$@"

@@ -1,0 +1,81 @@
+@define-color bg rgba(26, 20, 16, 0.9);        /* Coyote background */
+@define-color bg-alt rgba(61, 46, 31, 0.85);   /* Coyote bg_dark */
+@define-color border #b5651d;                  /* Coyote rust brown */
+@define-color text #d4b483;                    /* Coyote foreground */
+@define-color text-alt #c9522a;                /* Coyote bright rust */
+@define-color accent #dcb88a;                  /* Coyote light wheat */
+@define-color accent-alt #8a7339;              /* Coyote olive */
+
+
+
+* {
+    font-family: 'MesloLGS NF', 'Meslo LG S', monospace;
+    font-size: 26px;
+    border-radius: 26px;;
+}
+
+window {
+    margin: 0px;
+    padding: 8px;
+    border: 1px solid @border;
+    background-color: @bg;
+    border-radius: 16px;
+}
+
+#input {
+margin: 4px 8px;
+    padding: 8px;
+    border: none;
+    color: @text-alt;
+    background-color: @bg-alt;
+    border-radius: 12px;
+}
+
+#inner-box {
+    margin: 4px;
+    padding: 8px;
+    background-color: transparent;
+}
+
+#outer-box {
+    margin: 4px;
+    padding: 8px;
+    background-color: transparent;
+}
+
+#scroll {
+    margin: 0px;
+    padding: 8px;
+    background-color: transparent;
+}
+
+#entry {
+    padding: 6px 8px;
+    background-color: transparent;
+    border-radius: 8px;
+}
+
+#entry:selected {
+    background-color: @bg-alt;
+    border: 1px solid @accent;
+}
+
+#text {
+    color: @text;
+    margin: 2px;
+}
+
+#entry:selected #text {
+    color: @accent-alt;
+    font-weight: bold;
+}
+
+#input image {
+    color: @accent;
+}
+
+#input * {
+    outline: 2px solid @accent;
+    border-radius: 8px;
+}
+

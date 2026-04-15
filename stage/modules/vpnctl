@@ -1,0 +1,369 @@
+#!/usr/bin/env bash
+# Check logs with sudo tail -n 40 /var/log/openvpn/nordvpn.log
+
+VPNCTL_BIN="/usr/local/bin/vpnctl"
+CONFIG_DIR="/etc/openvpn"
+DEFAULT_CONF="${CONFIG_DIR}/nordvpn.conf"
+AUTH_FILE="${CONFIG_DIR}/nordvpn.auth"
+OVPN_DIR="${HOME}/nordvpn/ovpn_udp"
+PIDFILE="/run/openvpn-nordvpn.pid"
+
+# Use sudo for privileged operations if not already root
+if [[ $EUID -ne 0 ]]; then
+  SUDO="sudo"
+else
+  SUDO=""
+fi
+
+usage() {
+  cat <<USAGE
+Usage: vpnctl <command> [args...]
+
+Commands:
+  on [file]        Connect using DEFAULT_CONF or OVPN file (relative to \$OVPN_DIR)
+  off              Disconnect (kill OpenVPN)
+  status           Show VPN status (process, tun0, public IP)
+  list [filter]    List available .ovpn configs (optional grep filter)
+  random           Pick random server and connect
+  use <file>       Set DEFAULT_CONF symlink to OVPN file (no connect)
+  pick             Interactive pick (requires fzf)
+  killswitch on    Enable iptables kill switch (block non-tun0)
+  killswitch off   Disable kill switch
+  killswitch stat  Show kill switch rule presence
+  locs             Show unique "locations" (based on filenames)
+USAGE
+}
+
+vpn_status() {
+  echo "=== VPN STATUS ==="
+
+  if pgrep openvpn >/dev/null 2>&1; then
+    echo "OpenVPN: RUNNING NordVPN Configuration"
+    echo
+    echo "Process:"
+    pgrep -fa openvpn | sed 's/^/  /'
+  else
+    echo "OpenVPN: NOT running. NordVPN Configuration Inactive."
+  fi
+
+  echo
+  echo "Interface:"
+  ip a | grep -A2 'tun0' || echo "  No tun0 interface found"
+
+  echo
+  echo "Routing (summary):"
+  ip route | sed 's/^/  /' | head -n 10
+
+  echo
+  echo "Public IP:"
+  if command -v curl >/dev/null 2>&1; then
+    printf "  "
+    curl -s https://ifconfig.me || echo "  (curl failed)"
+    echo
+  else
+    echo "  curl not installed"
+  fi
+
+  echo "==================="
+}
+
+vpn_on() {
+  local cfgname="${1:-}"
+
+  # If user passed a file, switch default config symlink first
+  if [[ -n "$cfgname" ]]; then
+    local src="${OVPN_DIR}/${cfgname}"
+    if [[ ! -f "$src" ]]; then
+      echo "Config not found: $src" >&2
+      exit 1
+    fi
+    $SUDO ln -sf "$src" "$DEFAULT_CONF"
+    echo "Default config set to: $cfgname"
+  fi
+
+  echo "Stopping any existing OpenVPN..."
+  echo "Closing any existing NordVPN connection..."
+  $SUDO pkill openvpn 2>/dev/null || true
+  $SUDO rm -f "$PIDFILE" 2>/dev/null || true
+
+  echo "Starting OpenVPN using: $DEFAULT_CONF"
+  echo "NordVPN Connecting..."
+
+  $SUDO openvpn \
+    --config "$DEFAULT_CONF" \
+    --auth-user-pass "$AUTH_FILE" &
+
+  openvpn_pid=$!
+  echo "OpenVPN PID: $openvpn_pid"
+  $SUDO mkdir -p "$(dirname "$PIDFILE")" || true
+  echo "$openvpn_pid" | $SUDO tee "$PIDFILE" >/dev/null || true
+
+  sleep 3
+  vpn_status
+}
+
+vpn_off() {
+  echo "Stopping OpenVPN..."
+  echo "NordVPN Connection Closed..."
+  if [[ -f "$PIDFILE" ]]; then
+    $SUDO kill "$(cat "$PIDFILE")" 2>/dev/null || true
+    $SUDO rm -f "$PIDFILE"
+  fi
+  $SUDO pkill openvpn 2>/dev/null || true
+}
+
+vpn_list() {
+  if [[ ! -d "$OVPN_DIR" ]]; then
+    echo "OVPN dir not found: $OVPN_DIR" >&2
+    exit 1
+  fi
+  if [[ $# -ge 1 ]]; then
+    ls "$OVPN_DIR"/*.ovpn 2>/dev/null | grep -i "$1" || true
+  else
+    ls "$OVPN_DIR"/*.ovpn 2>/dev/null || true
+  fi
+}
+
+vpn_random() {
+  if [[ ! -d "$OVPN_DIR" ]]; then
+    echo "OVPN dir not found: $OVPN_DIR" >&2
+    exit 1
+  fi
+  local cfg
+  if command -v shuf >/dev/null 2>&1; then
+    cfg=$(ls "$OVPN_DIR"/*.ovpn 2>/dev/null | shuf -n1)
+  else
+    cfg=$(ls "$OVPN_DIR"/*.ovpn 2>/dev/null | sort -R | head -n1)
+  fi
+  [[ -z "$cfg" ]] && { echo "No .ovpn files found"; exit 1; }
+  cfg=$(basename "$cfg")
+  echo "Randomly selected server: $cfg"
+  vpn_on "$cfg"
+}
+
+vpn_use() {
+  if [[ -z "${1:-}" ]]; then
+    echo "Usage: vpnctl use <ovpn_filename>" >&2
+    exit 1
+  fi
+  local src="${OVPN_DIR}/$1"
+  if [[ ! -f "$src" ]]; then
+    echo "Config not found: $src" >&2
+    exit 1
+  fi
+  $SUDO ln -sf "$src" "$DEFAULT_CONF"
+  echo "Default NordVPN config now: $1"
+}
+
+vpn_pick() {
+  if ! command -v fzf >/dev/null 2>&1; then
+    echo "fzf not installed; falling back to vpnctl list" >&2
+    vpn_list
+    exit 0
+  fi
+  local choice
+  choice=$(vpn_list | fzf --prompt="Pick NordVPN server: " --height=40%) || exit 1
+  choice=$(basename "$choice")
+  vpn_on "$choice"
+}
+
+vpn_locs() {
+  if [[ ! -d "$OVPN_DIR" ]]; then
+    echo "OVPN dir not found: $OVPN_DIR" >&2
+    exit 1
+  fi
+  ls "$OVPN_DIR"/*.ovpn 2>/dev/null \
+    | sed 's#.*/##; s/\..*//' \
+    | sed 's/[0-9].*$//' \
+    | sort -u
+}
+
+# --- KILLSWITCH (IPv4 + IPv6) ---------------------------------------------
+
+killswitch_on() {
+    local dev="${VPN_DEV:-tun0}"
+
+    echo "Enabling killswitch: blocking NEW outbound traffic not via ${dev}..."
+
+    # IPv4 rules
+    $SUDO iptables -I OUTPUT -o "${dev}" -m conntrack --ctstate NEW -j ACCEPT
+    $SUDO iptables -I OUTPUT ! -o "${dev}" -m conntrack --ctstate NEW -j REJECT
+
+    # IPv6 rules (best-effort; harmless if IPv6 is disabled)
+    if command -v ip6tables >/dev/null 2>&1; then
+        $SUDO ip6tables -I OUTPUT -o "${dev}" -m conntrack --ctstate NEW -j ACCEPT || true
+        $SUDO ip6tables -I OUTPUT ! -o "${dev}" -m conntrack --ctstate NEW -j REJECT || true
+    fi
+
+    echo "Killswitch enabled."
+}
+
+killswitch_off() {
+    local dev="${VPN_DEV:-tun0}"
+
+    echo "Disabling killswitch (removing rules)..."
+
+    # IPv4
+    $SUDO iptables -D OUTPUT ! -o "${dev}" -m conntrack --ctstate NEW -j REJECT 2>/dev/null || true
+    $SUDO iptables -D OUTPUT -o "${dev}" -m conntrack --ctstate NEW -j ACCEPT 2>/dev/null || true
+
+    # IPv6
+    if command -v ip6tables >/dev/null 2>&1; then
+        $SUDO ip6tables -D OUTPUT ! -o "${dev}" -m conntrack --ctstate NEW -j REJECT 2>/dev/null || true
+        $SUDO ip6tables -D OUTPUT -o "${dev}" -m conntrack --ctstate NEW -j ACCEPT 2>/dev/null || true
+    fi
+
+    echo "Killswitch disabled."
+}
+
+killswitch_status() {
+    local dev="${VPN_DEV:-tun0}"
+    local v4 v6
+
+    v4=$($SUDO iptables -S OUTPUT 2>/dev/null | grep -F "! -o ${dev}" | grep -F " -j REJECT" || true)
+    if command -v ip6tables >/dev/null 2>&1; then
+        v6=$($SUDO ip6tables -S OUTPUT 2>/dev/null | grep -F "! -o ${dev}" | grep -F " -j REJECT" || true)
+    fi
+
+    if [[ -n "$v4" || -n "$v6" ]]; then
+        echo "Killswitch: ENABLED"
+        [[ -n "$v4" ]] && echo "  IPv4 rule: $v4"
+        [[ -n "$v6" ]] && echo "  IPv6 rule: $v6"
+    else
+        echo "Killswitch: DISABLED"
+    fi
+}
+
+vpn_menu() {
+  # Needs wofi
+  if ! command -v wofi >/dev/null 2>&1; then
+    echo "wofi not installed" >&2
+    exit 1
+  fi
+
+  # Toggle behavior: if a wofi is already open, close it and exit
+  if pgrep -x wofi >/dev/null; then
+    pkill -x wofi
+    exit 0
+  fi
+
+  # Build menu entries
+  choice="$(
+    printf '%s\n' \
+      "Connect (default)" \
+      "Connect (random)" \
+      "Pick server" \
+      "Disconnect" \
+      "Killswitch ON" \
+      "Killswitch OFF" \
+      "Killswitch status" \
+      "Full status (terminal)" \
+    | wofi --dmenu \
+           --prompt 'VPN' \
+           --location 3 \
+           --insensitive \
+           --width 550 \
+           --height 450 \
+           --xoffset -55 \
+           --yoffset 10
+  )" || exit 0
+
+  case "$choice" in
+    "Connect (default)")
+      # Run connect, show a bit of output, auto-close
+      kitty --class vpnstatus -e bash -c "vpnctl on; echo; sleep 2"
+      ;;
+    "Connect (random)")
+      kitty --class vpnstatus -e bash -c "vpnctl random; echo; sleep 2"
+      ;;
+    "Pick server")
+      cfg="$(
+        vpn_list | sed 's#.*/##' | wofi --dmenu \
+          --prompt 'Pick server' \
+          --location 3 \
+          --insensitive \
+          --width 550 \
+          --height 450 \
+          --xoffset -55 \
+          --yoffset 10
+      )" || exit 0
+      cfg=$(basename "$cfg")
+      if [[ -n "$cfg" ]]; then
+        kitty --class vpnstatus -e bash -c "vpnctl on    \"$cfg\"; echo; sleep 2"
+      fi
+      ;;
+
+    "Connect (default)")
+      kitty --class vpnstatus -e bash -c "vpnctl on; stty sane; echo; read -n1 -rp 'Press any key to close...'"
+      ;;
+    "Connect (random)")
+      kitty --class vpnstatus -e bash -c "vpnctl random; stty sane; echo; read -n1 -rp 'Press any key to close...'"
+      ;;
+    "Pick server")
+      cfg="$(
+        vpn_list | sed 's#.*/##' | wofi --dmenu \
+          --prompt 'Pick server' \
+          --location 3 \
+          --insensitive \
+          --width 550 \
+          --height 450 \
+          --xoffset -55 \
+          --yoffset 10
+      )" || exit 0
+      cfg=$(basename "$cfg")
+      if [[ -n "$cfg" ]]; then
+        kitty --class vpnstatus -e bash -c "vpnctl on \"$cfg\"; stty sane; echo; read -n1 -rp 'Press any key to close...'"
+      fi
+      ;;
+
+    "Disconnect")
+      kitty --class vpnstatus -e bash -c "vpnctl off; echo; read -n1 -rp 'Press any key to close...'"
+      ;;
+    "Killswitch ON")
+      kitty --class vpnstatus -e bash -c "vpnctl killswitch on; echo; read -n1 -rp 'Press any key to close...'"
+      ;;
+    "Killswitch OFF")
+      kitty --class vpnstatus -e bash -c "vpnctl killswitch off; echo; read -n1 -rp 'Press any key to close...'"
+      ;;
+    "Killswitch status")
+      kitty --class vpnstatus -e bash -c "vpnctl killswitch stat; echo; read -n1 -rp 'Press any key to close...'"
+      ;;
+    "Full status (terminal)")
+      kitty --class vpnstatus -e bash -c "vpnctl status; echo; read -n1 -rp 'Press any key to close...'"
+      ;;
+    *)
+      # No-op / cancelled
+      ;;
+  esac
+}
+
+# ========= dispatch =========
+
+cmd="${1:-}"
+shift || true
+
+case "$cmd" in
+  on)         vpn_on "$@" ;;
+  off)        vpn_off "$@" ;;
+  status)     vpn_status ;;
+  list)       vpn_list "$@" ;;
+  random)     vpn_random ;;
+  use)        vpn_use "$@" ;;
+  pick)       vpn_pick ;;
+  locs)       vpn_locs ;;
+  menu)       vpn_menu ;;
+  killswitch)
+    sub="${1:-}"
+    shift || true
+    case "$sub" in
+      on)   killswitch_on "$@" ;;
+      off)  killswitch_off "$@" ;;
+      stat) killswitch_status ;;
+      *)    echo "Usage: vpnctl killswitch {on|off|stat}" >&2; exit 1 ;;
+    esac
+    ;;
+  ""|-h|--help|help) usage ;;
+  *) echo "Unknown command: $cmd" >&2; usage; exit 1 ;;
+esac
+
+

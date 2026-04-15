@@ -1,0 +1,20 @@
+// ─────────────────────────────────────────────────────────────────────────
+//  VPN module — drop-in snippet for waybar bubble variants
+//  (bubble_full/config.jsonc, bubble_minimal/config.jsonc)
+//
+//  Bubble style uses outlined pills, no separator chevrons. Only the
+//  single module needs to be added.
+// ─────────────────────────────────────────────────────────────────────────
+
+// In modules-right, insert wherever you'd like the VPN pill to appear
+// (typical spot is right before "tray"):
+//     "custom/vpn",
+
+// VPN button — text set by vpn-status-indicator (" VPN" / " VPN OFF").
+"custom/vpn": {
+  "exec": "/usr/local/bin/vpn-status-indicator",
+  "interval": 5,
+  "return-type": "json",
+  "format": "{}",
+  "on-click": "/usr/local/bin/vpnctl menu"
+},

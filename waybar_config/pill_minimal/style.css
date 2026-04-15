@@ -1,0 +1,280 @@
+/* ===================================================================
+   WAYBAR STYLE — outlined-pill, minimal module set
+   =================================================================== */
+
+@keyframes blink-critical {
+  to { border-color: @critical; color: @critical; }
+}
+
+@keyframes pulse-focus {
+  0%   { box-shadow: inset 0 0 0 1px @blue; }
+  100% { box-shadow: inset 0 0 0 2px @cyan; }
+}
+
+/* PALETTE:BEGIN — replaced at apply time by dotctl */
+/* -- forest palette (canonical default — replaced at apply time) --- */
+@define-color black    #141410;
+@define-color red      #8b3a3a;  /* oxblood / warning */
+@define-color green    #4b5320;  /* drab green */
+@define-color yellow   #a89152;  /* khaki */
+@define-color blue     #3e4a33;  /* field drab */
+@define-color purple   #6b4f2a;  /* leather brown */
+@define-color cyan     #9aa370;  /* pale sage */
+@define-color gray     #8d8469;  /* tan gray */
+@define-color magenta  #8b6f3f;  /* coyote brown */
+@define-color teal1    #5b6d3e;  /* drab sage */
+@define-color green1   #9aa370;  /* pale sage */
+@define-color green2   #4b5320;  /* drab green */
+@define-color orange   #b87333;  /* desert rust */
+@define-color white    #d9cba4;  /* tan fg */
+@define-color fg_dark  #a89973;
+@define-color bg0      #141410;
+@define-color bg1      #1c1c14;
+@define-color bg2      #2a2820;
+@define-color bg3      #3d3a28;
+
+/* -- Accent Aliases ----------------------------------------------- */
+@define-color rose   @magenta;
+@define-color plum   @purple;
+@define-color mint   @green1;
+@define-color olive  @green2;
+@define-color lime   #8a9a3d;   /* brighter OD */
+@define-color gold   #c3b091;   /* light khaki / tan */
+@define-color teal   @teal1;
+
+@define-color warning  @orange;
+@define-color critical @red;
+
+@define-color ws-unfocused @bg2;
+@define-color ws-focused   @cyan;
+@define-color ws-visible   @purple;
+/* PALETTE:END */
+
+/* -- Global Reset ------------------------------------------------- */
+* {
+  border: none;
+  border-radius: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  box-shadow: none;
+  text-shadow: none;
+  -gtk-icon-shadow: none;
+}
+
+/* -- Bar Container ------------------------------------------------ */
+#waybar {
+  /* TRANSPARENT:BEGIN — replaced at apply time by dotctl */
+  background: transparent;
+  /* TRANSPARENT:END */
+  color: @white;
+  /* FONT:BEGIN — replaced at apply time by dotctl */
+  font-family: "MesloLGS NF", "Meslo LG S", monospace;
+  font-size: 11pt;
+  font-weight: 500;
+  /* FONT:END */
+}
+
+/* ===================================================================
+   BUBBLE BASE — outlined pill, dark interior, accent border
+   =================================================================== */
+
+#custom-power,
+#custom-launcher,
+#workspaces,
+#cpu,
+#custom-cputemp,
+#memory,
+#custom-gpu,
+#custom-workspace-prev,
+#clock,
+#custom-workspace-next,
+#custom-terminal,
+#custom-files,
+#custom-editor,
+#custom-browser,
+#tray,
+/* VPN:BEGIN */
+#custom-vpn,
+/* VPN:END */
+#pulseaudio {
+  border-radius: 14px;
+  margin: 5px 3px;
+  padding: 0 12px;
+  background: @bg1;
+  color: @white;
+  border: 1px solid @bg3;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+/* -- Warning / Critical ------------------------------------------- */
+#memory.warning,
+#cpu.warning {
+  border-color: @warning;
+  color: @warning;
+}
+
+#memory.critical,
+#cpu.critical {
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+  animation-name: blink-critical;
+  animation-duration: 1s;
+}
+
+/* ===================================================================
+   LEFT SIDE
+   =================================================================== */
+
+#custom-power {
+  background: @bg1;
+  color: @red;
+  border-color: @red;
+  font-size: 16px;
+  padding: 0 11px;
+}
+
+#custom-launcher {
+  background: @bg1;
+  color: @teal;
+  border-color: @teal;
+  font-size: 18px;
+  padding: 0 11px;
+}
+
+/* Workspaces */
+#workspaces {
+  background: @bg1;
+  border-color: @bg3;
+  padding: 0 4px;
+}
+
+#workspaces button {
+  padding: 1px 8px;
+  margin: 3px 2px;
+  color: @fg_dark;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  transition: all 0.18s ease;
+}
+
+#workspaces button.visible {
+  color: @purple;
+  border-color: @purple;
+}
+
+#workspaces button.focused {
+  color: @cyan;
+  border-color: @cyan;
+  background: alpha(@cyan, 0.12);
+}
+
+#workspaces button.urgent {
+  color: @orange;
+  border-color: @orange;
+  background: alpha(@orange, 0.15);
+}
+
+#workspaces button:hover {
+  color: @magenta;
+  border-color: @magenta;
+  background: alpha(@magenta, 0.1);
+}
+
+/* System monitors — accent border, matching text */
+#cpu {
+  color: @lime;
+  border-color: @lime;
+}
+
+#custom-cputemp {
+  color: @olive;
+  border-color: @olive;
+}
+
+#memory {
+  color: @mint;
+  border-color: @mint;
+}
+
+#custom-gpu {
+  color: @cyan;
+  border-color: @cyan;
+}
+
+/* ===================================================================
+   CENTER
+   =================================================================== */
+
+#custom-workspace-prev,
+#custom-workspace-next {
+  background: transparent;
+  border: none;
+  color: @fg_dark;
+  padding: 0 6px;
+}
+
+#custom-workspace-prev:hover,
+#custom-workspace-next:hover {
+  color: @magenta;
+}
+
+#clock {
+  color: @white;
+  border-color: @blue;
+  font-weight: bold;
+  padding: 0 16px;
+}
+
+/* ===================================================================
+   RIGHT SIDE
+   =================================================================== */
+
+#custom-terminal    { color: @cyan;    border-color: @cyan; }
+#custom-files    { color: @blue;    border-color: @blue; }
+#custom-editor    { color: @olive;   border-color: @olive; }
+#custom-browser  { color: @gold;    border-color: @gold; }
+
+#tray {
+  border-color: @bg3;
+  padding: 0 8px;
+}
+
+#pulseaudio {
+  color: @rose;
+  border-color: @rose;
+}
+
+/* VPN:BEGIN — stripped when WAYBAR_VPN=off */
+#custom-vpn.on              { color: @green; border-color: @green; }
+#custom-vpn.on.killswitch   { color: @mint;  border-color: @mint;  }
+#custom-vpn.off             { color: @red;   border-color: @red;   }
+#custom-vpn.off.killswitch {
+  color: @red;
+  border-color: @red;
+  animation-name: blink-critical;
+  animation-duration: 1s;
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+}
+/* VPN:END */
+
+/* ===================================================================
+   HOVER — fill the bubble with its accent color
+   =================================================================== */
+
+#custom-power:hover   { background: @red;   color: @hover_fg; }
+#custom-launcher:hover    { background: @teal;  color: @hover_fg; }
+#custom-terminal:hover       { background: @cyan;  color: @hover_fg; }
+#custom-files:hover       { background: @blue;  color: @hover_fg; }
+#custom-editor:hover       { background: @olive; color: @hover_fg; }
+#custom-browser:hover     { background: @gold;  color: @hover_fg; }
+#pulseaudio:hover         { background: @rose;  color: @hover_fg; }
+#clock:hover              { background: @blue;  color: @hover_fg; }
+/* VPN:BEGIN */
+#custom-vpn.on:hover            { background: @green; color: @hover_fg; }
+#custom-vpn.on.killswitch:hover { background: @mint;  color: @hover_fg; }
+#custom-vpn.off:hover           { background: @red;   color: @hover_fg; }
+/* VPN:END */

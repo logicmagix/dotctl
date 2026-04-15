@@ -1,0 +1,12 @@
+# Minimal mako config that parses on old versions
+default-timeout=3000
+ignore-timeout=false
+max-visible=3
+anchor=top-right
+background-color=#282828
+text-color=#ebdbb2
+border-color=#458588
+border-size=2
+padding=8
+margin=12
+font=Px PhoenixEGA 8x16 22

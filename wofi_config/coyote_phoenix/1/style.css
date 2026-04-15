@@ -1,0 +1,82 @@
+@define-color bg rgba(26, 20, 16, 0.9);        /* Coyote background */
+@define-color bg-alt rgba(36, 26, 18, 0.8);    /* Coyote bg_dark */
+@define-color border #4a3828;                  /* Coyote border / bright-black */
+@define-color text #d4b483;                    /* Coyote foreground */
+@define-color text-alt #b08c4d;                /* Coyote fg_dark */
+/*@define-color accent #9289d9;*/                  /* Gentoo purple */
+@define-color accent #c19a6b;                  /* Coyote desert tan */
+@define-color accent-alt #b5651d;              /* Coyote rust brown (cooler highlight) */
+
+
+
+* {
+    font-family: 'Px PhoenixEGA 8x16', monospace;
+    font-size: 26px;
+    border-radius: 26px;;
+}
+
+window {
+    margin: 0px;
+    padding: 8px;
+    border: 1px solid @border;
+    background-color: @bg;
+    border-radius: 16px;
+}
+
+#input {
+margin: 4px 8px;
+    padding: 8px;
+    border: none;
+    color: @text-alt;
+    background-color: @bg-alt;
+    border-radius: 12px;
+}
+
+#inner-box {
+    margin: 4px;
+    padding: 8px;
+    background-color: transparent;
+}
+
+#outer-box {
+    margin: 4px;
+    padding: 8px;
+    background-color: transparent;
+}
+
+#scroll {
+    margin: 0px;
+    padding: 8px;
+    background-color: transparent;
+}
+
+#entry {
+    padding: 6px 8px;
+    background-color: transparent;
+    border-radius: 8px;
+}
+
+#entry:selected {
+    background-color: @bg-alt;
+    border: 1px solid @accent;
+}
+
+#text {
+    color: @text;
+    margin: 2px;
+}
+
+#entry:selected #text {
+    color: @accent-alt;
+    font-weight: bold;
+}
+
+#input image {
+    color: @accent;
+}
+
+#input * {
+    outline: 2px solid @accent;
+    border-radius: 8px;
+}
+

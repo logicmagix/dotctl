@@ -1,0 +1,39 @@
+/* -- tokyo_night palette -------------------------------------------- */
+@define-color black    #1a1b26;
+@define-color red      #f7768e;
+@define-color green    #9ece6a;
+@define-color yellow   #e0af68;
+@define-color blue     #7aa2f7;
+@define-color purple   #9d7cd8;
+@define-color cyan     #7dcfff;
+@define-color gray     #565f89;
+@define-color magenta  #bb9af7;
+@define-color teal1    #1abc9c;
+@define-color green1   #73daca;
+@define-color green2   #41a6b5;
+@define-color orange   #ff9e64;
+@define-color white    #c0caf5;
+@define-color fg_dark  #a9b1d6;
+@define-color bg0      #1a1b26;
+@define-color bg1      #16161e;
+@define-color bg2      #24283b;
+@define-color bg3      #3b4261;
+
+/* -- Accent Aliases ----------------------------------------------- */
+@define-color rose   @magenta;
+@define-color plum   @purple;
+@define-color mint   @green1;
+@define-color olive  @green2;
+@define-color lime   #c3e88d;   /* spring accent */
+@define-color gold   @yellow;
+@define-color teal   @teal1;
+
+@define-color warning  @orange;
+@define-color critical @red;
+
+@define-color ws-unfocused @bg2;
+@define-color ws-focused   @cyan;
+@define-color ws-visible   @purple;
+
+/* -- Semantic tokens --------------------------------------------- */
+@define-color hover_fg @black;

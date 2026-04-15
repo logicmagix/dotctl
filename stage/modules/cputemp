@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# waybar-cputemp — print CPU temp + waybar state class (JSON).
+# Output: {"text":"CPU Temp: N°C","class":"normal|warning|critical","alt":"..."}
+
+labels=('Tctl' 'Tdie' 'CPU Package' 'CPU Composite' 'Package id 0')
+
+pick_temp() {
+  for d in /sys/class/hwmon/hwmon*; do
+    for lbl in "${labels[@]}"; do
+      f=$(grep -il "^${lbl}$" "$d"/temp*_label 2>/dev/null | head -n1)
+      if [[ -n "$f" ]]; then
+        inp="${f/_label/_input}"
+        if [[ -r "$inp" ]]; then
+          cat "$inp"
+          return 0
+        fi
+      fi
+    done
+  done
+  return 1
+}
+
+val="$(pick_temp || true)"
+
+# Fallback: any temp*_input; pick the highest.
+if [[ -z "$val" ]]; then
+  best=0
+  for inp in /sys/class/hwmon/hwmon*/temp*_input; do
+    [[ -r "$inp" ]] || continue
+    v=$(<"$inp")
+    [[ -n "$v" ]] || continue
+    (( v > best )) && best="$v"
+  done
+  (( best > 0 )) && val="$best"
+fi
+
+if [[ -z "$val" ]]; then
+  printf '{"text":"CPU Temp: --","class":"unknown","alt":"unknown"}\n'
+  exit 0
+fi
+
+t=$((val / 1000))
+
+if   (( t < 60 )); then cls="normal"
+elif (( t < 80 )); then cls="warning"
+else                    cls="critical"
+fi
+
+printf '{"text":"CPU Temp: %d°C","class":"%s","alt":"%s"}\n' "$t" "$cls" "$cls"

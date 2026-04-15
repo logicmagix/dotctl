@@ -1,0 +1,39 @@
+/* -- gruvbox palette -------------------------------------------- */
+@define-color black    #282828;
+@define-color red      #fb4934;
+@define-color green    #98971a;
+@define-color yellow   #d79921;
+@define-color blue     #458588;
+@define-color purple   #b16286;
+@define-color cyan     #8ec07c;  /* braqua */
+@define-color gray     #928374;
+@define-color magenta  #d3869b;  /* brpurple */
+@define-color teal1    #689d6a;  /* aqua */
+@define-color green1   #8ec07c;  /* braqua */
+@define-color green2   #98971a;  /* green */
+@define-color orange   #d65d0e;
+@define-color white    #ebdbb2;
+@define-color fg_dark  #a89984;
+@define-color bg0      #282828;
+@define-color bg1      #1d2021;
+@define-color bg2      #3c3836;
+@define-color bg3      #504945;
+
+/* -- Accent Aliases ----------------------------------------------- */
+@define-color rose   @magenta;
+@define-color plum   @purple;
+@define-color mint   @green1;
+@define-color olive  @green2;
+@define-color lime   #b8bb26;   /* bright yellow-green */
+@define-color gold   @yellow;
+@define-color teal   @teal1;
+
+@define-color warning  @orange;
+@define-color critical @red;
+
+@define-color ws-unfocused @bg2;
+@define-color ws-focused   @cyan;
+@define-color ws-visible   @purple;
+
+/* -- Semantic tokens --------------------------------------------- */
+@define-color hover_fg @black;

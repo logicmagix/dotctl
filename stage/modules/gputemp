@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# waybar-gputemp — print GPU temp + waybar state class (JSON).
+# Works with NVIDIA (nvidia-smi), AMD (sensors edge), and Intel (GPU hwmon).
+# Output: {"text":"GPU Temp: N°C","class":"normal|warning|critical","alt":"..."}
+
+pick_temp() {
+  local t=""
+
+  # NVIDIA
+  if command -v nvidia-smi >/dev/null 2>&1; then
+    t=$(nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader,nounits 2>/dev/null | head -n1 | tr -d '[:space:]')
+    [[ -n "$t" && "$t" =~ ^[0-9]+$ ]] && { printf '%s\n' "$t"; return 0; }
+  fi
+
+  # AMD / generic via lm-sensors "edge" label
+  if command -v sensors >/dev/null 2>&1; then
+    t=$(sensors 2>/dev/null | awk '/edge:/ {gsub(/[+°C]/,"",$2); print int($2); exit}')
+    [[ -n "$t" && "$t" =~ ^[0-9]+$ ]] && { printf '%s\n' "$t"; return 0; }
+  fi
+
+  # hwmon fallback: any device with "gpu" in its name
+  local d name input
+  for d in /sys/class/hwmon/hwmon*; do
+    [[ -r "$d/name" ]] || continue
+    name=$(<"$d/name")
+    if [[ "$name" == *gpu* || "$name" == amdgpu || "$name" == nouveau ]]; then
+      input=$(ls "$d"/temp*_input 2>/dev/null | head -n1)
+      if [[ -r "$input" ]]; then
+        t=$(<"$input")
+        [[ -n "$t" ]] && { printf '%s\n' $((t / 1000)); return 0; }
+      fi
+    fi
+  done
+
+  return 1
+}
+
+temp="$(pick_temp || true)"
+
+if [[ -z "$temp" ]]; then
+  printf '{"text":"GPU Temp: --","class":"unknown","alt":"unknown"}\n'
+  exit 0
+fi
+
+if   (( temp < 60 )); then cls="normal"
+elif (( temp < 80 )); then cls="warning"
+else                       cls="critical"
+fi
+
+printf '{"text":"GPU Temp: %d°C","class":"%s","alt":"%s"}\n' "$temp" "$cls" "$cls"

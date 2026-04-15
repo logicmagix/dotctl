@@ -1,0 +1,86 @@
+#!/bin/bash
+# cycle-hyprpaper-<COLOR> — wallpaper cycle for the <COLOR> theme.
+#
+# Template used by `theme-ctl new wallpaper <name>` and by every existing
+# cycle-hyprpaper-* script. Self-contained: drop into ~/.local/bin/, ensure
+# $HOME/Pictures/dotctl/wallpapers/<COLOR>/ exists with the listed images.
+#
+# Verbs:
+#   forward    step to next image (wrap at end)
+#   backward   step to previous image (wrap at start)
+#   current    re-apply the current image (no step) — used on theme switch
+#   first      reset index to 0 and apply
+#
+# Replace __COLOR__ and the IMAGES array when creating a new one.
+
+set -euo pipefail
+
+COLOR="__COLOR__"
+IMAGES=(
+  # one filename per line, curated order
+)
+
+# ---- boilerplate (do not edit unless the theme-ctl protocol changes) ----
+WALLPAPER_DIR="$HOME/Pictures/dotctl/wallpapers/$COLOR"
+LOG=/tmp/cycle_hyprpaper.log
+CONF="$HOME/.config/hypr/hyprpaper.conf"
+STATE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/hyprpaper-cycle"
+STATE_FILE="$STATE_DIR/index_$COLOR"
+LOCK_FILE="$STATE_DIR/lock"
+mkdir -p "$STATE_DIR"
+
+exec 9>"$LOCK_FILE"
+flock -w 2 9 || { echo "[$(date)] $COLOR: lock busy, skipping" >> "$LOG"; exit 0; }
+
+declare -a CYCLE
+for img in "${IMAGES[@]}"; do
+  f="$WALLPAPER_DIR/$img"
+  if [[ -f "$f" ]]; then
+    CYCLE+=("$f")
+  else
+    echo "[$(date)] $COLOR: missing on disk: $f" >> "$LOG"
+  fi
+done
+
+if ((${#CYCLE[@]} == 0)); then
+  echo "[$(date)] $COLOR: no wallpapers found in $WALLPAPER_DIR" >> "$LOG"
+  exit 1
+fi
+
+VERB="${1:-current}"
+idx=-1
+[[ -f "$STATE_FILE" ]] && read -r idx < "$STATE_FILE" || true
+
+count=${#CYCLE[@]}
+case "$VERB" in
+  forward)  next=$(( (idx + 1) % count ));;
+  backward) next=$(( (idx - 1 + count) % count ));;
+  current)  if (( idx >= 0 && idx < count )); then next=$idx; else next=0; fi;;
+  first)    next=0;;
+  *) echo "[$(date)] $COLOR: invalid verb: $VERB (forward|backward|current|first)" >> "$LOG"; exit 1;;
+esac
+echo "$next" > "$STATE_FILE"
+NEXT_WALLPAPER="${CYCLE[$next]}"
+
+{
+  echo
+  echo "[$(date)] $COLOR cycle ($VERB) -> $(basename -- "$NEXT_WALLPAPER")"
+  echo "Eligible count: ${#CYCLE[@]}"
+} >> "$LOG"
+
+cat > "$CONF" <<EOF
+splash = false
+ipc = true
+
+wallpaper {
+    monitor =
+    path = $NEXT_WALLPAPER
+    fit_mode = cover
+}
+EOF
+
+pkill -x hyprpaper 2>/dev/null || true
+sleep 0.3
+hyprpaper &>/dev/null 9>&- & disown
+
+echo "done." >> "$LOG"

@@ -1,0 +1,39 @@
+/* -- forest palette -------------------------------------------- */
+@define-color black    #141410;
+@define-color red      #8b3a3a;  /* oxblood / warning */
+@define-color green    #4b5320;  /* drab green */
+@define-color yellow   #a89152;  /* khaki */
+@define-color blue     #3e4a33;  /* field drab */
+@define-color purple   #6b4f2a;  /* leather brown */
+@define-color cyan     #9aa370;  /* pale sage */
+@define-color gray     #8d8469;  /* tan gray */
+@define-color magenta  #8b6f3f;  /* coyote brown */
+@define-color teal1    #5b6d3e;  /* drab sage */
+@define-color green1   #9aa370;  /* pale sage */
+@define-color green2   #4b5320;  /* drab green */
+@define-color orange   #b87333;  /* desert rust */
+@define-color white    #d9cba4;  /* tan fg */
+@define-color fg_dark  #a89973;
+@define-color bg0      #141410;
+@define-color bg1      #1c1c14;
+@define-color bg2      #2a2820;
+@define-color bg3      #3d3a28;
+
+/* -- Accent Aliases ----------------------------------------------- */
+@define-color rose   @magenta;
+@define-color plum   @purple;
+@define-color mint   @green1;
+@define-color olive  @green2;
+@define-color lime   #8a9a3d;   /* brighter OD */
+@define-color gold   #c3b091;   /* light khaki / tan */
+@define-color teal   @teal1;
+
+@define-color warning  @orange;
+@define-color critical @red;
+
+@define-color ws-unfocused @bg2;
+@define-color ws-focused   @cyan;
+@define-color ws-visible   @purple;
+
+/* -- Semantic tokens --------------------------------------------- */
+@define-color hover_fg @white;

@@ -1,0 +1,188 @@
+{
+  "layer": "top",
+  "position": "top",
+  "height": 34,
+  "exclusive": true,
+  // LEFT
+  "modules-left": [
+    "custom/power",
+    "custom/rarrow1",
+    "custom/launcher",
+    "custom/rarrow2",
+    "hyprland/workspaces",
+    "custom/rarrow3",
+    "cpu",
+    "custom/rarrow4",
+    "custom/cputemp",
+    "custom/rarrow5",
+    "memory",
+    "custom/rarrow6",
+    "custom/gpu",
+    "custom/rarrow7"
+  ],
+  // CENTER
+  "modules-center": [
+    "custom/rarrow-center-l",
+    "clock",
+    "custom/rarrow-center-r"
+  ],
+  // RIGHT
+  "modules-right": [
+    "custom/rsep-terminal", "custom/terminal",
+    "custom/rsep-files",    "custom/files",
+    "custom/rsep-editor",   "custom/editor",
+    "custom/rsep-browser",  "custom/browser",
+    "custom/rsep-tray",     "tray",
+    /* VPN:BEGIN */
+    "custom/rsep-vpn",      "custom/vpn",
+    /* VPN:END */
+    "custom/rsep-pulse",    "pulseaudio"
+  ],
+  // ===== Separators (pointed chevrons — swapped to half-circles when WAYBAR_DECOR=round) =====
+  "custom/rarrow1":        { "format": "", "tooltip": false },
+  "custom/rarrow2":        { "format": "", "tooltip": false },
+  "custom/rarrow3":        { "format": "", "tooltip": false },
+  "custom/rarrow4":        { "format": "", "tooltip": false },
+  "custom/rarrow5":        { "format": "", "tooltip": false },
+  "custom/rarrow6":        { "format": "", "tooltip": false },
+  "custom/rarrow7":        { "format": "", "tooltip": false },
+  "custom/rarrow-center-l": {
+    "format": "",
+    "tooltip": true,
+    "tooltip-format": "Previous workspace",
+    "on-click": "~/.config/hypr/ws-cycle.sh prev 1 10"
+  },
+  "custom/rarrow-center-r": {
+    "format": "",
+    "tooltip": true,
+    "tooltip-format": "Next workspace",
+    "on-click": "~/.config/hypr/ws-cycle.sh next 1 10"
+  },
+  "custom/rsep-terminal":  { "format": "", "tooltip": false },
+  "custom/rsep-files":     { "format": "", "tooltip": false },
+  "custom/rsep-editor":    { "format": "", "tooltip": false },
+  "custom/rsep-browser":   { "format": "", "tooltip": false },
+  "custom/rsep-tray":      { "format": "", "tooltip": false },
+  /* VPN:BEGIN */
+  "custom/rsep-vpn": {
+    "exec": "vpn-status-indicator",
+    "interval": 5,
+    "return-type": "json",
+    "format": "",
+    "tooltip": false
+  },
+  /* VPN:END */
+  "custom/rsep-pulse":     { "format": "", "tooltip": false },
+  /* VPN:BEGIN */
+  "custom/rsep-pulse": {
+    "exec": "vpn-status-indicator",
+    "interval": 5,
+    "return-type": "json",
+    "format": "",
+    "tooltip": false
+  },
+  /* VPN:END */
+  // ===== Modules =====
+  "custom/power": {
+    "format": "",
+    "tooltip-format": "Power",
+    "on-click": "power"
+  },
+  "custom/launcher": {
+    // "format": "\ue7e6",  // Gentoo
+    // "format": "\uf303",  // Arch Linux
+    // "format": "\uf306",  // Debian
+    // "format": "\uf32e",  // Void Linux
+    "format": "\uf17c",    // Tux (replaced at apply time by dotctl)
+    "tooltip-format": "Launcher",
+    "on-click": "launcher"
+  },
+  "custom/terminal": {
+    "format": "Terminal  ",
+    "tooltip-format": "Terminal",
+    "on-click": "for t in kitty foot alacritty wezterm ghostty gnome-terminal konsole xterm; do command -v $t >/dev/null 2>&1 && exec $t; done",
+    "return-type": "static"
+  },
+  "custom/files": {
+    "format": "Files  ",
+    "tooltip-format": "File Browser",
+    "on-click": "for f in nemo nautilus dolphin thunar pcmanfm caja; do command -v $f >/dev/null 2>&1 && exec $f \"$HOME\"; done; exec xdg-open \"$HOME\"",
+    "return-type": "static"
+  },
+  "custom/editor": {
+    "format": "Editor  ",
+    "tooltip-format": "Editor",
+    "on-click": "T=$(command -v kitty 2>/dev/null || command -v foot 2>/dev/null || command -v alacritty 2>/dev/null || command -v wezterm 2>/dev/null || command -v xterm 2>/dev/null); E=$(command -v nvim 2>/dev/null || command -v vim 2>/dev/null || command -v vi 2>/dev/null); test -n \"$T\" -a -n \"$E\" && exec $T -e $E",
+    "return-type": "static"
+  },
+  "custom/browser": {
+    "format": "Browser  ",
+    "tooltip-format": "Web Browser",
+    "on-click": "xdg-open https://",
+    "return-type": "static"
+  },
+  /* VPN:BEGIN */
+  "custom/vpn": {
+    "exec": "vpn-status-indicator",
+    "interval": 5,
+    "return-type": "json",
+    "format": "{}",
+    "on-click": "vpnctl menu"
+  },
+  /* VPN:END */
+  // ===== System modules =====
+  "cpu": {
+    "format": "Load: {usage}%",
+    "tooltip": true
+  },
+  "custom/cputemp": {
+    "exec": "cputemp",
+    "return-type": "json",
+    "format": "{}",
+    "interval": 3,
+    "tooltip": false
+  },
+  "memory": {
+    "format": "RAM Usage: {used:0.1f}G/{total:0.1f}G",
+    "tooltip": true
+  },
+  "custom/gpu": {
+    "exec": "gputemp",
+    "return-type": "json",
+    "format": "{}",
+    "interval": 2,
+    "tooltip": true
+  },
+  "clock": {
+    "format": "[{:%a %I:%M:%S}]",
+    "format-alt": "[{:%A, %B %d, %Y}]",
+    "tooltip-format": "<big>{:%A, %B %d, %Y}</big>\n<tt>{calendar}</tt>",
+    "interval": 1,
+    "on-click": "gsimplecal",
+    "on-click-right": "notify-send 'Timezones' \"Local: $(date)\\nUTC: $(TZ=UTC date)\""
+  },
+  "tray": {
+    "icon-size": 20,
+    "spacing": 6,
+    "reverse-direction": false
+  },
+  "pulseaudio": {
+    "format": "{icon}{volume}%",
+    "format-muted": "🔇 {volume}%",
+    "scroll-step": 2,
+    "on-click": "audio-output-menu",
+    "on-click-right": "pavucontrol",
+    "tooltip-format": "{icon} {volume}%",
+    "format-icons": {
+      "headphone": "🎧",
+      "headset": "🎧",
+      "hands-free": "🎧",
+      "hdmi": ["🔈","🔉","🔊"],
+      "default": ["🔈","🔉","🔊"]
+    }
+  },
+  "hyprland/workspaces": {
+    "disable-scroll": false,
+    "on-click": "activate"
+  }
+}

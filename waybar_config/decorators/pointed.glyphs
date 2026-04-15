@@ -1,0 +1,7 @@
+# dotctl waybar decorator — pointed (Powerline chevrons)
+# This is the canonical form. Canonical console variants ship pointed glyphs,
+# so this file is the identity (no substitutions).
+#
+# Format: each non-comment line is  FROM TO  (whitespace-separated). At apply
+# time dotctl reads the file for the active WAYBAR_DECOR and substitutes
+# FROM → TO in the waybar config.jsonc.

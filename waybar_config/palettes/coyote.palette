@@ -1,0 +1,39 @@
+/* -- coyote palette -------------------------------------------- */
+@define-color black    #1a1410;
+@define-color red      #c9522a;
+@define-color green    #8a7339;
+@define-color yellow   #c19a6b;
+@define-color blue     #8b6914;
+@define-color purple   #8b4513;
+@define-color cyan     #c0a878;  /* brcyan */
+@define-color gray     #4a3828;
+@define-color magenta  #b5651d;  /* brpurple */
+@define-color teal1    #dcc3a0;  /* aqua */
+@define-color green1   #c0a878;  /* brcyan */
+@define-color green2   #8a7339;  /* green */
+@define-color orange   #c9522a;
+@define-color white    #e4c9a3;
+@define-color fg_dark  #b08c4d;
+@define-color bg0      #1a1410;
+@define-color bg1      #241a12;
+@define-color bg2      #3d2e1f;
+@define-color bg3      #4a3828;
+
+/* -- Accent Aliases ----------------------------------------------- */
+@define-color rose   @magenta;
+@define-color plum   @purple;
+@define-color mint   @green1;
+@define-color olive  @green2;
+@define-color lime   #c4a464;   /* warm tan, brighter than olive */
+@define-color gold   @yellow;
+@define-color teal   @teal1;
+
+@define-color warning  @orange;
+@define-color critical @red;
+
+@define-color ws-unfocused @bg2;
+@define-color ws-focused   @cyan;
+@define-color ws-visible   @purple;
+
+/* -- Semantic tokens --------------------------------------------- */
+@define-color hover_fg @black;

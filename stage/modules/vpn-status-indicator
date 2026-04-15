@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+
+CONFIG_DIR="/etc/openvpn"
+DEFAULT_CONF="${CONFIG_DIR}/nordvpn.conf"
+
+state="off"
+loc=""
+
+# tun0 present → VPN is ON
+if ip link show tun0 >/dev/null 2>&1; then
+  state="on"
+fi
+
+# Get endpoint only if ON
+if [[ "$state" == "on" && -e "$DEFAULT_CONF" ]]; then
+  target=$(readlink -f "$DEFAULT_CONF" 2>/dev/null || echo "")
+  if [[ -n "$target" ]]; then
+    base=$(basename "$target")    # us1234.nordvpn.com.udp.ovpn
+    cc="${base%%[0-9]*}"           # us
+    cc="${cc,,}"
+    loc="${cc^^}"
+  fi
+fi
+
+# Detect killswitch
+ks="false"
+if iptables -S OUTPUT 2>/dev/null | grep -q '! -o tun0' | grep -q ' -j REJECT'; then
+  ks="true"
+fi
+
+classes="$state"
+[[ "$ks" == "true" ]] && classes="$classes killswitch"
+
+# Icons
+if [[ "$state" == "on" ]]; then
+  text=" VPN"
+  [[ -n "$loc" ]] && text+=" ${loc}"
+  alt="on"
+else
+  text=" VPN OFF"
+  alt="off"
+fi
+
+# Tooltip
+tooltip="VPN ${state^^}"
+[[ -n "$loc" ]] && tooltip="$tooltip | Endpoint: ${loc}"
+[[ "$ks" == "true" ]] && tooltip="$tooltip | Killswitch: ON"
+
+printf '{"text":"%s","tooltip":"%s","class":"%s","alt":"%s"}\n' \
+  "$text" "$tooltip" "$classes" "$alt"
+

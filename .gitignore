@@ -1,0 +1,29 @@
+# Editor / IDE cruft
+*.swp
+*.swo
+*.swn
+*~
+*.bak
+*.orig
+.idea/
+.vscode/
+Session.vim
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs / temp output
+*.log
+*.out
+*.tmp
+
+# Local scratchpads / notes
+notes.md
+dev-scratchpad.txt
+TODO.local
+
+# Generated / cached
+*.1.gz
+manpage.out
