@@ -190,6 +190,32 @@ sudo systemctl enable NetworkManager-wait-online.service
 sudo systemctl enable systemd-networkd-wait-online.service
 ```
 
+#### Stop OpenVPN log spam on the greeter TTY
+
+With `vpnctl.service` enabled, OpenVPN starts early enough that its
+verbose connect output can land on the same VT your display manager is
+claiming - you end up staring at a greeter decorated with `TLS:
+Initial packet from ...`, route adds, and ifconfig lines.
+
+Fix: order the display manager after `vpnctl.service` via a drop-in
+override. For [greetd](https://sr.ht/~kennylevinsen/greetd/):
+
+```bash
+sudo mkdir -p /etc/systemd/system/greetd.service.d
+sudo tee /etc/systemd/system/greetd.service.d/override.conf >/dev/null <<'EOF'
+[Unit]
+After=vpnctl.service network-online.target
+Wants=network-online.target
+EOF
+sudo systemctl daemon-reload
+```
+
+For other display managers, substitute the unit name
+(`sddm.service.d/`, `gdm.service.d/`, `lightdm.service.d/`, ...). Chain
+extra units into `After=` if you run companion services (e.g. a
+`nordvpn-watch.service` that reacts to tunnel state) that also log to
+the console.
+
 ### OpenRC (Gentoo / Artix)
 
 OpenRC ships its own `openvpn` init script that runs `openvpn` directly
