@@ -80,7 +80,7 @@
     "on-click": "launcher"
   },
   "custom/browser": {
-    "format": "Browser  ",
+    "format": " Browser ",
     "tooltip-format": "Web Browser",
     "on-click": "xdg-open https://",
     "return-type": "static"

@@ -241,6 +241,7 @@ List valid values for one axis. Axes:
 .BR waybar-opacities ,
 .BR hypr-effects ,
 .BR launcher-logos ,
+.BR waybar-editors ,
 .BR wofi-variants ,
 .BR waybar-variants ,
 .BR wallpapers ,
@@ -493,6 +494,50 @@ on every waybar apply, including cycles, so the choice sticks across
 .B "dotctl cycle waybar"
 rotations. Long alias:
 .BR --waybar-launcher-logo .
+.TP
+.BI "--waybar-editor " editor
+Target for the waybar
+.B custom/editor
+module. Short alias:
+.BR --editor .
+.B auto
+preserves the shipped
+.I nvim
+\(->
+.I vim
+\(->
+.I vi
+fallback. Terminal editors
+.RB ( nvim ,
+.BR vim ,
+.BR vi ,
+.BR nano ,
+.BR micro ,
+.BR helix ,
+.BR kak )
+open in the first
+.IR kitty / foot / alacritty / wezterm / xterm
+on PATH. GUI editors
+.RB ( gedit ,
+.BR gnome-text-editor ,
+.BR kate ,
+.BR kwrite ,
+.BR mousepad ,
+.BR pluma ,
+.BR featherpad ,
+.BR geany ,
+.BR gvim ,
+.BR neovide ,
+.BR emacs ,
+.BR code ,
+.BR codium ,
+.BR subl ,
+.BR zed )
+launch directly. Rewritten into the active
+.I config.jsonc
+on every waybar apply; minimal scopes have no editor block, so the choice
+only takes effect on
+.BR pill_full / console_full .
 .TP
 .BI "-w, --wallpaper " theme
 .TP

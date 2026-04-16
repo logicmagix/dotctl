@@ -98,25 +98,25 @@
     "on-click": "launcher"
   },
   "custom/terminal": {
-    "format": "Terminal  ",
+    "format": " Terminal ",
     "tooltip-format": "Terminal",
     "on-click": "for t in kitty foot alacritty wezterm ghostty gnome-terminal konsole xterm; do command -v $t >/dev/null 2>&1 && exec $t; done",
     "return-type": "static"
   },
   "custom/files": {
-    "format": "Files  ",
+    "format": " Files ",
     "tooltip-format": "File Browser",
     "on-click": "for f in nemo nautilus dolphin thunar pcmanfm caja; do command -v $f >/dev/null 2>&1 && exec $f \"$HOME\"; done; exec xdg-open \"$HOME\"",
     "return-type": "static"
   },
   "custom/editor": {
-    "format": "Editor  ",
+    "format": " Editor ",
     "tooltip-format": "Editor",
     "on-click": "T=$(command -v kitty 2>/dev/null || command -v foot 2>/dev/null || command -v alacritty 2>/dev/null || command -v wezterm 2>/dev/null || command -v xterm 2>/dev/null); E=$(command -v nvim 2>/dev/null || command -v vim 2>/dev/null || command -v vi 2>/dev/null); test -n \"$T\" -a -n \"$E\" && exec $T -e $E",
     "return-type": "static"
   },
   "custom/browser": {
-    "format": "Browser  ",
+    "format": " Browser ",
     "tooltip-format": "Web Browser",
     "on-click": "xdg-open https://",
     "return-type": "static"

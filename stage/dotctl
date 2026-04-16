@@ -55,7 +55,7 @@ readonly STATE_KEYS=(
   KITTY_COLOR   KITTY_FONT   KITTY_FONT_SIZE
   MAKO_COLOR    MAKO_FONT    MAKO_FONT_SIZE
   WOFI_COLOR    WOFI_FONT    WOFI_FONT_SIZE  WOFI_VARIANT
-  WAYBAR_COLOR  WAYBAR_FONT  WAYBAR_FONT_SIZE WAYBAR_STYLE WAYBAR_SCOPE WAYBAR_DECOR WAYBAR_VPN WAYBAR_TRANSPARENT WAYBAR_OPACITY WAYBAR_LAUNCHER_LOGO
+  WAYBAR_COLOR  WAYBAR_FONT  WAYBAR_FONT_SIZE WAYBAR_STYLE WAYBAR_SCOPE WAYBAR_DECOR WAYBAR_VPN WAYBAR_TRANSPARENT WAYBAR_OPACITY WAYBAR_LAUNCHER_LOGO WAYBAR_EDITOR
   TTYCLOCK_COLOR
   HYPR_EFFECT
   WALLPAPER
@@ -72,6 +72,7 @@ readonly DEFAULT_WAYBAR_VPN=off
 readonly DEFAULT_WAYBAR_TRANSPARENT=on
 readonly DEFAULT_WAYBAR_OPACITY=0.6
 readonly DEFAULT_WAYBAR_LAUNCHER_LOGO=tux
+readonly DEFAULT_WAYBAR_EDITOR=auto
 readonly DEFAULT_HYPR_EFFECT=shadow
 
 # Opacity picker ladder - 10% increments. `custom` drops to free-form input.
@@ -120,6 +121,52 @@ declare -A WAYBAR_LAUNCHER_NAMES=(
   [artix]='Artix'
   [slackware]='Slackware'
   [slackware_inverse]='Slackware (inverse)'
+)
+
+# Editor axis - rewrites the `on-click` line inside the `custom/editor`
+# block in waybar config.jsonc. `auto` preserves the shipped nvim → vim →
+# vi fallback (only present in the `_full` scopes). Terminal editors launch
+# via the first kitty/foot/alacritty/wezterm/xterm on PATH; GUI editors
+# launch directly (no terminal wrapper). Minimal scopes have no editor
+# block, so the rewrite is a silent no-op there.
+readonly WAYBAR_EDITORS=(
+  auto nvim vim vi nano micro helix kak
+  gedit gnome-text-editor kate kwrite mousepad pluma featherpad geany
+  gvim neovide emacs code codium subl zed
+)
+declare -A WAYBAR_EDITOR_BINS=(
+  [auto]=''
+  [nvim]=nvim [vim]=vim [vi]=vi [nano]=nano [micro]=micro
+  [helix]=hx [kak]=kak
+  [gedit]=gedit [gnome-text-editor]=gnome-text-editor
+  [kate]=kate [kwrite]=kwrite [mousepad]=mousepad [pluma]=pluma
+  [featherpad]=featherpad [geany]=geany
+  [gvim]=gvim [neovide]=neovide [emacs]=emacs
+  [code]=code [codium]=codium [subl]=subl [zed]=zed
+)
+declare -A WAYBAR_EDITOR_NAMES=(
+  [auto]='Auto (nvim / vim / vi)'
+  [nvim]='Neovim'       [vim]='Vim'            [vi]='Vi'
+  [nano]='GNU nano'     [micro]='micro'
+  [helix]='Helix (hx)'  [kak]='Kakoune'
+  [gedit]='gedit (GNOME)'
+  [gnome-text-editor]='GNOME Text Editor'
+  [kate]='Kate (KDE)'   [kwrite]='KWrite (KDE)'
+  [mousepad]='Mousepad (Xfce)'
+  [pluma]='Pluma (MATE)'
+  [featherpad]='FeatherPad'
+  [geany]='Geany'
+  [gvim]='gVim'         [neovide]='Neovide'
+  [emacs]='Emacs'
+  [code]='VS Code'      [codium]='VS Codium'
+  [subl]='Sublime Text' [zed]='Zed'
+)
+# GUI editors launch directly; terminal editors need a terminal wrapper.
+declare -A WAYBAR_EDITOR_GUI=(
+  [gedit]=1 [gnome-text-editor]=1 [kate]=1 [kwrite]=1
+  [mousepad]=1 [pluma]=1 [featherpad]=1 [geany]=1
+  [gvim]=1 [neovide]=1 [emacs]=1
+  [code]=1 [codium]=1 [subl]=1 [zed]=1
 )
 
 # Wizard ladder for font-size pickers - custom... drops to free-form input.
@@ -188,6 +235,7 @@ load_state() {
   : "${WAYBAR_TRANSPARENT:=$DEFAULT_WAYBAR_TRANSPARENT}"
   : "${WAYBAR_OPACITY:=$DEFAULT_WAYBAR_OPACITY}"
   : "${WAYBAR_LAUNCHER_LOGO:=$DEFAULT_WAYBAR_LAUNCHER_LOGO}"
+  : "${WAYBAR_EDITOR:=$DEFAULT_WAYBAR_EDITOR}"
   : "${HYPR_EFFECT:=$DEFAULT_HYPR_EFFECT}"
   # Style axis renames: zsh → console, bubble → pill. Auto-migrate old state.
   [[ "$WAYBAR_STYLE" == "zsh" ]]    && WAYBAR_STYLE="console"
@@ -340,6 +388,7 @@ detect_waybar_decors() {
   done | sort -u
 }
 detect_waybar_launcher_logos() { printf '%s\n' "${WAYBAR_LAUNCHER_LOGOS[@]}"; }
+detect_waybar_editors()        { printf '%s\n' "${WAYBAR_EDITORS[@]}"; }
 
 # Wallpaper themes = dirs in ~/Pictures/dotctl/wallpapers that have a matching cycle script in PATH.
 detect_wallpapers() {
@@ -432,6 +481,7 @@ validate_waybar_opacity() {
 }
 validate_hypr_effect()          { _in_list "$1" shadow glow; }
 validate_waybar_launcher_logo() { _in_list "$1" "${WAYBAR_LAUNCHER_LOGOS[@]}"; }
+validate_waybar_editor()        { _in_list "$1" "${WAYBAR_EDITORS[@]}"; }
 
 # Accepts positive integer or decimal in [4, 72]. Empty value rejected.
 validate_font_size() {
@@ -609,8 +659,36 @@ apply_waybar() {
     /^[[:space:]]+"format":[[:space:]]*"\\u[0-9a-fA-F]{4}"/ s|^([[:space:]]+)"format":[[:space:]]*"\\u[0-9a-fA-F]{4}",.*|\1"format": "\\u'"$glyph_hex"'",  // '"$pretty_name"'|
   }' "$WAYBAR_DIR/config.jsonc"
 
+  # Rewrite the `on-click` line inside the `custom/editor` block. Terminal
+  # editors keep the terminal wrapper (exec $T -e $E); GUI editors launch
+  # directly. `auto` restores the shipped nvim → vim → vi fallback. Minimal
+  # scopes have no editor block, so this is a no-op there.
+  local _ed_bin _ed_on_click
+  if [[ "$WAYBAR_EDITOR" == "auto" ]]; then
+    _ed_on_click='T=$(command -v kitty 2>/dev/null || command -v foot 2>/dev/null || command -v alacritty 2>/dev/null || command -v wezterm 2>/dev/null || command -v xterm 2>/dev/null); E=$(command -v nvim 2>/dev/null || command -v vim 2>/dev/null || command -v vi 2>/dev/null); test -n \"$T\" -a -n \"$E\" && exec $T -e $E'
+  else
+    _ed_bin="${WAYBAR_EDITOR_BINS[$WAYBAR_EDITOR]}"
+    if [[ -n "${WAYBAR_EDITOR_GUI[$WAYBAR_EDITOR]:-}" ]]; then
+      _ed_on_click="command -v ${_ed_bin} >/dev/null 2>&1 && exec ${_ed_bin}"
+    else
+      _ed_on_click='T=$(command -v kitty 2>/dev/null || command -v foot 2>/dev/null || command -v alacritty 2>/dev/null || command -v wezterm 2>/dev/null || command -v xterm 2>/dev/null); E=$(command -v '"${_ed_bin}"' 2>/dev/null); test -n \"$T\" -a -n \"$E\" && exec $T -e $E'
+    fi
+  fi
+  DOTCTL_EDITOR_ONCLICK="$_ed_on_click" awk '
+    BEGIN { new_val = ENVIRON["DOTCTL_EDITOR_ONCLICK"] }
+    /"custom\/editor":/ { in_editor = 1 }
+    in_editor && /^[[:space:]]*"on-click":/ {
+      match($0, /^[[:space:]]*/)
+      indent = substr($0, 1, RLENGTH)
+      print indent "\"on-click\": \"" new_val "\","
+      next
+    }
+    in_editor && /^[[:space:]]*\},?[[:space:]]*$/ { in_editor = 0 }
+    { print }
+  ' "$WAYBAR_DIR/config.jsonc" > "$WAYBAR_DIR/config.jsonc.tmp" && mv -f "$WAYBAR_DIR/config.jsonc.tmp" "$WAYBAR_DIR/config.jsonc"
+
   pkill -SIGUSR2 -x waybar 2>/dev/null || warn "waybar reload signal failed (waybar running?)"
-  log "apply waybar: ${WAYBAR_STYLE}_${WAYBAR_SCOPE} color=${WAYBAR_COLOR} font=${WAYBAR_FONT}/${WAYBAR_FONT_SIZE} decor=${WAYBAR_DECOR} vpn=${WAYBAR_VPN} transparent=${WAYBAR_TRANSPARENT}/opacity=${WAYBAR_OPACITY} logo=${WAYBAR_LAUNCHER_LOGO}"
+  log "apply waybar: ${WAYBAR_STYLE}_${WAYBAR_SCOPE} color=${WAYBAR_COLOR} font=${WAYBAR_FONT}/${WAYBAR_FONT_SIZE} decor=${WAYBAR_DECOR} vpn=${WAYBAR_VPN} transparent=${WAYBAR_TRANSPARENT}/opacity=${WAYBAR_OPACITY} logo=${WAYBAR_LAUNCHER_LOGO} editor=${WAYBAR_EDITOR}"
 }
 
 apply_wallpaper() {
@@ -776,8 +854,8 @@ EOF
   printf '  %-10s color=%s  font=%s  size=%s\n' "mako"  "$MAKO_COLOR" "$MAKO_FONT" "$MAKO_FONT_SIZE"
   printf '  %-10s color=%s  font=%s  size=%s  variant=%s\n' \
     "wofi" "$WOFI_COLOR" "$WOFI_FONT" "$WOFI_FONT_SIZE" "$WOFI_VARIANT"
-  printf '  %-10s color=%s  font=%s  size=%s  style=%s  scope=%s  decor=%s  vpn=%s  transparent=%s  opacity=%s  logo=%s\n' \
-    "waybar" "$WAYBAR_COLOR" "$WAYBAR_FONT" "$WAYBAR_FONT_SIZE" "$WAYBAR_STYLE" "$WAYBAR_SCOPE" "$WAYBAR_DECOR" "$WAYBAR_VPN" "$WAYBAR_TRANSPARENT" "$WAYBAR_OPACITY" "$WAYBAR_LAUNCHER_LOGO"
+  printf '  %-10s color=%s  font=%s  size=%s  style=%s  scope=%s  decor=%s  vpn=%s  transparent=%s  opacity=%s  logo=%s  editor=%s\n' \
+    "waybar" "$WAYBAR_COLOR" "$WAYBAR_FONT" "$WAYBAR_FONT_SIZE" "$WAYBAR_STYLE" "$WAYBAR_SCOPE" "$WAYBAR_DECOR" "$WAYBAR_VPN" "$WAYBAR_TRANSPARENT" "$WAYBAR_OPACITY" "$WAYBAR_LAUNCHER_LOGO" "$WAYBAR_EDITOR"
   if ttyclock_available; then
     printf '  %-10s color=%s\n' "tty-clock" "${TTYCLOCK_COLOR:-<unset>}"
   fi
@@ -850,6 +928,7 @@ cmd_list() {
     waybar-opacities|opacities) detect_waybar_opacities;;
     hypr-effects|effects) detect_hypr_effects;;
     launcher-logos|logos) detect_waybar_launcher_logos;;
+    waybar-editors|editors) detect_waybar_editors;;
     wofi-variants)      detect_wofi_variants;;
     waybar-variants)
       local s sc
@@ -884,6 +963,7 @@ axes:
   waybar-opacities     waybar bar opacity ladder [0.0-1.0]
   hypr-effects         hyprland window effect (shadow | glow)
   launcher-logos   waybar launcher distro glyphs
+  waybar-editors   waybar editor module targets (auto | nvim | vim | …)
   wofi-variants    wofi subvariants (1 | 2)
   waybar-variants  canonical waybar style_scope combos
   wallpapers       wallpaper themes with a matching cycle script
@@ -920,7 +1000,7 @@ cmd_set() {
   local new_kitty_color='' new_kitty_font='' new_kitty_font_size=''
   local new_mako_color='' new_mako_font='' new_mako_font_size=''
   local new_wofi_color='' new_wofi_font='' new_wofi_font_size='' new_wofi_variant=''
-  local new_waybar_color='' new_waybar_font='' new_waybar_font_size='' new_waybar_style='' new_waybar_scope='' new_waybar_decor='' new_waybar_vpn='' new_waybar_transparent='' new_waybar_opacity='' new_waybar_launcher_logo='' new_hypr_effect=''
+  local new_waybar_color='' new_waybar_font='' new_waybar_font_size='' new_waybar_style='' new_waybar_scope='' new_waybar_decor='' new_waybar_vpn='' new_waybar_transparent='' new_waybar_opacity='' new_waybar_launcher_logo='' new_waybar_editor='' new_hypr_effect=''
   local new_ttyclock_color=''
   local new_wallpaper=''
   local preset_name=''
@@ -952,6 +1032,8 @@ cmd_set() {
       --waybar-opacity)      new_waybar_opacity="$2"; shift 2;;
       --waybar-launcher-logo|--launcher-logo)
                              new_waybar_launcher_logo="$2"; shift 2;;
+      --waybar-editor|--editor)
+                             new_waybar_editor="$2"; shift 2;;
       --tty-clock-color|--ttyclock-color)
                              new_ttyclock_color="$2"; shift 2;;
       --hypr-effect)         new_hypr_effect="$2"; shift 2;;
@@ -1033,6 +1115,7 @@ cmd_set() {
   [[ -n "$new_waybar_transparent" ]]&& { validate_waybar_transparent "$new_waybar_transparent" || die "invalid waybar transparent: $new_waybar_transparent (must be on|off)"; WAYBAR_TRANSPARENT="$new_waybar_transparent"; }
   [[ -n "$new_waybar_opacity" ]]    && { validate_waybar_opacity "$new_waybar_opacity" || die "invalid waybar opacity: $new_waybar_opacity (must be a number in [0, 1])"; WAYBAR_OPACITY="$new_waybar_opacity"; }
   [[ -n "$new_waybar_launcher_logo" ]] && { validate_waybar_launcher_logo "$new_waybar_launcher_logo" || die "invalid waybar launcher logo: $new_waybar_launcher_logo (try \`dotctl list launcher-logos\`)"; WAYBAR_LAUNCHER_LOGO="$new_waybar_launcher_logo"; }
+  [[ -n "$new_waybar_editor" ]]        && { validate_waybar_editor "$new_waybar_editor" || die "invalid waybar editor: $new_waybar_editor (try \`dotctl list waybar-editors\`)"; WAYBAR_EDITOR="$new_waybar_editor"; }
   if [[ -n "$new_ttyclock_color" ]]; then
     ttyclock_available || die "--tty-clock-color: tty-clock not installed. Re-run install.sh and accept the tty-clock prompt."
     validate_ttyclock_color "$new_ttyclock_color" || die "invalid tty-clock color: $new_ttyclock_color"
@@ -1084,6 +1167,14 @@ dotctl set [FLAGS]
                            (tux | arch | gentoo | debian | void | nixos |
                             fedora | fedora_inverse | endeavouros | cachyos |
                             opensuse | artix | slackware | slackware_inverse)
+  --waybar-editor <E>      waybar editor module target. Long alias: --editor.
+                           auto = nvim → vim → vi fallback. Terminal editors
+                           (nvim, vim, vi, nano, micro, helix, kak) launch in
+                           the first kitty/foot/alacritty/wezterm/xterm on
+                           PATH. GUI editors (gedit, gnome-text-editor, kate,
+                           kwrite, mousepad, pluma, featherpad, geany, gvim,
+                           neovide, emacs, code, codium, subl, zed) launch
+                           directly. See `dotctl list waybar-editors`.
   -w, --wallpaper <C>
 
   --preset <NAME>          Load preset as base, then apply flags on top
@@ -1455,6 +1546,7 @@ EOF
     WAYBAR_TRANSPARENT="$DEFAULT_WAYBAR_TRANSPARENT"
     WAYBAR_OPACITY="$DEFAULT_WAYBAR_OPACITY"
     WAYBAR_LAUNCHER_LOGO="$DEFAULT_WAYBAR_LAUNCHER_LOGO"
+    WAYBAR_EDITOR="$DEFAULT_WAYBAR_EDITOR"
     HYPR_EFFECT="$DEFAULT_HYPR_EFFECT"
   fi
 
@@ -1557,6 +1649,14 @@ EOF
   done
   WAYBAR_LAUNCHER_LOGO=$(prompt_select "      waybar launcher logo" "$WAYBAR_LAUNCHER_LOGO" "${wl_opts[@]}")
 
+  # Editor target for the waybar `custom/editor` module. Pretty-names make
+  # the prompt read like an editor picker; the stored value is the bare key.
+  local we_opts=() e
+  for e in "${WAYBAR_EDITORS[@]}"; do
+    we_opts+=( "${e}|${WAYBAR_EDITOR_NAMES[$e]}" )
+  done
+  WAYBAR_EDITOR=$(prompt_select "      waybar editor" "$WAYBAR_EDITOR" "${we_opts[@]}")
+
   if ttyclock_available; then
     # Default to the current waybar color so first-time users get a coherent
     # theme without an extra decision. Existing state is preserved.
@@ -1574,7 +1674,7 @@ EOF
   printf '  %-10s %s / %s / size %s\n' "kitty" "$KITTY_COLOR" "$KITTY_FONT" "$KITTY_FONT_SIZE"
   printf '  %-10s %s / %s / size %s\n' "mako"  "$MAKO_COLOR" "$MAKO_FONT" "$MAKO_FONT_SIZE"
   printf '  %-10s %s / %s / size %s / variant %s\n' "wofi" "$WOFI_COLOR" "$WOFI_FONT" "$WOFI_FONT_SIZE" "$WOFI_VARIANT"
-  printf '  %-10s %s / %s / size %s / %s_%s / decor %s / vpn %s / transparent %s (%s) / logo %s\n' "waybar" "$WAYBAR_COLOR" "$WAYBAR_FONT" "$WAYBAR_FONT_SIZE" "$WAYBAR_STYLE" "$WAYBAR_SCOPE" "$WAYBAR_DECOR" "$WAYBAR_VPN" "$WAYBAR_TRANSPARENT" "$WAYBAR_OPACITY" "$WAYBAR_LAUNCHER_LOGO"
+  printf '  %-10s %s / %s / size %s / %s_%s / decor %s / vpn %s / transparent %s (%s) / logo %s / editor %s\n' "waybar" "$WAYBAR_COLOR" "$WAYBAR_FONT" "$WAYBAR_FONT_SIZE" "$WAYBAR_STYLE" "$WAYBAR_SCOPE" "$WAYBAR_DECOR" "$WAYBAR_VPN" "$WAYBAR_TRANSPARENT" "$WAYBAR_OPACITY" "$WAYBAR_LAUNCHER_LOGO" "$WAYBAR_EDITOR"
   ttyclock_available && printf '  %-10s %s\n' "tty-clock" "$TTYCLOCK_COLOR"
   printf '  %-10s effect %s\n' "hypr" "$HYPR_EFFECT"
   printf '  %-10s %s\n' "wallpaper" "$WALLPAPER"
@@ -1635,6 +1735,7 @@ _load_preset_into_state() {
   : "${WAYBAR_TRANSPARENT:=$DEFAULT_WAYBAR_TRANSPARENT}"
   : "${WAYBAR_OPACITY:=$DEFAULT_WAYBAR_OPACITY}"
   : "${WAYBAR_LAUNCHER_LOGO:=$DEFAULT_WAYBAR_LAUNCHER_LOGO}"
+  : "${WAYBAR_EDITOR:=$DEFAULT_WAYBAR_EDITOR}"
   : "${HYPR_EFFECT:=$DEFAULT_HYPR_EFFECT}"
   case "$WAYBAR_STYLE" in zsh) WAYBAR_STYLE="console";; bubble) WAYBAR_STYLE="pill";; esac
 }
