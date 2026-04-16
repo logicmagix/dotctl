@@ -258,7 +258,7 @@ to auto-populate), then
 Name must match
 .BR [a-z0-9_]+ .
 .TP
-.BR "scan [--dry-run] [--force] [--prefix " \fIpath\fR ]
+.BR "scan [--dry-run] [--force] [--update] [--prefix " \fIpath\fR ]
 Walk the wallpaper root and generate
 .B cycle-hyprpaper-*
 scripts for any directory that doesn't already have one. Image lists are
@@ -276,7 +276,18 @@ others are reported as
 .B invalid
 and skipped. Existing scripts are preserved unless
 .B --force
-is passed.
+or
+.B --update
+is passed. Without either flag, directories whose image count differs from
+the cycle script are reported as stale.
+.B --update
+merges new images into existing cycle scripts (appended at the end in
+alphabetical order) and prunes entries for deleted files, preserving the
+hand-curated ordering of existing entries.
+.B --force
+regenerates the entire script from scratch, replacing the
+.B IMAGES=()
+array with an alphabetically sorted list of current disk contents.
 .B --dry-run
 previews without writing.
 .B --prefix
@@ -675,6 +686,13 @@ Preview a scan without writing anything:
 .PP
 .EX
 dotctl scan --dry-run
+.EE
+.PP
+After adding new images to an existing wallpaper directory, update the
+cycle script without losing curated ordering:
+.PP
+.EX
+dotctl scan --update
 .EE
 .PP
 Scan a wallpaper pack in place from a non-canonical location:
