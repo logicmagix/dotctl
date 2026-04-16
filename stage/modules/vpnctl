@@ -21,6 +21,7 @@ Usage: vpnctl <command> [args...]
 
 Commands:
   on [file]        Connect using DEFAULT_CONF or OVPN file (relative to \$OVPN_DIR)
+  up [file]        Foreground connect (exec; for systemd Type=simple units)
   off              Disconnect (kill OpenVPN)
   status           Show VPN status (process, tun0, public IP)
   list [filter]    List available .ovpn configs (optional grep filter)
@@ -100,6 +101,29 @@ vpn_on() {
 
   sleep 3
   vpn_status
+}
+
+vpn_up() {
+  # Foreground variant of vpn_on: exec openvpn as PID 1 of this process so
+  # systemd (Type=simple) can track, stop, and restart it cleanly. No PID
+  # file, no trailing status poll, no & backgrounding.
+  local cfgname="${1:-}"
+
+  if [[ -n "$cfgname" ]]; then
+    local src="${OVPN_DIR}/${cfgname}"
+    if [[ ! -f "$src" ]]; then
+      echo "Config not found: $src" >&2
+      exit 1
+    fi
+    $SUDO ln -sf "$src" "$DEFAULT_CONF"
+  fi
+
+  $SUDO pkill openvpn 2>/dev/null || true
+  $SUDO rm -f "$PIDFILE" 2>/dev/null || true
+
+  exec $SUDO openvpn \
+    --config "$DEFAULT_CONF" \
+    --auth-user-pass "$AUTH_FILE"
 }
 
 vpn_off() {
@@ -344,6 +368,7 @@ shift || true
 
 case "$cmd" in
   on)         vpn_on "$@" ;;
+  up)         vpn_up "$@" ;;
   off)        vpn_off "$@" ;;
   status)     vpn_status ;;
   list)       vpn_list "$@" ;;

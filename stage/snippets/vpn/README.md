@@ -121,6 +121,7 @@ DEFAULT_CONF="${CONFIG_DIR}/nordvpn.conf"
 
 ```
 vpnctl on [file]        Connect using $DEFAULT_CONF (or pick an .ovpn file)
+vpnctl up [file]        Foreground connect (exec openvpn; used by systemd)
 vpnctl off              Disconnect
 vpnctl status           Process / interface / public IP
 vpnctl list [filter]    List available .ovpn configs
@@ -136,7 +137,76 @@ vpnctl menu             wofi menu (what the waybar button calls)
 The waybar button calls `vpnctl menu` on click, which presents a wofi
 dmenu for connect/disconnect/killswitch/pick-server/status.
 
-## 5. Sudo behavior
+## 5. Auto-start at boot (optional)
+
+By default `vpnctl` is a manual CLI - nothing starts it on login or boot.
+If you want the tunnel up automatically, wire it into your init system.
+
+### systemd (Arch / Fedora / Debian / openSUSE / Void / ...)
+
+A unit template ships at `stage/snippets/vpn/vpnctl.service`. It calls
+`vpnctl up`, which `exec`s `openvpn` in the foreground so systemd tracks
+the real process (not a wrapper), can stop it cleanly with `SIGTERM`, and
+restarts it on failure.
+
+Install and enable:
+
+```bash
+sudo install -m644 stage/snippets/vpn/vpnctl.service /etc/systemd/system/vpnctl.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now vpnctl.service
+```
+
+Check status:
+
+```bash
+systemctl status vpnctl.service
+journalctl -u vpnctl.service -f
+```
+
+Once enabled, drive the connection via systemd rather than the CLI:
+
+```bash
+sudo systemctl start vpnctl        # connect
+sudo systemctl stop  vpnctl        # disconnect
+sudo systemctl restart vpnctl      # reconnect (e.g., after switching servers)
+```
+
+To switch servers, use `vpnctl use <file>` to update the `nordvpn.conf`
+symlink, then `sudo systemctl restart vpnctl`.
+
+**Do not** mix `vpnctl on` / `vpnctl off` with the systemd unit. Both
+call `pkill openvpn`, so they'll fight: `vpnctl off` will kill systemd's
+openvpn, and `Restart=on-failure` will immediately bring it back.
+
+If you need `network-online.target` to actually wait for the network
+(rather than resolving instantly), enable whichever wait helper your
+network stack provides:
+
+```bash
+# NetworkManager:
+sudo systemctl enable NetworkManager-wait-online.service
+# or systemd-networkd:
+sudo systemctl enable systemd-networkd-wait-online.service
+```
+
+### OpenRC (Gentoo / Artix)
+
+OpenRC ships its own `openvpn` init script that runs `openvpn` directly
+against `/etc/openvpn/<name>.conf` - there's no need to involve `vpnctl`
+for auto-start. Typical wiring:
+
+```bash
+sudo rc-update add openvpn default
+sudo rc-service openvpn start
+```
+
+`vpnctl` remains available for interactive use (`on`, `off`, `status`,
+`pick`, `random`, killswitch, wofi menu) regardless of whether the init
+script is managing the connection. As with systemd, avoid running
+`vpnctl on` while the init-managed openvpn is active.
+
+## 6. Sudo behavior
 
 `vpnctl` needs root for `openvpn`, `iptables`, `ip6tables`, `kill`, and
 `tee /run/openvpn-*.pid`. It re-invokes itself with `sudo` when needed.
@@ -149,7 +219,7 @@ yourname ALL=(root) NOPASSWD: /usr/sbin/openvpn, /usr/sbin/iptables, /usr/sbin/i
 
 (Paths may differ on your distro - adjust with `command -v openvpn`, etc.)
 
-## 6. Troubleshooting
+## 7. Troubleshooting
 
 - **Button shows nothing**: `vpn-status-indicator` probably isn't on PATH,
   or waybar's config still references `~/.local/bin/vpn-status-indicator`

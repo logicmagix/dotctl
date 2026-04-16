@@ -1,0 +1,16 @@
+[Unit]
+Description=NordVPN via vpnctl
+Documentation=man:openvpn(8)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/vpnctl up
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target
