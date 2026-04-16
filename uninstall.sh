@@ -50,8 +50,13 @@ binaries with the same name are left alone.
 
 Optional (prompted individually):
   - $CONFIG_HOME/dotctl/                       (state + cycle scripts + presets)
-  - $CONFIG_HOME/{cava, kitty, mako, wofi, waybar}   (element configs)
+  - $CONFIG_HOME/{cava, kitty, mako, wofi, waybar, tty-clock}   (element configs)
   - $HOME/Pictures/dotctl/wallpapers/
+  - tty-clock binary / VPN helpers             (package-remove, dotctl-specific only)
+
+Shared runtime deps (waybar, cava, kitty, mako, wofi, jq, wl-clipboard,
+lm-sensors, libnotify, pavucontrol, inotify-tools, fonts) are ${BOLD}never${RST}
+package-removed by this script - Hyprland users typically want to keep them.
 
 BANNER
 
@@ -144,7 +149,7 @@ if [[ -d "$CONFIG_HOME/dotctl" ]]; then
   fi
 fi
 
-for elem in cava kitty mako wofi waybar; do
+for elem in cava kitty mako wofi waybar tty-clock; do
   if [[ -d "$CONFIG_HOME/$elem" ]]; then
     if confirm "  Remove $CONFIG_HOME/$elem/ ?" n; then
       # Harden against read-only files before removing, then verify the
@@ -171,6 +176,62 @@ if [[ -d "$HOME/Pictures/dotctl/wallpapers" ]]; then
   else
     skip "kept $HOME/Pictures/dotctl/"
   fi
+fi
+
+# ── Optional package removal (dotctl-introduced deps only) ──────────────────
+# We only prompt for packages the installer itself introduced as opt-in
+# (tty-clock, VPN helpers). Shared Hyprland-stack packages (waybar, cava,
+# kitty, mako, wofi, jq, wl-clipboard, lm-sensors, libnotify, pavucontrol,
+# inotify-tools) are left alone - removing them here would likely break
+# other parts of the user's desktop.
+
+detect_pkg_remove_cmd() {
+  REMOVE_CMD=()
+  if [[ -f /etc/os-release ]]; then
+    # shellcheck disable=SC1091
+    . /etc/os-release
+    case "${ID:-}" in
+      gentoo)                                  REMOVE_CMD=(sudo emerge --unmerge) ;;
+      arch|cachyos|endeavouros|manjaro|artix)  REMOVE_CMD=(sudo pacman -Rns --noconfirm) ;;
+      debian|ubuntu|linuxmint|pop)             REMOVE_CMD=(sudo apt remove -y) ;;
+      fedora|nobara)                           REMOVE_CMD=(sudo dnf remove -y) ;;
+      opensuse*|suse*|sles)                    REMOVE_CMD=(sudo zypper remove -y) ;;
+      void)                                    REMOVE_CMD=(sudo xbps-remove -Ry) ;;
+      slackware)                               REMOVE_CMD=(sudo slackpkg remove) ;;
+      nixos)                                   REMOVE_CMD=() ;;
+      *)                                       REMOVE_CMD=() ;;
+    esac
+  fi
+}
+
+detect_pkg_remove_cmd
+
+pkg_remove() {
+  local pkg="$1"
+  if (( ${#REMOVE_CMD[@]} == 0 )); then
+    warn "no known package-remove command for this distro - remove $pkg manually"
+    return 1
+  fi
+  "${REMOVE_CMD[@]}" "$pkg" || warn "$pkg remove failed (already gone? held back?) - check output above"
+}
+
+echo
+info "Optional package removal (dotctl-specific only - shared deps are preserved):"
+
+if command -v tty-clock >/dev/null 2>&1; then
+  if confirm "  Package-remove tty-clock?" n; then
+    pkg_remove tty-clock && ok "tty-clock package removed"
+  else
+    skip "kept tty-clock binary"
+  fi
+else
+  skip "tty-clock not installed"
+fi
+
+if command -v vpnctl >/dev/null 2>&1 || command -v vpn-status-indicator >/dev/null 2>&1; then
+  # vpnctl/vpn-status-indicator are repo scripts, not distro packages - the
+  # earlier unlink_if_repo loop already handled them. Nothing to package-remove.
+  skip "vpn helpers are repo scripts, already handled in the symlink pass"
 fi
 
 cat <<DONE

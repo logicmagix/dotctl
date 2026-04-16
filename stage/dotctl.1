@@ -1,6 +1,6 @@
 .TH DOTCTL 1 "April 2026" "dotctl 1.0" "User Commands"
 .SH NAME
-dotctl \- unified theme controller for cava, kitty, mako, wofi, waybar, hyprland, hyprpaper
+dotctl \- unified theme controller for cava, kitty, mako, wofi, waybar, tty-clock, hyprland, hyprpaper
 .SH SYNOPSIS
 .B dotctl
 .I command
@@ -12,14 +12,16 @@ dotctl \- unified theme controller for cava, kitty, mako, wofi, waybar, hyprland
 .SH DESCRIPTION
 .B dotctl
 is a shell CLI that changes the color, font, font size, and other presentation
-axes of five user-interface elements, one hyprland color/effect axis, and one
-wallpaper axis in a single command against a coordinated state file. It reads
-themed source configurations from standard locations under
+axes of five user-interface elements (plus an optional sixth,
+.BR tty-clock ),
+one hyprland color/effect axis, and one wallpaper axis in a single command
+against a coordinated state file. It reads themed source configurations from
+standard locations under
 .IR ~/.config/ ,
 copies or palette-injects the selected variant into the live config slot each
 app reads, and signals the running daemon where applicable.
 .PP
-The seven controlled axes are:
+The controlled axes are:
 .TP
 .B cava
 Color-only axis. Active file:
@@ -78,6 +80,24 @@ block on every apply, the launcher glyph is rewritten inside the
 block, and the VPN module is stripped from both files when disabled. Reloaded
 with
 .BR "pkill -SIGUSR2 waybar" .
+.TP
+.B tty-clock
+.IR (optional) .
+Color-only axis. tty-clock has no native config format, so dotctl copies a
+shell-sourceable fragment (defining
+.BR TTYCLOCK_ARGS )
+from
+.IR ~/.config/tty-clock/<color>/config
+to the active
+.IR ~/.config/tty-clock/config .
+Users run
+.B tty-clock-themed
+(a thin wrapper shipped as a dotctl module) which sources the active file and
+execs
+.BR tty-clock (1)
+with the themed color plus any user-supplied flags. If the user declined
+tty-clock at install time, the entire axis is skipped silently everywhere
+(apply, show, list, configure, set, sync).
 .TP
 .B hypr
 Color + window effect
@@ -178,10 +198,14 @@ Copy color (and font where both elements have a font axis) from source to
 target. Never copies style, scope, variant, decor, vpn, transparent, or
 opacity.
 .I target
-may be any single element or the keyword
+may be any single element (
+.BR cava ", " kitty ", " mako ", " wofi ", " waybar ", " tty-clock ", " wallpaper
+) or the keyword
 .BR all ;
 .I source
 must be a single element.
+.B tty-clock
+is only reachable as a sync target or source when it was installed.
 .sp
 Examples:
 .RS
@@ -191,6 +215,8 @@ Examples:
 .B "dotctl sync all kitty"
 .br
 .B "dotctl sync waybar cava"
+.br
+.B "dotctl sync tty-clock kitty"
 .RE
 .TP
 .BI "list " axis
@@ -201,6 +227,7 @@ List valid values for one axis. Axes:
 .BR mako-colors ,
 .BR wofi-colors ,
 .BR waybar-colors ,
+.BR tty-clock-colors ,
 .BR fonts ,
 .BR kitty-fonts ,
 .BR mako-fonts ,
@@ -308,10 +335,15 @@ per-element.
 .SS Shortcut flags
 .TP
 .BI "-c, --color " color
-Set color for cava, kitty, mako, wofi, and waybar.
+Set color for cava, kitty, mako, wofi, and waybar - and for tty-clock
+when it was installed at
+.BR install.sh
+time. The fan-out validates every element before touching state, so a
+color that's missing for any installed element is rejected.
 .TP
 .BI "-f, --font " font
-Set font for kitty, mako, wofi, and waybar. Cava has no font axis.
+Set font for kitty, mako, wofi, and waybar. Cava and tty-clock have no
+font axis.
 .TP
 .BI "--font-size " N
 Set font size for kitty, mako, wofi, and waybar. Accepts integer or decimal
@@ -416,6 +448,19 @@ Wizard ladder:
 .BR 0.90 ,
 .BR 1.00 .
 .TP
+.BI "--tty-clock-color, --ttyclock-color " color
+tty-clock palette. Only available when tty-clock was installed via
+.BR install.sh
+(the installer copies
+.IR tty-clock_config/
+into
+.IR ~/.config/tty-clock/
+and symlinks the
+.B tty-clock-themed
+wrapper onto PATH). Errors out with a pointer back to
+.B install.sh
+when the axis isn't present.
+.TP
 .BI "--hypr-effect " effect
 Hyprland window effect.
 .B shadow
@@ -511,7 +556,7 @@ itself.
 .SH FILES
 .TP
 .I ~/.config/dotctl/config
-23-field
+24-field
 .B KEY=value
 state file, hand-editable, flock-guarded on writes. Regenerate with
 .BR "dotctl configure" .
@@ -525,9 +570,13 @@ files without the
 .BR WAYBAR_TRANSPARENT ,
 .BR WAYBAR_OPACITY ,
 .BR WAYBAR_LAUNCHER_LOGO ,
+.BR TTYCLOCK_COLOR ,
 or
 .B HYPR_EFFECT
-fields are soft-migrated to defaults on load.
+fields are soft-migrated to defaults on load. The
+.B TTYCLOCK_COLOR
+field is allowed to be empty - users who declined tty-clock at install
+time see it as a no-op everywhere.
 .TP
 .I ~/.config/dotctl/presets/<name>.conf
 Saved presets.
@@ -572,6 +621,17 @@ perspective. Directory names are the canonical axes; a new color or variant is
 available to
 .B dotctl
 simply by dropping the matching directory into place.
+.TP
+.I ~/.config/tty-clock/<color>/config
+Per-color shell fragments sourced by the
+.B tty-clock-themed
+wrapper. Each defines a
+.B TTYCLOCK_ARGS
+array with the palette-matching
+.B "-C <n>"
+color code (and any default flags like
+.BR -c
+to center). Absent when the user declined tty-clock at install time.
 .TP
 .I ~/Pictures/dotctl/wallpapers/<theme>/
 Wallpaper image directories, auto-discovered at runtime. A wallpaper theme is
@@ -636,6 +696,13 @@ Change only the waybar launcher distro glyph (persists across cycles):
 .PP
 .EX
 dotctl set --launcher-logo nixos
+.EE
+.PP
+Set the tty-clock color (only when tty-clock was installed via install.sh):
+.PP
+.EX
+dotctl set --tty-clock-color gruvbox
+tty-clock-themed                      # launches with the themed palette
 .EE
 .PP
 Re-unify after drift:
@@ -737,6 +804,7 @@ file.
 .BR kitty (1),
 .BR wofi (1),
 .BR cava (1),
+.BR tty-clock (1),
 .BR sed (1),
 .BR flock (1),
 .BR inotifywait (1)

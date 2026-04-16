@@ -1,0 +1,7 @@
+# dotctl tty-clock theme: decay_green
+# Sourced by the tty-clock-themed wrapper. TTYCLOCK_ARGS is expanded before
+# any user args, so `tty-clock-themed -t` still works to toggle 12h mode.
+#
+# tty-clock(1) color palette (-C N): 0=black 1=red 2=green 3=yellow
+# 4=blue 5=magenta 6=cyan 7=white. Decay-green → green.
+TTYCLOCK_ARGS=(-c -C 2)

@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# tty-clock-themed - launch tty-clock with the active dotctl theme.
+#
+# Reads ~/.config/tty-clock/config (copied in place by `dotctl apply`),
+# which defines a TTYCLOCK_ARGS=( ) bash array with the palette-matching
+# `-C <n>` color plus any default flags (e.g. `-c` to center). User args
+# are passed through after, so `tty-clock-themed -t` toggles 12h on top of
+# the themed color, and `tty-clock-themed -C 6` overrides the color.
+
+set -euo pipefail
+
+command -v tty-clock >/dev/null 2>&1 || {
+  printf 'tty-clock-themed: tty-clock binary not found on PATH\n' >&2
+  exit 127
+}
+
+CFG="${XDG_CONFIG_HOME:-$HOME/.config}/tty-clock/config"
+TTYCLOCK_ARGS=()
+if [[ -f "$CFG" ]]; then
+  # shellcheck disable=SC1090
+  source "$CFG"
+fi
+
+exec tty-clock "${TTYCLOCK_ARGS[@]}" "$@"

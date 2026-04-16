@@ -56,6 +56,8 @@ This script will:
   3. Symlink ${BOLD}$SYS_BIN/${RST}{dotctl, power, launcher, cputemp, gputemp,
      audio-output, audio-output-menu, audio-hotplug-watch} → repo
   4. Optionally symlink ${BOLD}$SYS_BIN/${RST}{vpnctl, vpn-status-indicator} → repo
+  4b. Optionally install tty-clock (via yay on Arch/AUR, native pkg mgr
+      elsewhere) and drop the tty-clock-themed wrapper + themed configs
   5. Copy ${BOLD}~/.config/${RST}{cava, kitty, mako, wofi, waybar} from repo config dirs
   6. Install bundled Nerd Fonts (MesloLGS NF, Phoenix) to ~/.local/share/fonts/
   7. Copy ${BOLD}~/.config/dotctl/cycle/${RST} (wallpaper cycle scripts + template)
@@ -271,6 +273,52 @@ if confirm "Install the optional VPN module (vpnctl + vpn-status-indicator)?" n;
   WANT_VPN=1
 fi
 
+# ── Gate: tty-clock (opt-in) ────────────────────────────────────────────────
+# tty-clock is in native repos on Gentoo (app-misc), Debian/Ubuntu, Fedora,
+# Void, and Arch (extra). On Arch-family we prefer yay when available so
+# AUR-only forks and repo versions both work out of the box. Installer
+# failures are non-fatal: users who can't get the binary simply won't have
+# anything on PATH for `tty-clock-themed` to call.
+
+WANT_TTYCLOCK=0
+if confirm "Install optional tty-clock integration (binary + themed wrapper)?" n; then
+  WANT_TTYCLOCK=1
+fi
+
+ttyclock_pkg_install() {
+  # Try yay first on pacman-family (covers both extra and AUR), then fall
+  # back to pacman. On other distros, just use the native install command.
+  case "$PKG_MANAGER" in
+    pacman)
+      if command -v yay >/dev/null 2>&1; then
+        info "Installing tty-clock via yay…"
+        yay -S --noconfirm --needed tty-clock || warn "yay install failed; try 'yay -S tty-clock' manually"
+      else
+        info "yay not found - trying pacman (tty-clock is in extra)…"
+        "${INSTALL_CMD[@]}" tty-clock || warn "pacman install failed. Install yay and try 'yay -S tty-clock'."
+      fi
+      ;;
+    unknown)
+      warn "Unknown package manager - install tty-clock manually if you want the integration"
+      ;;
+    nix)
+      warn "On NixOS, add tty-clock to environment.systemPackages (or home-manager) yourself"
+      ;;
+    *)
+      info "Installing tty-clock via $PKG_MANAGER…"
+      "${INSTALL_CMD[@]}" tty-clock || warn "tty-clock install failed - the wrapper will still be in place, but has nothing to call"
+      ;;
+  esac
+}
+
+if (( WANT_TTYCLOCK == 1 )); then
+  if command -v tty-clock >/dev/null 2>&1; then
+    skip "tty-clock already installed"
+  else
+    ttyclock_pkg_install
+  fi
+fi
+
 # ── Sudo tick ───────────────────────────────────────────────────────────────
 
 if [[ $EUID -ne 0 ]]; then
@@ -298,13 +346,16 @@ sys_link() {
 
 sys_link "$STAGE/dotctl" "$SYS_BIN/dotctl"
 
-# Module scripts - everything in stage/modules/ except the VPN pair, which
-# only installs when the user opted in at the gate above.
+# Module scripts - everything in stage/modules/ except the VPN pair and
+# the tty-clock wrapper, which each gate on their own opt-in prompts.
 for m in "$STAGE"/modules/*; do
   name="$(basename "$m")"
   case "$name" in
     vpnctl|vpn-status-indicator)
       (( WANT_VPN == 1 )) || { skip "$name (vpn module opted out)"; continue; }
+      ;;
+    tty-clock-themed)
+      (( WANT_TTYCLOCK == 1 )) || { skip "$name (tty-clock opted out)"; continue; }
       ;;
   esac
   [[ -f "$m" ]] || continue
@@ -357,6 +408,14 @@ copy_config "$REPO/kitty_config"  "$CONFIG_HOME/kitty"
 copy_config "$REPO/mako_config"   "$CONFIG_HOME/mako"
 copy_config "$REPO/wofi_config"   "$CONFIG_HOME/wofi"
 copy_config "$REPO/waybar_config" "$CONFIG_HOME/waybar"
+
+# tty-clock configs only copy when the user opted in - dotctl checks for
+# ~/.config/tty-clock/ at runtime and degrades silently when absent.
+if (( WANT_TTYCLOCK == 1 )); then
+  copy_config "$REPO/tty-clock_config" "$CONFIG_HOME/tty-clock"
+else
+  skip "tty-clock_config (opted out - dotctl will skip the element)"
+fi
 
 # ── Fonts ──────────────────────────────────────────────────────────────────
 # Install bundled Nerd Fonts (MesloLGS NF, Phoenix) so waybar chevrons,
