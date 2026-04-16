@@ -19,8 +19,21 @@ choice="$(
        --yoffset 10
 )"
 
+# Detect init system: systemd, OpenRC, or runit.
+if [ -d /run/systemd/system ]; then
+  poweroff_cmd="systemctl poweroff"
+  reboot_cmd="systemctl reboot"
+elif command -v openrc-shutdown >/dev/null 2>&1; then
+  poweroff_cmd="openrc-shutdown -p now"
+  reboot_cmd="openrc-shutdown -r now"
+else
+  # runit (Void, Artix-runit) and generic sysv fallback.
+  poweroff_cmd="poweroff"
+  reboot_cmd="reboot"
+fi
+
 case "$choice" in
-  " Poweroff") loginctl poweroff ;;
-  " Reboot")   loginctl reboot ;;
+  " Poweroff") $poweroff_cmd ;;
+  " Reboot")   $reboot_cmd ;;
   "󰒲 Logout")  hyprctl dispatch exit ;;
 esac
