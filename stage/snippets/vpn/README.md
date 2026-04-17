@@ -218,19 +218,49 @@ the console.
 
 ### OpenRC (Gentoo / Artix)
 
-OpenRC ships its own `openvpn` init script that runs `openvpn` directly
-against `/etc/openvpn/<name>.conf` - there's no need to involve `vpnctl`
-for auto-start. Typical wiring:
+OpenRC ships its own `openvpn` init script that supports one service
+instance per config file via symlink naming. Because it uses
+`start-stop-daemon` (no respawning supervisor), it coexists cleanly with
+`vpnctl on` / `vpnctl off` - the waybar button and `pkill` do not fight
+an always-on watchdog.
+
+**Do not** write a custom `supervise-daemon`-based init script for this.
+That supervisor respawns openvpn on any exit (including a clean
+`vpnctl off`), so the tunnel becomes impossible to turn off from the
+waybar module.
+
+Wire it up:
 
 ```bash
-sudo rc-update add openvpn default
-sudo rc-service openvpn start
+# 1. Create a per-config instance bound to /etc/openvpn/nordvpn.conf
+sudo ln -s /etc/init.d/openvpn /etc/init.d/openvpn.nordvpn
 ```
 
-`vpnctl` remains available for interactive use (`on`, `off`, `status`,
-`pick`, `random`, killswitch, wofi menu) regardless of whether the init
-script is managing the connection. As with systemd, avoid running
-`vpnctl on` while the init-managed openvpn is active.
+Then pick boot behavior - this is the one-command toggle between
+"start connected" and "start disconnected" at login:
+
+```bash
+# Start CONNECTED at boot
+sudo rc-update add openvpn.nordvpn default
+
+# Start DISCONNECTED at boot (remove from runlevel)
+sudo rc-update del openvpn.nordvpn default
+```
+
+Start/stop now without rebooting:
+
+```bash
+sudo rc-service openvpn.nordvpn start
+sudo rc-service openvpn.nordvpn stop
+```
+
+Runtime control stays with `vpnctl` and the waybar module regardless of
+whether the init service is enabled - `vpnctl off` kills openvpn and it
+stays dead until you reconnect (no supervisor bringing it back). One
+cosmetic caveat: `rc-service openvpn.nordvpn status` can go stale after
+you toggle via waybar, because `vpnctl` does not update the init
+script's pidfile. The waybar indicator (which reads `tun0` directly) is
+always accurate.
 
 ## 6. Sudo behavior
 
