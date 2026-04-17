@@ -340,6 +340,10 @@ info "Installing system binaries to $SYS_BIN/ (symlinks → repo)…"
 sys_link() {
   local target="$1" link="$2"
   [[ -e "$target" ]] || { warn "missing: $target"; return 1; }
+  # Guarantee the symlink target is executable. Exec bits can be lost via
+  # zip extraction, FAT filesystems, or `git config core.fileMode false`,
+  # and a non-exec target would make the symlink silently useless.
+  [[ -f "$target" && ! -x "$target" ]] && chmod +x "$target"
   $SUDO ln -sf "$target" "$link"
   ok "$link → $target"
 }

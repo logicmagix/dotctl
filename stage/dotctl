@@ -1191,7 +1191,7 @@ Examples:
   dotctl set --kitty-font-size 14             # only kitty shrinks
   dotctl set --waybar-color gruvbox           # only waybar drifts
   dotctl set --preset laptop                  # snapshot for this display
-  dotctl set --preset tv -w gentoo            # load preset, override wallpaper
+  dotctl set --preset tv -w forest            # load preset, override wallpaper
 EOF
 }
 
@@ -2298,7 +2298,7 @@ QUICK REFERENCE
   dotctl set --hypr-effect glow    Hyprland shadow/border color effect
   dotctl set --launcher-logo nixos
   dotctl set --tty-clock-color gruvbox   (only when tty-clock was installed)
-  dotctl set -w gentoo
+  dotctl set -w forest
   dotctl cycle wallpaper next      (keybind: Super+Alt Right)
   dotctl cycle waybar    next      (keybind: Super+Alt Up)
   dotctl sync wallpaper waybar     Wallpaper follows waybar color
