@@ -114,13 +114,18 @@ emit() {
     "$text" "$tip" "$kind" "$vol"
 }
 
-emit
-
-# Re-emit on any pactl event that could change the display.
-exec pactl subscribe 2>/dev/null | while IFS= read -r line; do
-  case "$line" in
-    *"'change' on sink"*|*"'change' on server"*|*"'new' on sink"*|*"'remove' on sink"*)
-      emit
-      ;;
-  esac
+# Emit current state and re-emit on any pactl event that could change the
+# display. If the audio server isn't up yet (common right after login)
+# pactl subscribe exits immediately — retry so waybar keeps getting updates
+# once the server comes online.
+while :; do
+  emit
+  pactl subscribe 2>/dev/null | while IFS= read -r line; do
+    case "$line" in
+      *"'change' on sink"*|*"'change' on server"*|*"'new' on sink"*|*"'remove' on sink"*)
+        emit
+        ;;
+    esac
+  done || true
+  sleep 2
 done
