@@ -132,7 +132,7 @@ declare -A WAYBAR_LAUNCHER_NAMES=(
 readonly WAYBAR_EDITORS=(
   auto nvim vim vi nano micro helix kak
   gedit gnome-text-editor kate kwrite mousepad pluma featherpad geany
-  gvim neovide emacs code codium subl zed
+  gvim neovide emacs code codium subl zed tide42
 )
 declare -A WAYBAR_EDITOR_BINS=(
   [auto]=''
@@ -143,6 +143,7 @@ declare -A WAYBAR_EDITOR_BINS=(
   [featherpad]=featherpad [geany]=geany
   [gvim]=gvim [neovide]=neovide [emacs]=emacs
   [code]=code [codium]=codium [subl]=subl [zed]=zed
+  [tide42]=tide42
 )
 declare -A WAYBAR_EDITOR_NAMES=(
   [auto]='Auto (nvim / vim / vi)'
@@ -160,13 +161,14 @@ declare -A WAYBAR_EDITOR_NAMES=(
   [emacs]='Emacs'
   [code]='VS Code'      [codium]='VS Codium'
   [subl]='Sublime Text' [zed]='Zed'
+  [tide42]='Tide42'
 )
 # GUI editors launch directly; terminal editors need a terminal wrapper.
 declare -A WAYBAR_EDITOR_GUI=(
   [gedit]=1 [gnome-text-editor]=1 [kate]=1 [kwrite]=1
   [mousepad]=1 [pluma]=1 [featherpad]=1 [geany]=1
   [gvim]=1 [neovide]=1 [emacs]=1
-  [code]=1 [codium]=1 [subl]=1 [zed]=1
+  [code]=1 [codium]=1 [subl]=1 [zed]=1 [tide42]=1
 )
 
 # Wizard ladder for font-size pickers - custom... drops to free-form input.
