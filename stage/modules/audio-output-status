@@ -59,21 +59,30 @@ classify() {
   printf aux
 }
 
+placeholder() {
+  printf '{"text":"🔇 --","tooltip":"%s","class":"none","percentage":0}\n' "$1"
+}
+
+# pactl can block (not fail) while pipewire/pulse is coming up at login,
+# e.g. socket present but server not yet responsive. A short timeout keeps
+# emit() from stalling waybar in that window.
+pac() { timeout 1 pactl "$@" 2>/dev/null; }
+
 emit() {
   local sink vol mute data desc port_type kind type_icon vol_icon text tip
 
-  sink=$(pactl get-default-sink 2>/dev/null || true)
+  sink=$(pac get-default-sink || true)
   if [ -z "$sink" ]; then
-    printf '{"text":"🔇 --","tooltip":"no default sink","class":"none","percentage":0}\n'
+    placeholder "no default sink"
     return
   fi
 
-  mute=$(pactl get-sink-mute "$sink" 2>/dev/null | awk '{print $2}') || mute=no
-  vol=$(pactl get-sink-volume "$sink" 2>/dev/null \
+  mute=$(pac get-sink-mute "$sink" | awk '{print $2}') || mute=no
+  vol=$(pac get-sink-volume "$sink" \
     | awk 'NR==1 { for (i=1;i<=NF;i++) if ($i ~ /%$/) { gsub("%","",$i); print $i+0; exit } }')
   [ -z "${vol:-}" ] && vol=0
 
-  data=$(pactl list sinks 2>/dev/null | awk -v s="$sink" '
+  data=$(pac list sinks | awk -v s="$sink" '
     /^Sink #/                   { k=0; next }
     $1=="Name:"                 { k=($2==s)?1:0; next }
     k && $1=="Description:"     { sub(/^[[:space:]]*Description:[[:space:]]*/,""); print "desc="$0; next }
@@ -113,6 +122,11 @@ emit() {
   printf '{"text":"%s","tooltip":"%s","class":"%s","percentage":%d}\n' \
     "$text" "$tip" "$kind" "$vol"
 }
+
+# Guarantee waybar sees one line immediately, before any pactl round-trip.
+# Without this, a blocking pactl call at login (socket up, server not yet
+# responsive) leaves the module invisible until the first subscribe event.
+placeholder "audio starting"
 
 # Emit current state and re-emit on any pactl event that could change the
 # display. If the audio server isn't up yet (common right after login)
