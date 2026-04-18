@@ -1632,7 +1632,7 @@ EOF
   WAYBAR_FONT_SIZE=$(prompt_font_size  "      waybar font size"         "$WAYBAR_FONT_SIZE")
   WAYBAR_STYLE=$(prompt_select      "      waybar style"             "$WAYBAR_STYLE" "${waybar_styles[@]}")
   WAYBAR_SCOPE=$(prompt_select      "      waybar scope"             "$WAYBAR_SCOPE" "${waybar_scopes[@]}")
-  WAYBAR_DECOR=$(prompt_select      "      waybar decor"             "$WAYBAR_DECOR" "${waybar_decors[@]}")
+  WAYBAR_DECOR=$(prompt_select      "      waybar decor (console style)" "$WAYBAR_DECOR" "${waybar_decors[@]}")
   if waybar_vpn_available; then
     WAYBAR_VPN=$(prompt_select      "      waybar vpn module"        "$WAYBAR_VPN"   "${waybar_vpns[@]}")
   else
@@ -1640,7 +1640,7 @@ EOF
     info "      waybar vpn module: skipped - vpnctl / vpn-status-indicator not on PATH"
   fi
   WAYBAR_TRANSPARENT=$(prompt_select "      waybar transparent bg"    "$WAYBAR_TRANSPARENT" "${waybar_transparents[@]}")
-  WAYBAR_OPACITY=$(prompt_opacity   "      waybar bg opacity"         "$WAYBAR_OPACITY")
+  WAYBAR_OPACITY=$(prompt_opacity   "      waybar bg opacity (when active)" "$WAYBAR_OPACITY")
   HYPR_EFFECT=$(prompt_select       "      hypr window effect"        "$HYPR_EFFECT"  "${hypr_effects[@]}")
 
   # Launcher logo - tagged with distro pretty-names so the prompt reads
