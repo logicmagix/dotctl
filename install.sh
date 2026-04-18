@@ -184,7 +184,7 @@ pkg_name() {
         libnotify)        printf 'x11-libs/libnotify\n' ;;
         pavucontrol)      printf 'media-sound/pavucontrol\n' ;;
         noto-fonts-emoji)    printf 'media-fonts/noto-emoji\n' ;;
-        nerd-fonts-symbols)  printf 'media-fonts/nerd-fonts\n' ;;
+        nerd-fonts-symbols)  printf 'media-fonts/nerdfonts\n' ;;
       esac
       ;;
     pacman)
