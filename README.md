@@ -22,12 +22,12 @@ dotctl cycle wallpaper next        # keybind entry point
 | **kitty**     |   ✓   |  ✓   |  ✓   |                                                               |
 | **mako**      |   ✓   |  ✓   |  ✓   |                                                               |
 | **wofi**      |   ✓   |  ✓   |  ✓   | subvariant (1/2)                                              |
-| **waybar**    |   ✓   |  ✓   |  ✓   | style, scope, decor, vpn, transparent, opacity, launcher logo |
+| **waybar**    |   ✓   |  ✓   |  ✓   | style, scope, decor, vpn, transparent, opacity, launcher logo, editor |
 | **tty-clock** |   ✓   |      |      | optional - installed via the `tty-clock-themed` wrapper       |
 | **hypr**      |   ✓   |      |      | window effect (shadow/glow)                                   |
 | **wallpaper** |   ✓   |      |      | cycle script per theme                                        |
 
-Everything lives in one 24-field, hand-editable state file at
+Everything lives in one 25-field, hand-editable state file at
 `~/.config/dotctl/config` (tty-clock slot stays empty for users who
 opted out at install). `dotctl configure` walks a wizard through every
 axis; `dotctl set` takes targeted flags; `dotctl apply` re-reads the
@@ -60,6 +60,11 @@ file after a hand edit; `dotctl watch` auto-applies on save.
   you want the bar to sit at 30% over the wallpaper.
 - **Launcher distro logo** - pick from 14 distro glyphs; the choice
   survives `cycle waybar` rotations.
+- **Editor launcher** - pick which editor the waybar launcher opens;
+  curated list of 26 (auto + vim family, terminal TUIs, GNOME/KDE/Xfce
+  GUIs, and GUI IDEs like tide42, VS Code, Zed, Neovide). `auto` falls
+  back nvim → vim → vi. Minimal scopes have no editor block, so the
+  pick is a no-op there.
 - **Drift detection** - `dotctl show` flags any element whose color or
   font has drifted off the rest of the UI.
 
@@ -108,8 +113,8 @@ The installer is interactive and walks you through:
 1. Verify `hyprland` + `hyprpaper` are present (hard fail otherwise).
 2. Optionally `pacman -S` / `emerge` / etc. the runtime elements.
 3. Symlink the CLI + module scripts (`dotctl`, `power`, `launcher`,
-   `cputemp`, `gputemp`, `audio-output`, `audio-output-menu`,
-   `audio-hotplug-watch`) into `/usr/local/bin/`.
+   `cputemp`, `gputemp`, `ws-cycle`, `audio-output`, `audio-output-menu`,
+   `audio-output-status`, `audio-hotplug-watch`) into `/usr/local/bin/`.
 4. Optionally symlink the VPN module (`vpnctl`, `vpn-status-indicator`).
 5. Copy themed configs into `~/.config/{cava,kitty,mako,wofi,waybar}`.
 6. Copy wallpaper cycle scripts + template into `~/.config/dotctl/cycle/`.
@@ -192,8 +197,9 @@ dotctl set --waybar-transparent off --waybar-opacity 0.60
 dotctl set --waybar-vpn on                 # needs vpnctl + vpn-status-indicator
 dotctl set --hypr-effect glow              # colored glow instead of drop shadow
 dotctl set --launcher-logo nixos           # survives cycle waybar rotations
+dotctl set --waybar-editor tide42          # GUI editors launch direct; TUIs use kitty/foot/alacritty
 dotctl set --tty-clock-color gruvbox       # only if you installed tty-clock
-dotctl set -w gentoo                       # wallpaper-only, UI untouched
+dotctl set -w decay_green                  # wallpaper-only, UI untouched
 ```
 
 Presets:
@@ -241,7 +247,7 @@ variant files drives all 5 × 4 = 20 color/variant combinations.
 
 ### State file
 
-`~/.config/dotctl/config` is 24 `KEY=value` lines (the tty-clock slot
+`~/.config/dotctl/config` is 25 `KEY=value` lines (the tty-clock slot
 stays empty for users who opted out), flock-guarded on writes. You can
 hand-edit it and re-apply with `dotctl apply`, or run `dotctl watch` in
 a second terminal to auto-apply on save:
@@ -259,6 +265,7 @@ WAYBAR_VPN=on
 WAYBAR_TRANSPARENT=on
 WAYBAR_OPACITY=0.30
 WAYBAR_LAUNCHER_LOGO=gentoo
+WAYBAR_EDITOR=tide42
 HYPR_EFFECT=glow
 WALLPAPER=forest
 ```
@@ -432,7 +439,6 @@ dotctl/
 - `dotctl list help`
 
 ## Screenshots
-- See tide42 in action:
 
 ### 	
 

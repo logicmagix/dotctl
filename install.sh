@@ -54,7 +54,8 @@ This script will:
   2. Optionally install runtime packages (waybar, cava, kitty, mako, wofi,
      lm-sensors, libnotify, pavucontrol, …)
   3. Symlink ${BOLD}$SYS_BIN/${RST}{dotctl, power, launcher, cputemp, gputemp,
-     audio-output, audio-output-menu, audio-hotplug-watch} → repo
+     ws-cycle, audio-output, audio-output-menu, audio-output-status,
+     audio-hotplug-watch} → repo
   4. Optionally symlink ${BOLD}$SYS_BIN/${RST}{vpnctl, vpn-status-indicator} → repo
   4b. Optionally install tty-clock (via yay on Arch/AUR, native pkg mgr
       elsewhere) and drop the tty-clock-themed wrapper + themed configs
