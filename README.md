@@ -70,7 +70,7 @@ file after a hand edit; `dotctl watch` auto-applies on save.
 **Waybar variants** (4): `pill_full`, `pill_minimal`, `console_full`, `console_minimal`
 **Waybar decorators** (console-only): `pointed`, `round`
 **Launcher logos** (14): `tux`, `arch`, `gentoo`, `debian`, `void`, `nixos`, `fedora`, `fedora_inverse`, `endeavouros`, `cachyos`, `opensuse`, `artix`, `slackware`, `slackware_inverse`
-**Wallpaper themes** (11): `arch`, `coyote`, `forest`, `gentoo`, `gruvbox`, `nixos`, `ocean`, `opensuse`, `slackware`, `tokyo_night`, `void`
+**Wallpaper themes** (6): `coyote`, `decay_green`, `forest`, `gruvbox`, `ocean`, `tokyo_night`
 
 ## Requirements
 
@@ -430,6 +430,30 @@ dotctl/
 - `dotctl help`
 - `dotctl <command> --help`
 - `dotctl list help`
+
+## Screenshots
+- See tide42 in action:
+
+### 	
+
+### Coyote Colorway
+![Coyote](screenshots/screenshot0.png)
+- Coyote colorway
+
+### Decay Green Colorway
+![Decay Green](screenshots/screenshot1.png)
+
+### Forest Colorway
+![Forest](screenshots/screenshot2.png)
+
+### Gruvbox Colorway
+![Gruvbox](screenshots/screenshot3.png)
+
+### Tokyo Night Colorway
+![Tokyo Night](screenshots/screenshot4.png)
+
+### Mix/Match Colors
+![Buffers](screenshots/screenshot5.png)
 
 ## License
 

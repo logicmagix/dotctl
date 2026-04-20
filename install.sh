@@ -554,7 +554,7 @@ install_wallpaper_dir() {
 
 info "Installing wallpapers to $PIC_ROOT/…"
 mkdir -p "$PIC_ROOT"
-for name in forest coyote tokyo_night gruvbox ocean; do
+for name in forest coyote tokyo_night gruvbox ocean decay_green; do
   install_wallpaper_dir "$name"
 done
 
