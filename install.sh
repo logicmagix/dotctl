@@ -53,10 +53,12 @@ This script will:
   1. Verify hyprland + hyprpaper are installed (hard requirement)
   2. Optionally install runtime packages (waybar, cava, kitty, mako, wofi,
      lm-sensors, libnotify, pavucontrol, …)
-  3. Symlink ${BOLD}$SYS_BIN/${RST}{dotctl, power, launcher, cputemp, gputemp,
+  3. Symlink ${BOLD}$SYS_BIN/${RST}{dotctl, power, launcher, cputemp,
      ws-cycle, audio-output, audio-output-menu, audio-output-status,
      audio-hotplug-watch} → repo
   4. Optionally symlink ${BOLD}$SYS_BIN/${RST}{vpnctl, vpn-status-indicator} → repo
+  4a. Optionally symlink ${BOLD}$SYS_BIN/gputemp${RST} → repo (skip on machines
+      without a discrete GPU - the waybar module stays authored either way)
   4b. Optionally install tty-clock (via yay on Arch/AUR, native pkg mgr
       elsewhere) and drop the tty-clock-themed wrapper + themed configs
   5. Copy ${BOLD}~/.config/${RST}{cava, kitty, mako, wofi, waybar} from repo config dirs
@@ -274,6 +276,17 @@ if confirm "Install the optional VPN module (vpnctl + vpn-status-indicator)?" n;
   WANT_VPN=1
 fi
 
+# ── Gate: GPU temp module (opt-in) ──────────────────────────────────────────
+# gputemp reads from nvidia-smi / lm-sensors / hwmon. Machines without a
+# discrete GPU (or with integrated graphics that expose no temp sensor) can
+# skip the symlink - the waybar module block stays authored and is a no-op
+# until the binary is restored on PATH.
+
+WANT_GPU=0
+if confirm "Install the optional GPU temp module (gputemp - skip on non-discrete GPU machines)?" y; then
+  WANT_GPU=1
+fi
+
 # ── Gate: tty-clock (opt-in) ────────────────────────────────────────────────
 # tty-clock is in native repos on Gentoo (app-misc), Debian/Ubuntu, Fedora,
 # Void, and Arch (extra). On Arch-family we prefer yay when available so
@@ -351,13 +364,17 @@ sys_link() {
 
 sys_link "$STAGE/dotctl" "$SYS_BIN/dotctl"
 
-# Module scripts - everything in stage/modules/ except the VPN pair and
-# the tty-clock wrapper, which each gate on their own opt-in prompts.
+# Module scripts - everything in stage/modules/ except the VPN pair,
+# gputemp, and the tty-clock wrapper, which each gate on their own opt-in
+# prompts.
 for m in "$STAGE"/modules/*; do
   name="$(basename "$m")"
   case "$name" in
     vpnctl|vpn-status-indicator)
       (( WANT_VPN == 1 )) || { skip "$name (vpn module opted out)"; continue; }
+      ;;
+    gputemp)
+      (( WANT_GPU == 1 )) || { skip "$name (gpu temp module opted out)"; continue; }
       ;;
     tty-clock-themed)
       (( WANT_TTYCLOCK == 1 )) || { skip "$name (tty-clock opted out)"; continue; }

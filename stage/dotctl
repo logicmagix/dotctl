@@ -168,7 +168,7 @@ declare -A WAYBAR_EDITOR_GUI=(
   [gedit]=1 [gnome-text-editor]=1 [kate]=1 [kwrite]=1
   [mousepad]=1 [pluma]=1 [featherpad]=1 [geany]=1
   [gvim]=1 [neovide]=1 [emacs]=1
-  [code]=1 [codium]=1 [subl]=1 [zed]=1 [tide42]=1
+  [code]=1 [codium]=1 [subl]=1 [zed]=1
 )
 
 # Wizard ladder for font-size pickers - custom... drops to free-form input.
@@ -636,6 +636,15 @@ apply_waybar() {
       !skip { print }
     ' "$_f" > "$_f.tmp" && mv -f "$_f.tmp" "$_f"
   done
+
+  # GPU gate: when `gputemp` isn't on PATH (user opted out at install),
+  # the memory-end chevron would otherwise point into a now-empty gpu
+  # slot. Fade #custom-rarrow6's background to transparent so the left
+  # chain tapers out after the RAM block. Only affects console_full -
+  # pill_* has no chevrons, and console_minimal has no gpu block.
+  if ! command -v gputemp >/dev/null 2>&1; then
+    sed -i -E 's/(#custom-rarrow6[[:space:]]+\{[^}]*background:[[:space:]]*)@olive/\1transparent/' "$WAYBAR_DIR/style.css"
+  fi
 
   # Decorator injection: for console style, swap the canonical pointed glyphs
   # with the active decorator's target glyphs in config.jsonc. The decorator
@@ -1171,12 +1180,12 @@ dotctl set [FLAGS]
                             opensuse | artix | slackware | slackware_inverse)
   --waybar-editor <E>      waybar editor module target. Long alias: --editor.
                            auto = nvim → vim → vi fallback. Terminal editors
-                           (nvim, vim, vi, nano, micro, helix, kak) launch in
-                           the first kitty/foot/alacritty/wezterm/xterm on
-                           PATH. GUI editors (gedit, gnome-text-editor, kate,
-                           kwrite, mousepad, pluma, featherpad, geany, gvim,
-                           neovide, emacs, code, codium, subl, zed) launch
-                           directly. See `dotctl list waybar-editors`.
+                           (nvim, vim, vi, nano, micro, helix, kak, tide42)
+                           launch in the first kitty/foot/alacritty/wezterm/
+                           xterm on PATH. GUI editors (gedit, gnome-text-editor,
+                           kate, kwrite, mousepad, pluma, featherpad, geany,
+                           gvim, neovide, emacs, code, codium, subl, zed)
+                           launch directly. See `dotctl list waybar-editors`.
   -w, --wallpaper <C>
 
   --preset <NAME>          Load preset as base, then apply flags on top

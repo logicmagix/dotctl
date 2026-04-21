@@ -61,10 +61,10 @@ file after a hand edit; `dotctl watch` auto-applies on save.
 - **Launcher distro logo** - pick from 14 distro glyphs; the choice
   survives `cycle waybar` rotations.
 - **Editor launcher** - pick which editor the waybar launcher opens;
-  curated list of 26 (auto + vim family, terminal TUIs, GNOME/KDE/Xfce
-  GUIs, and GUI IDEs like tide42, VS Code, Zed, Neovide). `auto` falls
-  back nvim → vim → vi. Minimal scopes have no editor block, so the
-  pick is a no-op there.
+  curated list of 26 (auto + vim family, terminal TUIs including tide42,
+  GNOME/KDE/Xfce GUIs, and GUI IDEs like VS Code, Zed, Neovide). `auto`
+  falls back nvim → vim → vi. Minimal scopes have no editor block, so
+  the pick is a no-op there.
 - **Drift detection** - `dotctl show` flags any element whose color or
   font has drifted off the rest of the UI.
 
@@ -197,7 +197,7 @@ dotctl set --waybar-transparent off --waybar-opacity 0.60
 dotctl set --waybar-vpn on                 # needs vpnctl + vpn-status-indicator
 dotctl set --hypr-effect glow              # colored glow instead of drop shadow
 dotctl set --launcher-logo nixos           # survives cycle waybar rotations
-dotctl set --waybar-editor tide42          # GUI editors launch direct; TUIs use kitty/foot/alacritty
+dotctl set --waybar-editor tide42          # TUIs use kitty/foot/alacritty; GUI editors launch direct
 dotctl set --tty-clock-color gruvbox       # only if you installed tty-clock
 dotctl set -w decay_green                  # wallpaper-only, UI untouched
 ```
