@@ -62,6 +62,7 @@ This script will:
   4b. Optionally install tty-clock (via yay on Arch/AUR, native pkg mgr
       elsewhere) and drop the tty-clock-themed wrapper + themed configs
   5. Copy ${BOLD}~/.config/${RST}{cava, kitty, mako, wofi, waybar} from repo config dirs
+     (any existing config is renamed to ${BOLD}<name>.bak-<timestamp>${RST} first)
   6. Install bundled Nerd Fonts (MesloLGS NF, Phoenix) to ~/.local/share/fonts/
   7. Copy ${BOLD}~/.config/dotctl/cycle/${RST} (wallpaper cycle scripts + template)
   8. Copy ${BOLD}~/.config/hypr/${RST}{dotctl-keybinds.conf, dotctl-colors.conf} snippets
@@ -408,18 +409,20 @@ fi
 
 info "Installing user configs to $CONFIG_HOME/…"
 
+# Shared timestamp so every backup from one install run sorts together.
+BACKUP_TS="$(date +%Y%m%d-%H%M%S)"
+
 # Element config dirs - copy (not symlink) so user edits stay private.
+# If a destination already exists, move it aside to a timestamped backup
+# rather than deleting it. The uninstaller leaves backups alone.
 copy_config() {
   local src="$1" dest="$2"
   [[ -d "$src" ]] || { warn "missing: $src"; return 1; }
   mkdir -p "$(dirname "$dest")"
-  if [[ -d "$dest" ]]; then
-    if confirm "  $dest exists - overwrite?" n; then
-      rm -rf "$dest"
-    else
-      skip "kept existing $dest"
-      return 0
-    fi
+  if [[ -e "$dest" || -L "$dest" ]]; then
+    local backup="${dest}.bak-${BACKUP_TS}"
+    mv "$dest" "$backup"
+    ok "backed up existing $dest → $backup"
   fi
   cp -a "$src" "$dest"
   ok "$dest"
@@ -504,8 +507,14 @@ elif [[ -f "$FC_USER_CONF" ]]; then
   skip "user fontconfig already exists ($FC_USER_CONF)"
 fi
 
-# Cycle scripts (copies - user curates IMAGES=() per theme)
+# Cycle scripts (copies - user curates IMAGES=() per theme). Any existing
+# cycle/ is moved aside so the user's curated image lists survive reinstall.
 info "Installing cycle scripts to $CONFIG_HOME/dotctl/cycle/…"
+if [[ -d "$CONFIG_HOME/dotctl/cycle" ]]; then
+  cycle_backup="$CONFIG_HOME/dotctl/cycle.bak-${BACKUP_TS}"
+  mv "$CONFIG_HOME/dotctl/cycle" "$cycle_backup"
+  ok "backed up existing cycle/ → $cycle_backup"
+fi
 mkdir -p "$CONFIG_HOME/dotctl/cycle"
 cp -a "$STAGE/cycle/." "$CONFIG_HOME/dotctl/cycle/"
 chmod +x "$CONFIG_HOME/dotctl/cycle"/cycle-hyprpaper-*
@@ -522,6 +531,11 @@ ok "$DATA_HOME/dotctl/dotctl-colors.conf.tmpl"
 # palette-driven values on first run.
 if [[ -d "$CONFIG_HOME/hypr" ]]; then
   info "Installing hypr snippets to $CONFIG_HOME/hypr/…"
+  if [[ -e "$CONFIG_HOME/hypr/dotctl-keybinds.conf" ]]; then
+    kb_backup="$CONFIG_HOME/hypr/dotctl-keybinds.conf.bak-${BACKUP_TS}"
+    mv "$CONFIG_HOME/hypr/dotctl-keybinds.conf" "$kb_backup"
+    ok "backed up existing dotctl-keybinds.conf → $kb_backup"
+  fi
   cp -a "$STAGE/hypr/dotctl-keybinds.conf" "$CONFIG_HOME/hypr/dotctl-keybinds.conf"
   ok "$CONFIG_HOME/hypr/dotctl-keybinds.conf"
 

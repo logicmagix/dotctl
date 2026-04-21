@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # dotctl uninstaller
 #
-# Removes symlinks and installed files that point into the repo. Leaves
-# user configs in ~/.config/{cava,kitty,mako,wofi,waybar} alone unless
-# you explicitly confirm - those may have been edited post-install.
+# Removes symlinks and installed files that point into the repo. User
+# config directories in ~/.config/{cava,kitty,mako,wofi,waybar,tty-clock},
+# $CONFIG_HOME/dotctl/, the wallpapers directory, and any install-time
+# .bak-<timestamp> backups are left in place - the user can edit, keep,
+# or remove them on their own schedule.
 
 set -euo pipefail
 
@@ -48,11 +50,14 @@ This will remove:
 Only symlinks that point ${BOLD}into the repo${RST} are removed - unrelated
 binaries with the same name are left alone.
 
-Optional (prompted individually):
+${BOLD}Left in place${RST} (remove by hand if you actually want them gone):
   - $CONFIG_HOME/dotctl/                       (state + cycle scripts + presets)
   - $CONFIG_HOME/{cava, kitty, mako, wofi, waybar, tty-clock}   (element configs)
   - $HOME/Pictures/dotctl/wallpapers/
-  - tty-clock binary / VPN helpers             (package-remove, dotctl-specific only)
+  - Any install-time ${BOLD}*.bak-<timestamp>${RST} backups next to those paths
+
+Optional (prompted):
+  - tty-clock binary                            (package-remove, dotctl-specific only)
 
 Shared runtime deps (waybar, cava, kitty, mako, wofi, jq, wl-clipboard,
 lm-sensors, libnotify, pavucontrol, inotify-tools, fonts) are ${BOLD}never${RST}
@@ -135,47 +140,34 @@ for f in "$CONFIG_HOME/hypr/dotctl-keybinds.conf" "$CONFIG_HOME/hypr/dotctl-colo
   fi
 done
 
-# ── Optional user-data removals ─────────────────────────────────────────────
+# ── User data is preserved ──────────────────────────────────────────────────
+# Element configs, $CONFIG_HOME/dotctl/, the wallpapers directory, and any
+# install-time .bak-<timestamp> siblings are deliberately left in place.
+# Users can remove them manually when they're sure they no longer want them.
 
 echo
-info "Optional removals (each prompted individually):"
-
-if [[ -d "$CONFIG_HOME/dotctl" ]]; then
-  if confirm "  Remove $CONFIG_HOME/dotctl/ (state, presets, cycle scripts)?" n; then
-    rm -rf "$CONFIG_HOME/dotctl"
-    ok "removed $CONFIG_HOME/dotctl/"
-  else
-    skip "kept $CONFIG_HOME/dotctl/"
-  fi
-fi
-
-for elem in cava kitty mako wofi waybar tty-clock; do
-  if [[ -d "$CONFIG_HOME/$elem" ]]; then
-    if confirm "  Remove $CONFIG_HOME/$elem/ ?" n; then
-      # Harden against read-only files before removing, then verify the
-      # dir is actually gone. Running apps (notably kitty) can re-create
-      # their config dir immediately after rm - warn instead of dying so
-      # the rest of uninstall still runs.
-      chmod -R u+w "$CONFIG_HOME/$elem" 2>/dev/null || true
-      rm -rf "$CONFIG_HOME/$elem"
-      if [[ -e "$CONFIG_HOME/$elem" ]]; then
-        warn "$CONFIG_HOME/$elem/ reappeared after removal - a running $elem process likely recreated it. Close all $elem windows and remove it manually:  rm -rf $CONFIG_HOME/$elem"
-      else
-        ok "removed $CONFIG_HOME/$elem/"
-      fi
-    else
-      skip "kept $CONFIG_HOME/$elem/"
-    fi
-  fi
+info "Leaving user data in place (remove by hand if desired):"
+for p in \
+  "$CONFIG_HOME/dotctl" \
+  "$CONFIG_HOME/cava" "$CONFIG_HOME/kitty" "$CONFIG_HOME/mako" \
+  "$CONFIG_HOME/wofi" "$CONFIG_HOME/waybar" "$CONFIG_HOME/tty-clock" \
+  "$HOME/Pictures/dotctl/wallpapers"; do
+  [[ -e "$p" ]] && skip "kept $p"
 done
 
-if [[ -d "$HOME/Pictures/dotctl/wallpapers" ]]; then
-  if confirm "  Remove $HOME/Pictures/dotctl/wallpapers/ ?" n; then
-    rm -rf "$HOME/Pictures/dotctl"
-    ok "removed $HOME/Pictures/dotctl/"
-  else
-    skip "kept $HOME/Pictures/dotctl/"
-  fi
+# Surface any .bak-* siblings so users know the backups are still around.
+shopt -s nullglob
+backups=(
+  "$CONFIG_HOME"/cava.bak-* "$CONFIG_HOME"/kitty.bak-* "$CONFIG_HOME"/mako.bak-*
+  "$CONFIG_HOME"/wofi.bak-* "$CONFIG_HOME"/waybar.bak-* "$CONFIG_HOME"/tty-clock.bak-*
+  "$CONFIG_HOME"/dotctl/cycle.bak-*
+  "$CONFIG_HOME"/hypr/dotctl-keybinds.conf.bak-*
+)
+shopt -u nullglob
+if (( ${#backups[@]} > 0 )); then
+  for b in "${backups[@]}"; do
+    skip "kept backup $b"
+  done
 fi
 
 # ── Optional package removal (dotctl-introduced deps only) ──────────────────
