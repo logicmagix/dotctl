@@ -1865,7 +1865,7 @@ _build_images_block() {
   shopt -u nullglob nocaseglob
 
   if (( ${#found[@]} == 0 )); then
-    printf '  # no images found at scan time - drop files into the wallpaper dir then re-run dotctl scan\n'
+    printf '  # no images found at scan time - drop files into the wallpaper dir then run dotctl scan --update\n'
     return 0
   fi
 
@@ -1887,12 +1887,17 @@ _count_images() {
 }
 
 # Extract the list of basenames from IMAGES=( ) in an existing cycle script.
-# Prints one unquoted basename per line.
+# Prints one unquoted basename per line. Comment and blank lines inside the
+# block are filtered out regardless of leading whitespace.
 _script_images() {
   local script="$1"
-  sed -n '/^IMAGES=(/,/^)/{ /^IMAGES=(/d; /^)/d; p; }' "$script" \
-    | sed 's/^[[:space:]]*"//; s/"[[:space:]]*$//' \
-    | grep -v '^#' || true
+  sed -n '/^IMAGES=(/,/^)/{
+    /^IMAGES=(/d
+    /^)/d
+    /^[[:space:]]*#/d
+    /^[[:space:]]*$/d
+    p
+  }' "$script" | sed 's/^[[:space:]]*"//; s/"[[:space:]]*$//'
 }
 
 # List image basenames on disk for a wallpaper directory (one per line, sorted).
@@ -1968,8 +1973,8 @@ Scaffold a new wallpaper theme. Creates:
 
 The cycle script is rendered from the 4-verb template with __COLOR__
 replaced by <name>. Populate IMAGES=( ) by hand for curated ordering, or
-drop images into the directory and run `dotctl scan` to auto-populate in
-alphabetical order.
+drop images into the directory and run `dotctl scan --update` to
+auto-populate in alphabetical order.
 
 <name> must match [a-z0-9_]+. The script refuses to overwrite an existing
 cycle script; delete or rename it first if you want a fresh scaffold.
@@ -2001,7 +2006,7 @@ EOF
   info "next:"
   info "  1. drop image files into $dir/"
   info "  2. edit $script and populate the IMAGES=( ) array with the desired cycle order"
-  info "     (or run \`dotctl scan\` once images are in place to auto-populate)"
+  info "     (or run \`dotctl scan --update\` once images are in place to auto-populate)"
   info "  3. dotctl set -w $name   (or pick it in configure)"
 }
 
@@ -2010,45 +2015,42 @@ EOF
 # ──────────────────────────────────────────────────────────────────────────────
 
 cmd_scan() {
-  local prefix="$WALLPAPER_ROOT" dry_run='' force='' update=''
+  local prefix="$WALLPAPER_ROOT" update=''
   while (( $# > 0 )); do
     case "$1" in
-      --dry-run)  dry_run=1; shift;;
-      --force)    force=1; shift;;
       --update)   update=1; shift;;
       --prefix)   prefix="$2"; shift 2;;
       -h|--help)
         cat <<'EOF'
-dotctl scan [OPTIONS]
+dotctl scan [--update] [--prefix PATH]
 
-Walks the wallpaper root looking for theme directories without a matching
-cycle-hyprpaper-<dir> script. Generates the missing scripts from the template
-and populates IMAGES=( ) from the directory's contents (alphabetical order).
+Walks the wallpaper root and reports what cycle-hyprpaper-<dir> scripts
+need to be created or resynced against disk contents.
 
-Directory names must match [a-z0-9_]+. Anything else is skipped with a
-warning. Existing scripts are preserved unless --force or --update is given.
+Without --update, scan is a preview: it prints what would happen and
+writes nothing. Pass --update to actually create missing scripts and
+sync existing ones with the current directory contents.
 
-When run without --force or --update, existing directories that have changed
-(new or removed images) are flagged in the output.
+Directory names must match [a-z0-9_]+; others are skipped with a warning.
+
+MODES
+  (default)         Preview only. Prints what would be created/updated.
+                    Writes no files. Safe to run anytime.
+  --update          Create missing cycle scripts and sync existing ones:
+                    new images are appended at the end (alphabetical),
+                    entries whose files no longer exist are pruned, and
+                    hand-curated ordering of surviving entries is preserved.
 
 OPTIONS
   --prefix <path>   Scan this directory instead of $WALLPAPER_ROOT.
-                    Generated scripts will hardcode this prefix as
-                    WALLPAPER_DIR, so you can scan a non-canonical location
-                    and have the scripts work there directly.
-  --dry-run         Print what would be created/updated, write nothing.
-  --update          Update existing scripts with new images. Preserves
-                    hand-curated ordering of existing entries, appends new
-                    images at the end, and removes entries for deleted files.
-  --force           Regenerate scripts even if they already exist
-                    (replaces hand-curated IMAGES=() ordering - be careful).
+                    With --update, generated scripts hardcode this prefix
+                    as WALLPAPER_DIR so they work against the scanned
+                    location directly.
 
 EXAMPLES
-  dotctl scan
-  dotctl scan --dry-run
-  dotctl scan --update
-  dotctl scan --prefix ~/Downloads/wallpaper-pack
-  dotctl scan --force
+  dotctl scan                     # preview changes
+  dotctl scan --update            # apply them
+  dotctl scan --update --prefix ~/Downloads/wallpaper-pack
 EOF
         return 0;;
       *) die "scan: unknown flag \`$1\` - try \`dotctl scan --help\`";;
@@ -2057,8 +2059,13 @@ EOF
 
   [[ -d "$prefix" ]] || die "scan: $prefix does not exist or is not a directory"
 
-  info "scanning $prefix/"
-  local created=0 skipped=0 invalid=0 forced=0 updated=0 stale=0
+  if [[ -z "$update" ]]; then
+    info "scanning $prefix/ (preview - pass --update to apply)"
+  else
+    info "scanning $prefix/"
+  fi
+
+  local created=0 updated=0 unchanged=0 invalid=0 pending=0
   local dir name target images_block n existed
 
   for dir in "$prefix"/*/; do
@@ -2071,108 +2078,85 @@ EOF
       continue
     fi
 
-    mkdir -p "$CYCLE_DIR"
     target=$(cycle_script "$name")
     existed=0
     [[ -e "$target" ]] && existed=1
-
     n=$(_count_images "$dir")
 
-    # ── existing script: --update merges, --force regenerates, default reports ──
-    if (( existed == 1 )) && [[ -z "$force" ]]; then
-      if [[ -n "$update" ]]; then
-        # Compute new/removed image counts for status output.
-        local -a _disk_list _script_list _new _removed
-        _disk_list=() _script_list=() _new=() _removed=()
-        mapfile -t _disk_list   < <(_disk_images "$dir" | LC_ALL=C sort -u)
-        mapfile -t _script_list < <(_script_images "$target")
+    if (( existed == 1 )); then
+      # Diff disk vs script to decide whether anything needs to change.
+      local -a _disk_list _script_list _new _removed
+      _disk_list=() _script_list=() _new=() _removed=()
+      mapfile -t _disk_list   < <(_disk_images "$dir" | LC_ALL=C sort -u)
+      mapfile -t _script_list < <(_script_images "$target")
 
-        local -A _disk_set _script_set
-        _disk_set=() _script_set=()
-        local _img
-        for _img in "${_disk_list[@]}"; do _disk_set["$_img"]=1; done
-        for _img in "${_script_list[@]}"; do _script_set["$_img"]=1; done
-        for _img in "${_disk_list[@]}"; do
-          [[ -z "${_script_set[$_img]:-}" ]] && _new+=( "$_img" )
-        done
-        for _img in "${_script_list[@]}"; do
-          [[ -z "${_disk_set[$_img]:-}" ]] && _removed+=( "$_img" )
-        done
+      local -A _disk_set _script_set
+      _disk_set=() _script_set=()
+      local _img
+      for _img in "${_disk_list[@]}"; do _disk_set["$_img"]=1; done
+      for _img in "${_script_list[@]}"; do _script_set["$_img"]=1; done
+      for _img in "${_disk_list[@]}"; do
+        [[ -z "${_script_set[$_img]:-}" ]] && _new+=( "$_img" )
+      done
+      for _img in "${_script_list[@]}"; do
+        [[ -z "${_disk_set[$_img]:-}" ]] && _removed+=( "$_img" )
+      done
 
-        if (( ${#_new[@]} == 0 && ${#_removed[@]} == 0 )); then
-          printf '  %-20s up to date (%s images)\n' "$name" "$n"
-          (( ++skipped ))
-          continue
-        fi
-
-        if [[ -n "$dry_run" ]]; then
-          printf '  %-20s DRY-RUN would update cycle-hyprpaper-%s (+%s new, -%s removed)\n' \
-            "$name" "$name" "${#_new[@]}" "${#_removed[@]}"
-          continue
-        fi
-
-        _update_images_in_script "$target" "$dir"
-        printf '  %-20s updated cycle-hyprpaper-%s (+%s new, -%s removed, %s total)\n' \
-          "$name" "$name" "${#_new[@]}" "${#_removed[@]}" "$n"
-        (( ++updated ))
+      if (( ${#_new[@]} == 0 && ${#_removed[@]} == 0 )); then
+        printf '  %-20s up to date (%s images)\n' "$name" "$n"
+        (( ++unchanged ))
         continue
       fi
 
-      # Default (no --force, no --update): check for changes and report.
-      local _disk_n _script_n
-      _disk_n=$n
-      _script_n=$(wc -l < <(_script_images "$target"))
-      _script_n=${_script_n// /}
-      if [[ "$_disk_n" != "$_script_n" ]]; then
-        printf '  %-20s skip - script exists (%s on disk, %s in script - run with --update)\n' \
-          "$name" "$_disk_n" "$_script_n"
-        (( ++stale ))
-      else
-        printf '  %-20s skip - script exists\n' "$name"
+      if [[ -z "$update" ]]; then
+        printf '  %-20s would update cycle-hyprpaper-%s (+%s new, -%s removed, %s total)\n' \
+          "$name" "$name" "${#_new[@]}" "${#_removed[@]}" "$n"
+        (( ++pending ))
+        continue
       fi
-      (( ++skipped ))
+
+      _update_images_in_script "$target" "$dir"
+      printf '  %-20s updated cycle-hyprpaper-%s (+%s new, -%s removed, %s total)\n' \
+        "$name" "$name" "${#_new[@]}" "${#_removed[@]}" "$n"
+      (( ++updated ))
       continue
     fi
 
-    # ── new directory or --force: generate from scratch ──
-    if [[ -n "$dry_run" ]]; then
-      if (( existed == 1 )); then
-        printf '  %-20s DRY-RUN would REGENERATE cycle-hyprpaper-%s (%s images)\n' "$name" "$name" "$n"
-      else
-        printf '  %-20s DRY-RUN would create cycle-hyprpaper-%s (%s images)\n' "$name" "$name" "$n"
-      fi
+    # No script yet.
+    if [[ -z "$update" ]]; then
+      printf '  %-20s would create cycle-hyprpaper-%s (%s images)\n' "$name" "$name" "$n"
+      (( ++pending ))
       continue
     fi
 
+    mkdir -p "$CYCLE_DIR"
     images_block=$(_build_images_block "$dir")
     _render_cycle_script "$name" "$images_block" > "$target"
 
-    # When --prefix is non-default, rewrite WALLPAPER_DIR in the generated
-    # script so it points to the literal scan path rather than the canonical
-    # WALLPAPER_ROOT/<name>.
+    # With a non-canonical prefix, rewrite WALLPAPER_DIR so the script points
+    # at the literal scan path rather than the canonical WALLPAPER_ROOT/<name>.
     if [[ "$prefix" != "$WALLPAPER_ROOT" ]]; then
       sed -i -E "s|^WALLPAPER_DIR=.*|WALLPAPER_DIR=\"$prefix/$name\"|" "$target"
     fi
 
     chmod +x "$target"
-
-    if (( existed == 1 )); then
-      printf '  %-20s regenerated cycle-hyprpaper-%s (%s images)\n' "$name" "$name" "$n"
-      (( ++forced ))
-    else
-      printf '  %-20s created cycle-hyprpaper-%s (%s images)\n' "$name" "$name" "$n"
-      (( ++created ))
-    fi
+    printf '  %-20s created cycle-hyprpaper-%s (%s images)\n' "$name" "$name" "$n"
+    (( ++created ))
   done
 
   info ""
-  if [[ -n "$dry_run" ]]; then
-    info "dry-run complete (no files written)"
+  if [[ -z "$update" ]]; then
+    local summary="unchanged $unchanged, pending $pending"
+    (( invalid > 0 )) && summary+=", invalid $invalid"
+    info "$summary"
+    if (( pending > 0 )); then
+      info "preview complete (no files written) - run \`dotctl scan --update\` to apply"
+    else
+      info "preview complete - nothing to do"
+    fi
   else
-    local summary="created $created, skipped $skipped, invalid $invalid"
-    (( forced  > 0 )) && summary+=", regenerated $forced"
-    (( updated > 0 )) && summary+=", updated $updated"
-    (( stale   > 0 )) && summary+=", stale $stale (run --update to sync)"
+    local summary="created $created, updated $updated, unchanged $unchanged"
+    (( invalid > 0 )) && summary+=", invalid $invalid"
     info "$summary"
   fi
 }
@@ -2290,10 +2274,10 @@ ACTIONS
   preset <save|load|list|show|delete> [name]
   new wallpaper <name>             Scaffold ~/Pictures/dotctl/wallpapers/<name>/
                                    and ~/.config/dotctl/cycle/cycle-hyprpaper-<name>
-  scan [--dry-run] [--force] [--update] [--prefix PATH]
-                                   Auto-generate cycle scripts for new wallpaper
-                                   dirs. --update syncs new/removed images into
-                                   existing scripts (preserves ordering).
+  scan [--update] [--prefix PATH]  Preview (default) or apply (--update) cycle
+                                   script sync. --update creates missing scripts
+                                   and merges new/removed images into existing
+                                   ones (preserves curated ordering).
   help                             This message
 
 QUICK REFERENCE
@@ -2316,8 +2300,8 @@ QUICK REFERENCE
   dotctl sync all kitty            All elements take kitty's color+font
   dotctl preset save laptop        Snapshot current state
   dotctl preset load tv            Restore snapshot
-  dotctl scan                      Auto-generate cycle scripts for new wallpaper dirs
-  dotctl scan --dry-run            Preview what scan would create
+  dotctl scan                      Preview what cycle scripts would be created/updated
+  dotctl scan --update             Apply: create missing and sync existing scripts
   dotctl new wallpaper forest      Scaffold one new wallpaper theme by hand
 
 STATE

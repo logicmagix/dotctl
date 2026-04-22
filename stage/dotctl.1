@@ -286,38 +286,35 @@ to auto-populate), then
 Name must match
 .BR [a-z0-9_]+ .
 .TP
-.BR "scan [--dry-run] [--force] [--update] [--prefix " \fIpath\fR ]
-Walk the wallpaper root and generate
+.BR "scan [--update] [--prefix " \fIpath\fR ]
+Walk the wallpaper root and reconcile
 .B cycle-hyprpaper-*
-scripts for any directory that doesn't already have one. Image lists are
-populated from disk contents in alphabetical order (case-insensitive glob for
+scripts with disk contents. Image lists come from a case-insensitive glob for
 .BR .jpg ,
 .BR .jpeg ,
 .BR .png ,
 .BR .webp ,
 .BR .gif ,
 .BR .bmp ,
-.BR .jxl ).
+and
+.BR .jxl .
 Directory names must match
 .BR [a-z0-9_]+ ;
 others are reported as
 .B invalid
-and skipped. Existing scripts are preserved unless
-.B --force
-or
+and skipped.
+.PP
+Without
+.BR --update ,
+scan is a preview: it prints what would be created or synced and writes
+nothing. Pass
 .B --update
-is passed. Without either flag, directories whose image count differs from
-the cycle script are reported as stale.
-.B --update
-merges new images into existing cycle scripts (appended at the end in
-alphabetical order) and prunes entries for deleted files, preserving the
-hand-curated ordering of existing entries.
-.B --force
-regenerates the entire script from scratch, replacing the
-.B IMAGES=()
-array with an alphabetically sorted list of current disk contents.
-.B --dry-run
-previews without writing.
+to actually create missing scripts and resync existing ones. When a script
+exists, new images are appended at the end in alphabetical order, entries
+for deleted files are pruned, and the hand-curated ordering of surviving
+entries is preserved. To wipe curated ordering and regenerate a script from
+scratch, delete the script file first and re-run
+.BR "scan --update" .
 .B --prefix
 scans a non-canonical directory and hardcodes that path into the generated
 scripts so a wallpaper pack can be used in place without moving it. Default
@@ -791,27 +788,23 @@ Bulk-import several wallpaper themes (alphabetical cycle order):
 mkdir ~/Pictures/dotctl/wallpapers/forest ~/Pictures/dotctl/wallpapers/retrowave
 cp ~/Downloads/forest/*    ~/Pictures/dotctl/wallpapers/forest/
 cp ~/Downloads/retrowave/* ~/Pictures/dotctl/wallpapers/retrowave/
-dotctl scan                                   # generates both cycle scripts
+dotctl scan                                   # preview what would happen
+dotctl scan --update                          # create both cycle scripts
 dotctl set -w forest
 .EE
 .PP
-Preview a scan without writing anything:
-.PP
-.EX
-dotctl scan --dry-run
-.EE
-.PP
-After adding new images to an existing wallpaper directory, update the
+After adding new images to an existing wallpaper directory, resync the
 cycle script without losing curated ordering:
 .PP
 .EX
-dotctl scan --update
+dotctl scan                                   # see the diff first
+dotctl scan --update                          # apply it
 .EE
 .PP
 Scan a wallpaper pack in place from a non-canonical location:
 .PP
 .EX
-dotctl scan --prefix ~/Downloads/wallpaper-pack
+dotctl scan --update --prefix ~/Downloads/wallpaper-pack
 .EE
 .SH EXIT STATUS
 .TP

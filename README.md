@@ -51,8 +51,9 @@ file after a hand edit; `dotctl watch` auto-applies on save.
   rewritten at apply time. Add a new palette by dropping a `.palette`
   file in place.
 - **Wallpaper themes as directories** - drop a folder of images, run
-  `dotctl scan`, get a cycle script back. Add images later and
-  `dotctl scan --update` merges them in without losing curated ordering.
+  `dotctl scan` to preview, then `dotctl scan --update` to generate the
+  cycle script. Re-running `--update` later merges new images in without
+  losing curated ordering and prunes entries for deleted files.
 - **Hyprland integration without editing `hyprland.conf`** - ships two
   sourceable snippets (`dotctl-keybinds.conf` + `dotctl-colors.conf`)
   that you enable with two one-liners.
@@ -321,15 +322,17 @@ dotctl set -w forest
 mkdir ~/Pictures/dotctl/wallpapers/{forest,retrowave}
 cp ~/Downloads/forest/*    ~/Pictures/dotctl/wallpapers/forest/
 cp ~/Downloads/retrowave/* ~/Pictures/dotctl/wallpapers/retrowave/
-dotctl scan                               # generates both cycle scripts
+dotctl scan                               # preview what would happen
+dotctl scan --update                      # create both cycle scripts
 dotctl set -w forest
 ```
 
-`dotctl scan --dry-run` previews without writing. `dotctl scan --update`
-merges new images into existing cycle scripts while preserving
-hand-curated ordering (deleted images are also pruned). Without
-`--update`, stale directories are flagged in the output so you know
-what changed. `dotctl scan --prefix ~/Downloads/wallpaper-pack` scans a
+`dotctl scan` is preview-only: it prints what cycle scripts would be
+created or resynced and writes nothing. `dotctl scan --update` actually
+applies the changes: missing scripts are created, and existing scripts
+have new images appended (alphabetical) and deleted entries pruned while
+hand-curated ordering of surviving entries is preserved.
+`dotctl scan --update --prefix ~/Downloads/wallpaper-pack` scans a
 non-canonical directory and hardcodes that path into the generated cycle
 scripts so a pack can be used in place without moving it.
 
