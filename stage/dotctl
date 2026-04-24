@@ -1789,7 +1789,9 @@ _count_images() {
 
 # Extract the list of basenames from IMAGES=( ) in an existing cycle script.
 # Prints one unquoted basename per line. Comment and blank lines inside the
-# block are filtered out regardless of leading whitespace.
+# block are filtered out regardless of leading whitespace, and any line that
+# strips to empty (e.g. a stray `""` entry) is dropped so downstream associative
+# array lookups never see an empty key.
 _script_images() {
   local script="$1"
   sed -n '/^IMAGES=(/,/^)/{
@@ -1798,7 +1800,7 @@ _script_images() {
     /^[[:space:]]*#/d
     /^[[:space:]]*$/d
     p
-  }' "$script" | sed 's/^[[:space:]]*"//; s/"[[:space:]]*$//'
+  }' "$script" | sed 's/^[[:space:]]*"//; s/"[[:space:]]*$//' | sed '/^$/d'
 }
 
 # List image basenames on disk for a wallpaper directory (one per line, sorted).
@@ -1823,22 +1825,22 @@ _update_images_in_script() {
   # Build a set of images currently on disk for fast lookup.
   local -A disk_set=()
   local img
-  for img in "${on_disk[@]}"; do disk_set["$img"]=1; done
+  for img in "${on_disk[@]}"; do [[ -n "$img" ]] && disk_set["$img"]=1; done
 
   # Build a set of images already in the script.
   local -A script_set=()
-  for img in "${in_script[@]}"; do script_set["$img"]=1; done
+  for img in "${in_script[@]}"; do [[ -n "$img" ]] && script_set["$img"]=1; done
 
   # New images = on disk but not in script.
   for img in "${on_disk[@]}"; do
-    [[ -z "${script_set[$img]:-}" ]] && new_imgs+=( "$img" )
+    [[ -n "$img" && -z "${script_set[$img]:-}" ]] && new_imgs+=( "$img" )
   done
 
   # Rebuild the block: keep existing entries that still exist on disk (in their
   # original order), then append new images (sorted alphabetically).
   local -a merged=()
   for img in "${in_script[@]}"; do
-    [[ -n "${disk_set[$img]:-}" ]] && merged+=( "$img" )
+    [[ -n "$img" && -n "${disk_set[$img]:-}" ]] && merged+=( "$img" )
   done
   merged+=( "${new_imgs[@]}" )
 
@@ -1994,13 +1996,13 @@ EOF
       local -A _disk_set _script_set
       _disk_set=() _script_set=()
       local _img
-      for _img in "${_disk_list[@]}"; do _disk_set["$_img"]=1; done
-      for _img in "${_script_list[@]}"; do _script_set["$_img"]=1; done
+      for _img in "${_disk_list[@]}"; do [[ -n "$_img" ]] && _disk_set["$_img"]=1; done
+      for _img in "${_script_list[@]}"; do [[ -n "$_img" ]] && _script_set["$_img"]=1; done
       for _img in "${_disk_list[@]}"; do
-        [[ -z "${_script_set[$_img]:-}" ]] && _new+=( "$_img" )
+        [[ -n "$_img" && -z "${_script_set[$_img]:-}" ]] && _new+=( "$_img" )
       done
       for _img in "${_script_list[@]}"; do
-        [[ -z "${_disk_set[$_img]:-}" ]] && _removed+=( "$_img" )
+        [[ -n "$_img" && -z "${_disk_set[$_img]:-}" ]] && _removed+=( "$_img" )
       done
 
       if (( ${#_new[@]} == 0 && ${#_removed[@]} == 0 )); then
