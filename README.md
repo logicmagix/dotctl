@@ -1,9 +1,9 @@
 # dotctl
 
 Unified theme controller for a Hyprland Wayland desktop. One command
-re-themes cava, kitty, mako, wofi, waybar, tty-clock (optional), hyprland,
-and hyprpaper against a coordinated state file - no more editing eight
-config files to change a color.
+re-themes cava, kitty, mako, wofi, waybar, hyprland, and hyprpaper
+against a coordinated state file - no more editing eight config files
+to change a color.
 
 ```sh
 dotctl set -c forest -f meslo      # all five UI elements switch together
@@ -23,21 +23,18 @@ dotctl cycle wallpaper next        # keybind entry point
 | **mako**      |   ✓   |  ✓   |  ✓   |                                                               |
 | **wofi**      |   ✓   |  ✓   |  ✓   | subvariant (1/2)                                              |
 | **waybar**    |   ✓   |  ✓   |  ✓   | style, scope, decor, vpn, transparent, opacity, launcher logo, editor |
-| **tty-clock** |   ✓   |      |      | optional - installed via the `tty-clock-themed` wrapper       |
 | **hypr**      |   ✓   |      |      | window effect (shadow/glow)                                   |
 | **wallpaper** |   ✓   |      |      | cycle script per theme                                        |
 
-Everything lives in one 25-field, hand-editable state file at
-`~/.config/dotctl/config` (tty-clock slot stays empty for users who
-opted out at install). `dotctl configure` walks a wizard through every
-axis; `dotctl set` takes targeted flags; `dotctl apply` re-reads the
-file after a hand edit; `dotctl watch` auto-applies on save.
+Everything lives in one 24-field, hand-editable state file at
+`~/.config/dotctl/config`. `dotctl configure` walks a wizard through
+every axis; `dotctl set` takes targeted flags; `dotctl apply` re-reads
+the file after a hand edit; `dotctl watch` auto-applies on save.
 
 ## Features
 
 - **Unified switch** - `dotctl set -c <color> -f <font>` fans out across
-  cava, kitty, mako, wofi, waybar, and (when installed) tty-clock in one
-  command.
+  cava, kitty, mako, wofi, and waybar in one command.
 - **Per-element override** - still want gruvbox on waybar while the rest
   stays forest? `dotctl set --waybar-color gruvbox`.
 - **`sync`** - copy color/font from one element to another, or to `all`,
@@ -88,9 +85,6 @@ file after a hand edit; `dotctl watch` auto-applies on save.
 - `waybar`, `cava`, `kitty`, `mako`, `wofi`
 - `inotify-tools` (optional - powers `dotctl watch`; 1 s mtime polling fallback if missing)
 - `jq`, `wl-clipboard`
-- `tty-clock` (optional - gated behind an install prompt; uses `yay` on
-  Arch for the AUR fallback, native pkg mgr elsewhere. If you decline,
-  dotctl transparently skips the element everywhere)
 
 **Known-good distros** (auto-detected by `install.sh`):
 Gentoo, Arch / CachyOS / EndeavourOS / Manjaro / Artix, Debian / Ubuntu /
@@ -199,7 +193,6 @@ dotctl set --waybar-vpn on                 # needs vpnctl + vpn-status-indicator
 dotctl set --hypr-effect glow              # colored glow instead of drop shadow
 dotctl set --launcher-logo nixos           # survives cycle waybar rotations
 dotctl set --waybar-editor tide42          # TUIs use kitty/foot/alacritty; GUI editors launch direct
-dotctl set --tty-clock-color gruvbox       # only if you installed tty-clock
 dotctl set -w decay_green                  # wallpaper-only, UI untouched
 ```
 
@@ -236,7 +229,6 @@ single "active" file each app reads, and signals the daemon:
 | mako      | `~/.config/mako/<color>_<font>/config`               | `~/.config/mako/config`             | `makoctl reload`         |
 | wofi      | `~/.config/wofi/<color>_<font>/<variant>/style.css`  | `~/.config/wofi/style.css`          | (on next launch)         |
 | waybar    | `~/.config/waybar/<style>_<scope>/{config.jsonc,style.css}` + `palettes/<color>.palette` + `fonts/<font>.fontdef` + `decorators/<decor>.glyphs` | `~/.config/waybar/{config.jsonc,style.css}` | `pkill -SIGUSR2 waybar` |
-| tty-clock | `~/.config/tty-clock/<color>/config` (sourced by `tty-clock-themed`) | `~/.config/tty-clock/config`        | (user re-launches)       |
 | hypr      | `~/.local/share/dotctl/dotctl-colors.conf.tmpl` + active waybar palette | `~/.config/hypr/dotctl-colors.conf` | `hyprctl reload`         |
 | wallpaper | `~/Pictures/dotctl/wallpapers/<theme>/` + `~/.config/dotctl/cycle/cycle-hyprpaper-<theme>` | `hyprpaper` daemon                  | (hyprpaper reload)       |
 
@@ -248,10 +240,9 @@ variant files drives all 5 × 4 = 20 color/variant combinations.
 
 ### State file
 
-`~/.config/dotctl/config` is 25 `KEY=value` lines (the tty-clock slot
-stays empty for users who opted out), flock-guarded on writes. You can
-hand-edit it and re-apply with `dotctl apply`, or run `dotctl watch` in
-a second terminal to auto-apply on save:
+`~/.config/dotctl/config` is 24 `KEY=value` lines, flock-guarded on
+writes. You can hand-edit it and re-apply with `dotctl apply`, or run
+`dotctl watch` in a second terminal to auto-apply on save:
 
 ```sh
 CAVA_COLOR=forest
@@ -299,13 +290,10 @@ Drop matching directories at every element location:
 ~/.config/wofi/<color>_<font>/1/style.css
 ~/.config/wofi/<color>_<font>/2/style.css
 ~/.config/waybar/palettes/<color>.palette
-~/.config/tty-clock/<color>/config        # only if tty-clock was installed
 ```
 
 `dotctl list colors` will pick the new color up the next time it runs,
-and `dotctl set -c <color>` will apply it. The tty-clock slot is
-optional - dotctl computes the color intersection only across elements
-that are actually installed.
+and `dotctl set -c <color>` will apply it.
 
 ### New wallpaper theme
 
@@ -352,13 +340,6 @@ The VPN module is opt-in at install time. Re-run `install.sh` and pick
 "yes" at the VPN gate, or manually symlink `vpnctl` and
 `vpn-status-indicator` from `stage/modules/` onto `PATH`.
 
-**`dotctl set --tty-clock-color X` errors with "tty-clock not installed".**
-tty-clock is opt-in at install time. Re-run `install.sh` and pick "yes"
-at the tty-clock gate, or install the binary yourself (yay/pacman on
-Arch, native pkg mgr elsewhere) and copy `tty-clock_config/` into
-`~/.config/tty-clock/` plus the `tty-clock-themed` wrapper from
-`stage/modules/` onto `PATH`.
-
 **Waybar launcher / power click does nothing.**
 Make sure `power` and `launcher` are on `PATH`:
 `command -v power launcher`. They're symlinked into `/usr/local/bin/`
@@ -390,16 +371,15 @@ reload hyprland automatically.
 Removes the system symlinks, the man page (both `.1` and `.1.gz` forms),
 the hyprland snippets, and the data template. Prompts individually
 before removing any user data under `~/.config/dotctl/`,
-`~/.config/{cava,kitty,mako,wofi,waybar,tty-clock}/`, and
+`~/.config/{cava,kitty,mako,wofi,waybar}/`, and
 `~/Pictures/dotctl/wallpapers/`. Symlinks in `/usr/local/bin/` that
 happen to share a name with a module but point outside the repo are
 left alone.
 
-The uninstaller also offers to package-remove tty-clock (the only
-dotctl-specific dep the installer introduces as a system package). Shared
-runtime deps like waybar, cava, kitty, mako, wofi, `jq`, `wl-clipboard`,
-`lm-sensors`, `libnotify`, `pavucontrol`, and `inotify-tools` are never
-package-removed - most Hyprland users want to keep them.
+Shared runtime deps like waybar, cava, kitty, mako, wofi, `jq`,
+`wl-clipboard`, `lm-sensors`, `libnotify`, `pavucontrol`, and
+`inotify-tools` are never package-removed - most Hyprland users want to
+keep them.
 
 Finally, remove the two `source = ` lines you added to
 `~/.config/hypr/hyprland.conf`, then `hyprctl reload`.
@@ -414,7 +394,6 @@ dotctl/
 ├── kitty_config/             kitty theme sources (<color>_<font>/kitty.conf)
 ├── mako_config/              mako theme sources  (<color>_<font>/config)
 ├── wofi_config/              wofi theme sources  (<color>_<font>/<variant>/style.css)
-├── tty-clock_config/         optional tty-clock theme sources (<color>/config)
 ├── waybar_config/
 │   ├── console_full/         canonical waybar variants (config.jsonc + style.css)
 │   ├── console_minimal/

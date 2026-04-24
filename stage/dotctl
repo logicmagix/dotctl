@@ -1,5 +1,5 @@
 #!/bin/bash
-# dotctl - unified theme controller for cava, kitty, mako, wofi, waybar, tty-clock, hyprpaper.
+# dotctl - unified theme controller for cava, kitty, mako, wofi, waybar, hyprpaper.
 #
 #   dotctl help            for full usage
 #   dotctl configure       first-time interactive setup (required before any other command)
@@ -27,9 +27,6 @@ readonly KITTY_DIR="$CONFIG_ROOT/kitty"
 readonly MAKO_DIR="$CONFIG_ROOT/mako"
 readonly WOFI_DIR="$CONFIG_ROOT/wofi"
 readonly WAYBAR_DIR="$CONFIG_ROOT/waybar"
-# tty-clock is optional: the installer only creates $TTYCLOCK_DIR when the
-# user opts in, so all tty-clock paths are guarded by `ttyclock_available`.
-readonly TTYCLOCK_DIR="$CONFIG_ROOT/tty-clock"
 readonly HYPR_DIR="$CONFIG_ROOT/hypr"
 readonly HYPR_COLORS_FILE="$HYPR_DIR/dotctl-colors.conf"
 readonly HYPR_COLORS_TEMPLATE="$HOME/.local/share/dotctl/dotctl-colors.conf.tmpl"
@@ -56,7 +53,6 @@ readonly STATE_KEYS=(
   MAKO_COLOR    MAKO_FONT    MAKO_FONT_SIZE
   WOFI_COLOR    WOFI_FONT    WOFI_FONT_SIZE  WOFI_VARIANT
   WAYBAR_COLOR  WAYBAR_FONT  WAYBAR_FONT_SIZE WAYBAR_STYLE WAYBAR_SCOPE WAYBAR_DECOR WAYBAR_VPN WAYBAR_TRANSPARENT WAYBAR_OPACITY WAYBAR_LAUNCHER_LOGO WAYBAR_EDITOR
-  TTYCLOCK_COLOR
   HYPR_EFFECT
   WALLPAPER
 )
@@ -242,13 +238,8 @@ load_state() {
   # Style axis renames: zsh → console, bubble → pill. Auto-migrate old state.
   [[ "$WAYBAR_STYLE" == "zsh" ]]    && WAYBAR_STYLE="console"
   [[ "$WAYBAR_STYLE" == "bubble" ]] && WAYBAR_STYLE="pill"
-  # tty-clock is opt-in at install time - allow TTYCLOCK_COLOR to stay empty
-  # when the user didn't install tty-clock configs. apply_ttyclock/show/etc.
-  # guard on ttyclock_available before touching this value.
-  : "${TTYCLOCK_COLOR:=}"
   local k
   for k in "${STATE_KEYS[@]}"; do
-    [[ "$k" == "TTYCLOCK_COLOR" ]] && continue
     [[ -n "${!k:-}" ]] || die "state file is missing key: $k. Run \`dotctl configure\` to repair."
   done
 }
@@ -281,26 +272,6 @@ detect_cava_colors() {
     [[ -f "${d}config" ]] || continue
     basename "$d"
   done | sort -u
-}
-
-# tty-clock colors share the same shape as cava: top-level dirs with a
-# `config` file (sourced by the tty-clock-themed wrapper, not tty-clock
-# directly - tty-clock has no config format). Empty output when the user
-# opted out of tty-clock at install time.
-detect_ttyclock_colors() {
-  [[ -d "$TTYCLOCK_DIR" ]] || return 0
-  local d
-  for d in "$TTYCLOCK_DIR"/*/; do
-    [[ -f "${d}config" ]] || continue
-    basename "$d"
-  done | sort -u
-}
-
-# tty-clock integration is live iff at least one themed config dir exists.
-# All tty-clock touch points in dotctl gate on this so users who opted out
-# at install get a fully transparent degrade.
-ttyclock_available() {
-  [[ -d "$TTYCLOCK_DIR" ]] && [[ -n "$(detect_ttyclock_colors)" ]]
 }
 
 # Colors for kitty/mako = any <color>_<font> dir - we extract the leading color
@@ -425,19 +396,15 @@ detect_wallpapers_orphan_scripts() {
 }
 
 # Intersection of UI colors across every installed element - candidates for
-# --color. tty-clock joins the intersection only when the user opted in at
-# install time, so users without it don't see spurious "color missing from
-# tty-clock" mismatches.
+# --color.
 detect_ui_colors() {
   local required=5
-  ttyclock_available && required=6
   {
     detect_cava_colors
     detect_kitty_colors
     detect_mako_colors
     detect_wofi_colors
     detect_waybar_colors
-    ttyclock_available && detect_ttyclock_colors
   } | sort | uniq -c | awk -v n="$required" '$1==n {print $2}'
 }
 
@@ -457,7 +424,6 @@ validate_kitty_color()   { _in_list "$1" $(detect_kitty_colors); }
 validate_mako_color()    { _in_list "$1" $(detect_mako_colors); }
 validate_wofi_color()    { _in_list "$1" $(detect_wofi_colors); }
 validate_waybar_color()  { _in_list "$1" $(detect_waybar_colors); }
-validate_ttyclock_color(){ _in_list "$1" $(detect_ttyclock_colors); }
 validate_wallpaper()     { _in_list "$1" $(detect_wallpapers); }
 
 validate_kitty_font()   { _in_list "$1" $(detect_kitty_fonts); }
@@ -499,7 +465,6 @@ path_kitty()    { printf '%s/%s_%s/kitty.conf\n' "$KITTY_DIR" "$1" "$2"; }
 path_mako()     { printf '%s/%s_%s/config\n' "$MAKO_DIR" "$1" "$2"; }
 path_wofi()     { printf '%s/%s_%s/%s/style.css\n' "$WOFI_DIR" "$1" "$2" "$3"; }
 path_waybar()   { printf '%s/%s_%s\n' "$WAYBAR_DIR" "$1" "$2"; }  # args: style, scope
-path_ttyclock() { printf '%s/%s/config\n' "$TTYCLOCK_DIR" "$1"; }
 
 # ──────────────────────────────────────────────────────────────────────────────
 #  Apply functions - copy themed source into the live slot, reload the daemon
@@ -511,19 +476,6 @@ apply_cava() {
   cp -f "$src" "$CAVA_DIR/config"
   log "apply cava: $CAVA_COLOR"
   # cava doesn't hot-reload; user restarts it manually if running.
-}
-
-apply_ttyclock() {
-  # Silent no-op when the user opted out of tty-clock at install time, or
-  # has tty-clock installed but never configured a theme yet.
-  ttyclock_available || return 0
-  [[ -n "$TTYCLOCK_COLOR" ]] || return 0
-  local src; src=$(path_ttyclock "$TTYCLOCK_COLOR")
-  [[ -f "$src" ]] || die "tty-clock source missing: $src"
-  cp -f "$src" "$TTYCLOCK_DIR/config"
-  log "apply tty-clock: $TTYCLOCK_COLOR"
-  # tty-clock has no IPC; users re-launch `tty-clock-themed` to pick up
-  # the new palette.
 }
 
 apply_kitty() {
@@ -810,7 +762,6 @@ apply_all() {
   apply_mako
   apply_wofi
   apply_waybar
-  apply_ttyclock
   apply_hypr
   apply_wallpaper
 }
@@ -825,7 +776,6 @@ apply_subset() {
       mako)      apply_mako;;
       wofi)      apply_wofi;;
       waybar)    apply_waybar;;
-      tty-clock|ttyclock) apply_ttyclock;;
       hypr)      apply_hypr;;
       wallpaper) apply_wallpaper;;
       *) warn "unknown element: $el";;
@@ -867,19 +817,11 @@ EOF
     "wofi" "$WOFI_COLOR" "$WOFI_FONT" "$WOFI_FONT_SIZE" "$WOFI_VARIANT"
   printf '  %-10s color=%s  font=%s  size=%s  style=%s  scope=%s  decor=%s  vpn=%s  transparent=%s  opacity=%s  logo=%s  editor=%s\n' \
     "waybar" "$WAYBAR_COLOR" "$WAYBAR_FONT" "$WAYBAR_FONT_SIZE" "$WAYBAR_STYLE" "$WAYBAR_SCOPE" "$WAYBAR_DECOR" "$WAYBAR_VPN" "$WAYBAR_TRANSPARENT" "$WAYBAR_OPACITY" "$WAYBAR_LAUNCHER_LOGO" "$WAYBAR_EDITOR"
-  if ttyclock_available; then
-    printf '  %-10s color=%s\n' "tty-clock" "${TTYCLOCK_COLOR:-<unset>}"
-  fi
   printf '  %-10s effect=%s\n' "hypr" "$HYPR_EFFECT"
   printf '  %-10s %s\n' "wallpaper" "$WALLPAPER"
 
-  # Drift detection - tty-clock joins the color comparison only when the
-  # user has it installed and configured (empty TTYCLOCK_COLOR would
-  # falsely trigger drift).
+  # Drift detection across UI elements.
   local ui_colors=( "$CAVA_COLOR" "$KITTY_COLOR" "$MAKO_COLOR" "$WOFI_COLOR" "$WAYBAR_COLOR" )
-  if ttyclock_available && [[ -n "$TTYCLOCK_COLOR" ]]; then
-    ui_colors+=( "$TTYCLOCK_COLOR" )
-  fi
   local ui_fonts=( "$KITTY_FONT" "$MAKO_FONT" "$WOFI_FONT" "$WAYBAR_FONT" )
   local unique_colors unique_fonts
   unique_colors=$(printf '%s\n' "${ui_colors[@]}" | sort -u | wc -l)
@@ -925,7 +867,6 @@ cmd_list() {
     mako-colors)        detect_mako_colors;;
     wofi-colors)        detect_wofi_colors;;
     waybar-colors)      detect_waybar_colors;;
-    tty-clock-colors|ttyclock-colors) detect_ttyclock_colors;;
     fonts)              detect_kitty_fonts;;
     kitty-fonts)        detect_kitty_fonts;;
     mako-fonts)         detect_mako_fonts;;
@@ -960,7 +901,6 @@ axes:
   mako-colors      colors available for mako
   wofi-colors      colors available for wofi
   waybar-colors    colors available for waybar
-  tty-clock-colors colors available for tty-clock (empty if opted out)
   fonts            fonts available (kitty)
   kitty-fonts
   mako-fonts
@@ -1012,7 +952,6 @@ cmd_set() {
   local new_mako_color='' new_mako_font='' new_mako_font_size=''
   local new_wofi_color='' new_wofi_font='' new_wofi_font_size='' new_wofi_variant=''
   local new_waybar_color='' new_waybar_font='' new_waybar_font_size='' new_waybar_style='' new_waybar_scope='' new_waybar_decor='' new_waybar_vpn='' new_waybar_transparent='' new_waybar_opacity='' new_waybar_launcher_logo='' new_waybar_editor='' new_hypr_effect=''
-  local new_ttyclock_color=''
   local new_wallpaper=''
   local preset_name=''
 
@@ -1045,8 +984,6 @@ cmd_set() {
                              new_waybar_launcher_logo="$2"; shift 2;;
       --waybar-editor|--editor)
                              new_waybar_editor="$2"; shift 2;;
-      --tty-clock-color|--ttyclock-color)
-                             new_ttyclock_color="$2"; shift 2;;
       --hypr-effect)         new_hypr_effect="$2"; shift 2;;
       -w|--wallpaper)        new_wallpaper="$2"; shift 2;;
       --preset)              preset_name="$2"; shift 2;;
@@ -1062,23 +999,18 @@ cmd_set() {
   fi
 
   # 2. Apply shortcuts (--color fans out to every installed UI element;
-  #    --font to the 4 font-bearing elements). tty-clock only joins the
-  #    fan-out when the user opted in at install time.
+  #    --font to the 4 font-bearing elements).
   if [[ -n "$new_color" ]]; then
     validate_cava_color   "$new_color" || die "--color: $new_color has no cava dir"
     validate_kitty_color  "$new_color" || die "--color: $new_color has no kitty dirs"
     validate_mako_color   "$new_color" || die "--color: $new_color has no mako dirs"
     validate_wofi_color   "$new_color" || die "--color: $new_color has no wofi dirs"
     validate_waybar_color "$new_color" || die "--color: $new_color has no waybar dirs"
-    if ttyclock_available; then
-      validate_ttyclock_color "$new_color" || die "--color: $new_color has no tty-clock dir"
-    fi
     CAVA_COLOR="$new_color"
     KITTY_COLOR="$new_color"
     MAKO_COLOR="$new_color"
     WOFI_COLOR="$new_color"
     WAYBAR_COLOR="$new_color"
-    ttyclock_available && TTYCLOCK_COLOR="$new_color"
   fi
   if [[ -n "$new_font" ]]; then
     validate_kitty_font  "$new_font" || die "--font: $new_font not available for kitty"
@@ -1127,11 +1059,6 @@ cmd_set() {
   [[ -n "$new_waybar_opacity" ]]    && { validate_waybar_opacity "$new_waybar_opacity" || die "invalid waybar opacity: $new_waybar_opacity (must be a number in [0, 1])"; WAYBAR_OPACITY="$new_waybar_opacity"; }
   [[ -n "$new_waybar_launcher_logo" ]] && { validate_waybar_launcher_logo "$new_waybar_launcher_logo" || die "invalid waybar launcher logo: $new_waybar_launcher_logo (try \`dotctl list launcher-logos\`)"; WAYBAR_LAUNCHER_LOGO="$new_waybar_launcher_logo"; }
   [[ -n "$new_waybar_editor" ]]        && { validate_waybar_editor "$new_waybar_editor" || die "invalid waybar editor: $new_waybar_editor (try \`dotctl list waybar-editors\`)"; WAYBAR_EDITOR="$new_waybar_editor"; }
-  if [[ -n "$new_ttyclock_color" ]]; then
-    ttyclock_available || die "--tty-clock-color: tty-clock not installed. Re-run install.sh and accept the tty-clock prompt."
-    validate_ttyclock_color "$new_ttyclock_color" || die "invalid tty-clock color: $new_ttyclock_color"
-    TTYCLOCK_COLOR="$new_ttyclock_color"
-  fi
   [[ -n "$new_hypr_effect" ]]       && { validate_hypr_effect "$new_hypr_effect" || die "invalid hypr effect: $new_hypr_effect (must be shadow|glow)"; HYPR_EFFECT="$new_hypr_effect"; }
   [[ -n "$new_wallpaper" ]]         && { validate_wallpaper    "$new_wallpaper"    || die "invalid wallpaper theme: $new_wallpaper"; WALLPAPER="$new_wallpaper"; }
 
@@ -1145,9 +1072,8 @@ _help_set() {
 dotctl set [FLAGS]
 
   -c, --color <C>          Set color for cava, kitty, mako, wofi, waybar
-                           (and tty-clock if installed)
-  -f, --font <F>           Set font for kitty, mako, wofi, waybar (cava,
-                           tty-clock unaffected - no font axis)
+  -f, --font <F>           Set font for kitty, mako, wofi, waybar (cava
+                           unaffected - no font axis)
       --font-size <N>      Set font size for kitty, mako, wofi, waybar  (4–72)
 
   --cava-color <C>
@@ -1170,9 +1096,6 @@ dotctl set [FLAGS]
   --waybar-vpn <S>         waybar vpn module (on | off) - requires vpnctl + vpn-status-indicator on PATH
   --waybar-transparent <S> waybar bar background (on = transparent, off = opaque palette fill)
   --waybar-opacity <N>     waybar bar opacity [0.0-1.0] - only applies when transparent=off
-  --tty-clock-color <C>    tty-clock palette (only when tty-clock was
-                           installed via install.sh). See `dotctl list
-                           tty-clock-colors`.
   --hypr-effect <E>        hyprland window effect (shadow | glow)
   --launcher-logo <L>      waybar launcher distro glyph
                            (tux | arch | gentoo | debian | void | nixos |
@@ -1287,7 +1210,6 @@ _element_color() {
     mako)                printf '%s\n' "$MAKO_COLOR";;
     wofi)                printf '%s\n' "$WOFI_COLOR";;
     waybar)              printf '%s\n' "$WAYBAR_COLOR";;
-    tty-clock|ttyclock)  printf '%s\n' "$TTYCLOCK_COLOR";;
     wallpaper)           printf '%s\n' "$WALLPAPER";;
     *) return 1;;
   esac
@@ -1299,7 +1221,7 @@ _element_font() {
     mako)   printf '%s\n' "$MAKO_FONT";;
     wofi)   printf '%s\n' "$WOFI_FONT";;
     waybar) printf '%s\n' "$WAYBAR_FONT";;
-    cava|tty-clock|ttyclock|wallpaper) printf '-\n';;
+    cava|wallpaper) printf '-\n';;
     *) return 1;;
   esac
 }
@@ -1322,10 +1244,6 @@ _set_element_color() {
     waybar)
       validate_waybar_color "$color" || die "sync: waybar has no color $color"
       WAYBAR_COLOR="$color";;
-    tty-clock|ttyclock)
-      ttyclock_available || die "sync: tty-clock not installed"
-      validate_ttyclock_color "$color" || die "sync: tty-clock has no color $color"
-      TTYCLOCK_COLOR="$color";;
     wallpaper)
       validate_wallpaper "$color" || die "sync: no wallpaper theme \`$color\`"
       WALLPAPER="$color";;
@@ -1349,7 +1267,7 @@ _set_element_font() {
     waybar)
       validate_waybar_font "$font" || die "sync: waybar has no font $font"
       WAYBAR_FONT="$font";;
-    cava|tty-clock|ttyclock|wallpaper) ;;  # no font axis
+    cava|wallpaper) ;;  # no font axis
     *) die "sync: unknown element $el";;
   esac
 }
@@ -1366,18 +1284,16 @@ Copy color (and font, where both have a font axis) from <source> to <target>.
 Never copies style, scope, variant, decor, vpn, transparent, or opacity -
 those stay on the target.
 
-  target ∈ { cava, kitty, mako, wofi, waybar, tty-clock, wallpaper, all }
-  source ∈ { cava, kitty, mako, wofi, waybar, tty-clock, wallpaper }
+  target ∈ { cava, kitty, mako, wofi, waybar, wallpaper, all }
+  source ∈ { cava, kitty, mako, wofi, waybar, wallpaper }
 
-Elements without a font axis (cava, tty-clock, wallpaper) are sync-color-only.
-When <target> is `all`, the <source> element itself is left untouched. tty-clock
-is only reachable via sync when it was installed (see install.sh).
+Elements without a font axis (cava, wallpaper) are sync-color-only.
+When <target> is `all`, the <source> element itself is left untouched.
 
 Examples:
   dotctl sync wallpaper waybar    # wallpaper follows waybar color
   dotctl sync all kitty           # every installed element + wallpaper take kitty's color+font
   dotctl sync waybar cava         # waybar color ← cava color (cava has no font)
-  dotctl sync tty-clock kitty     # tty-clock palette follows kitty (no font axis)
 EOF
       return 0;;
   esac
@@ -1392,9 +1308,6 @@ EOF
 
   if [[ "$target" == "all" ]]; then
     local el targets=( cava kitty mako wofi waybar wallpaper )
-    # tty-clock joins `all` only when installed - skips it transparently
-    # for users who opted out.
-    ttyclock_available && targets+=( tty-clock )
     for el in "${targets[@]}"; do
       [[ "$el" == "$source" ]] && continue
       _set_element_color "$el" "$src_color" || warn "sync: skip $el (no match for $src_color)"
@@ -1525,11 +1438,11 @@ cmd_configure() {
 dotctl configure [--preset <name>]
 
 Interactive wizard. Walks every installed element:
-  cava → kitty → mako → wofi → waybar → [tty-clock] → wallpaper
+  cava → kitty → mako → wofi → waybar → wallpaper
 
-tty-clock is included only when the installer set it up. Each prompt
-defaults to the current value (or preset value with --preset). Ends with
-a summary, an apply confirmation, and an optional save-as-preset step.
+Each prompt defaults to the current value (or preset value with --preset).
+Ends with a summary, an apply confirmation, and an optional save-as-preset
+step.
 EOF
         return 0;;
       *) die "configure: unknown flag \`$1\`";;
@@ -1568,7 +1481,7 @@ EOF
 
   # Discover options per element
   local cava_colors kitty_colors kitty_fonts mako_colors mako_fonts
-  local wofi_colors wofi_fonts wofi_variants ttyclock_colors
+  local wofi_colors wofi_fonts wofi_variants
   local waybar_colors waybar_fonts waybar_styles waybar_scopes waybar_decors waybar_vpns waybar_transparents waybar_opacities hypr_effects
   local wallpapers
 
@@ -1589,7 +1502,6 @@ EOF
   mapfile -t waybar_transparents < <(detect_waybar_transparents)
   mapfile -t waybar_opacities    < <(detect_waybar_opacities)
   mapfile -t hypr_effects        < <(detect_hypr_effects)
-  mapfile -t ttyclock_colors     < <(detect_ttyclock_colors)
   mapfile -t wallpapers     < <(detect_wallpapers)
 
   (( ${#cava_colors[@]}   > 0 )) || die "no cava colors detected in $CAVA_DIR"
@@ -1599,10 +1511,8 @@ EOF
   (( ${#waybar_colors[@]} > 0 )) || die "no waybar colors detected in $WAYBAR_DIR"
   (( ${#wallpapers[@]}    > 0 )) || die "no wallpaper themes detected in $WALLPAPER_ROOT (with matching cycle scripts)"
 
-  # Total step count in prompt labels adapts to whether tty-clock is
-  # installed - 6 without, 7 with.
+  # Total step count in prompt labels (5 UI elements + wallpaper).
   local total=6
-  ttyclock_available && total=7
 
   CAVA_COLOR=$(prompt_select      "[1/$total] cava color"               "$CAVA_COLOR"   "${cava_colors[@]}")
 
@@ -1668,15 +1578,7 @@ EOF
   done
   WAYBAR_EDITOR=$(prompt_select "      waybar editor" "$WAYBAR_EDITOR" "${we_opts[@]}")
 
-  if ttyclock_available; then
-    # Default to the current waybar color so first-time users get a coherent
-    # theme without an extra decision. Existing state is preserved.
-    : "${TTYCLOCK_COLOR:=$WAYBAR_COLOR}"
-    TTYCLOCK_COLOR=$(prompt_select "[6/$total] tty-clock color"       "$TTYCLOCK_COLOR" "${ttyclock_colors[@]}")
-    WALLPAPER=$(prompt_select      "[7/$total] wallpaper theme"       "$WALLPAPER"    "${wallpapers[@]}")
-  else
-    WALLPAPER=$(prompt_select      "[6/$total] wallpaper theme"       "$WALLPAPER"    "${wallpapers[@]}")
-  fi
+  WALLPAPER=$(prompt_select        "[6/$total] wallpaper theme"       "$WALLPAPER"    "${wallpapers[@]}")
 
   # Summary
   info ""
@@ -1686,7 +1588,6 @@ EOF
   printf '  %-10s %s / %s / size %s\n' "mako"  "$MAKO_COLOR" "$MAKO_FONT" "$MAKO_FONT_SIZE"
   printf '  %-10s %s / %s / size %s / variant %s\n' "wofi" "$WOFI_COLOR" "$WOFI_FONT" "$WOFI_FONT_SIZE" "$WOFI_VARIANT"
   printf '  %-10s %s / %s / size %s / %s_%s / decor %s / vpn %s / transparent %s (%s) / logo %s / editor %s\n' "waybar" "$WAYBAR_COLOR" "$WAYBAR_FONT" "$WAYBAR_FONT_SIZE" "$WAYBAR_STYLE" "$WAYBAR_SCOPE" "$WAYBAR_DECOR" "$WAYBAR_VPN" "$WAYBAR_TRANSPARENT" "$WAYBAR_OPACITY" "$WAYBAR_LAUNCHER_LOGO" "$WAYBAR_EDITOR"
-  ttyclock_available && printf '  %-10s %s\n' "tty-clock" "$TTYCLOCK_COLOR"
   printf '  %-10s effect %s\n' "hypr" "$HYPR_EFFECT"
   printf '  %-10s %s\n' "wallpaper" "$WALLPAPER"
   info ""
@@ -2251,7 +2152,7 @@ EOF
 
 cmd_help() {
   cat <<'EOF'
-dotctl - unified theme controller for cava, kitty, mako, wofi, waybar, tty-clock, hyprland, hyprpaper
+dotctl - unified theme controller for cava, kitty, mako, wofi, waybar, hyprland, hyprpaper
 
 USAGE
   dotctl <action> [args...]
@@ -2267,9 +2168,8 @@ ACTIONS
   cycle <wallpaper|waybar> <next|prev>
                                    Keybind entry points
   sync <target> <source>           Copy color/font from one element to another
-                                   target ∈ {cava,kitty,mako,wofi,waybar,tty-clock,wallpaper,all}
-                                   source ∈ {cava,kitty,mako,wofi,waybar,tty-clock,wallpaper}
-                                   (tty-clock only when installed via install.sh)
+                                   target ∈ {cava,kitty,mako,wofi,waybar,wallpaper,all}
+                                   source ∈ {cava,kitty,mako,wofi,waybar,wallpaper}
   list <axis>                      List valid values for an axis  (try `dotctl list help`)
   preset <save|load|list|show|delete> [name]
   new wallpaper <name>             Scaffold ~/Pictures/dotctl/wallpapers/<name>/
@@ -2292,7 +2192,6 @@ QUICK REFERENCE
   dotctl set --waybar-vpn on       Requires vpnctl + vpn-status-indicator on PATH
   dotctl set --hypr-effect glow    Hyprland shadow/border color effect
   dotctl set --launcher-logo nixos
-  dotctl set --tty-clock-color gruvbox   (only when tty-clock was installed)
   dotctl set -w forest
   dotctl cycle wallpaper next      (keybind: Super+Alt Right)
   dotctl cycle waybar    next      (keybind: Super+Alt Up)
@@ -2320,7 +2219,6 @@ SOURCES (read-only from dotctl's perspective)
   ~/.config/waybar/palettes/<color>.palette
   ~/.config/waybar/fonts/<font>.fontdef
   ~/.config/waybar/decorators/<decor>.glyphs
-  ~/.config/tty-clock/<color>/config                          (optional - only when tty-clock was installed)
   ~/.local/share/dotctl/dotctl-colors.conf.tmpl               (hyprland color template)
   ~/Pictures/dotctl/wallpapers/<theme>/   + ~/.config/dotctl/cycle/cycle-hyprpaper-<theme>
 

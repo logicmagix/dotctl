@@ -59,10 +59,10 @@ This script will:
   4. Optionally symlink ${BOLD}$SYS_BIN/${RST}{vpnctl, vpn-status-indicator} → repo
   4a. Optionally symlink ${BOLD}$SYS_BIN/gputemp${RST} → repo (skip on machines
       without a discrete GPU - the waybar module stays authored either way)
-  4b. Optionally install tty-clock (via yay on Arch/AUR, native pkg mgr
-      elsewhere) and drop the tty-clock-themed wrapper + themed configs
   5. Copy ${BOLD}~/.config/${RST}{cava, kitty, mako, wofi, waybar} from repo config dirs
-     (any existing config is renamed to ${BOLD}<name>.bak-<timestamp>${RST} first)
+     (conflicting files are renamed to ${BOLD}<file>.bak-<timestamp>${RST} in place;
+     user-added files and untouched files are left alone - no whole-directory
+     backups)
   6. Install bundled Nerd Fonts (MesloLGS NF, Phoenix) to ~/.local/share/fonts/
   7. Copy ${BOLD}~/.config/dotctl/cycle/${RST} (wallpaper cycle scripts + template)
   8. Copy ${BOLD}~/.config/hypr/${RST}{dotctl-keybinds.conf, dotctl-colors.conf} snippets
@@ -288,52 +288,6 @@ if confirm "Install the optional GPU temp module (gputemp - skip on non-discrete
   WANT_GPU=1
 fi
 
-# ── Gate: tty-clock (opt-in) ────────────────────────────────────────────────
-# tty-clock is in native repos on Gentoo (app-misc), Debian/Ubuntu, Fedora,
-# Void, and Arch (extra). On Arch-family we prefer yay when available so
-# AUR-only forks and repo versions both work out of the box. Installer
-# failures are non-fatal: users who can't get the binary simply won't have
-# anything on PATH for `tty-clock-themed` to call.
-
-WANT_TTYCLOCK=0
-if confirm "Install optional tty-clock integration (binary + themed wrapper)?" n; then
-  WANT_TTYCLOCK=1
-fi
-
-ttyclock_pkg_install() {
-  # Try yay first on pacman-family (covers both extra and AUR), then fall
-  # back to pacman. On other distros, just use the native install command.
-  case "$PKG_MANAGER" in
-    pacman)
-      if command -v yay >/dev/null 2>&1; then
-        info "Installing tty-clock via yay…"
-        yay -S --noconfirm --needed tty-clock || warn "yay install failed; try 'yay -S tty-clock' manually"
-      else
-        info "yay not found - trying pacman (tty-clock is in extra)…"
-        "${INSTALL_CMD[@]}" tty-clock || warn "pacman install failed. Install yay and try 'yay -S tty-clock'."
-      fi
-      ;;
-    unknown)
-      warn "Unknown package manager - install tty-clock manually if you want the integration"
-      ;;
-    nix)
-      warn "On NixOS, add tty-clock to environment.systemPackages (or home-manager) yourself"
-      ;;
-    *)
-      info "Installing tty-clock via $PKG_MANAGER…"
-      "${INSTALL_CMD[@]}" tty-clock || warn "tty-clock install failed - the wrapper will still be in place, but has nothing to call"
-      ;;
-  esac
-}
-
-if (( WANT_TTYCLOCK == 1 )); then
-  if command -v tty-clock >/dev/null 2>&1; then
-    skip "tty-clock already installed"
-  else
-    ttyclock_pkg_install
-  fi
-fi
-
 # ── Sudo tick ───────────────────────────────────────────────────────────────
 
 if [[ $EUID -ne 0 ]]; then
@@ -365,9 +319,8 @@ sys_link() {
 
 sys_link "$STAGE/dotctl" "$SYS_BIN/dotctl"
 
-# Module scripts - everything in stage/modules/ except the VPN pair,
-# gputemp, and the tty-clock wrapper, which each gate on their own opt-in
-# prompts.
+# Module scripts - everything in stage/modules/ except the VPN pair and
+# gputemp, which each gate on their own opt-in prompts.
 for m in "$STAGE"/modules/*; do
   name="$(basename "$m")"
   case "$name" in
@@ -376,9 +329,6 @@ for m in "$STAGE"/modules/*; do
       ;;
     gputemp)
       (( WANT_GPU == 1 )) || { skip "$name (gpu temp module opted out)"; continue; }
-      ;;
-    tty-clock-themed)
-      (( WANT_TTYCLOCK == 1 )) || { skip "$name (tty-clock opted out)"; continue; }
       ;;
   esac
   [[ -f "$m" ]] || continue
@@ -413,18 +363,29 @@ info "Installing user configs to $CONFIG_HOME/…"
 BACKUP_TS="$(date +%Y%m%d-%H%M%S)"
 
 # Element config dirs - copy (not symlink) so user edits stay private.
-# If a destination already exists, move it aside to a timestamped backup
-# rather than deleting it. The uninstaller leaves backups alone.
+# File-level backup: for each file we're about to drop in, rename any
+# conflicting target file to <file>.bak-<timestamp> in place. Files the
+# user added (that don't exist in the repo source) and files that already
+# match byte-for-byte are left untouched. This preserves user customizations
+# across reinstalls instead of burying them in a stale whole-dir backup.
 copy_config() {
   local src="$1" dest="$2"
   [[ -d "$src" ]] || { warn "missing: $src"; return 1; }
-  mkdir -p "$(dirname "$dest")"
-  if [[ -e "$dest" || -L "$dest" ]]; then
-    local backup="${dest}.bak-${BACKUP_TS}"
-    mv "$dest" "$backup"
-    ok "backed up existing $dest → $backup"
-  fi
-  cp -a "$src" "$dest"
+  mkdir -p "$dest"
+  local f rel target
+  while IFS= read -r -d '' f; do
+    rel="${f#"$src"/}"
+    target="$dest/$rel"
+    mkdir -p "$(dirname "$target")"
+    if [[ -e "$target" || -L "$target" ]]; then
+      if cmp -s "$f" "$target" 2>/dev/null; then
+        continue
+      fi
+      mv "$target" "${target}.bak-${BACKUP_TS}"
+      ok "backed up ${target} → ${target}.bak-${BACKUP_TS}"
+    fi
+    cp -a "$f" "$target"
+  done < <(find "$src" \( -type f -o -type l \) -print0)
   ok "$dest"
 }
 
@@ -433,14 +394,6 @@ copy_config "$REPO/kitty_config"  "$CONFIG_HOME/kitty"
 copy_config "$REPO/mako_config"   "$CONFIG_HOME/mako"
 copy_config "$REPO/wofi_config"   "$CONFIG_HOME/wofi"
 copy_config "$REPO/waybar_config" "$CONFIG_HOME/waybar"
-
-# tty-clock configs only copy when the user opted in - dotctl checks for
-# ~/.config/tty-clock/ at runtime and degrades silently when absent.
-if (( WANT_TTYCLOCK == 1 )); then
-  copy_config "$REPO/tty-clock_config" "$CONFIG_HOME/tty-clock"
-else
-  skip "tty-clock_config (opted out - dotctl will skip the element)"
-fi
 
 # ── Fonts ──────────────────────────────────────────────────────────────────
 # Install bundled Nerd Fonts (MesloLGS NF, Phoenix) so waybar chevrons,
@@ -507,18 +460,13 @@ elif [[ -f "$FC_USER_CONF" ]]; then
   skip "user fontconfig already exists ($FC_USER_CONF)"
 fi
 
-# Cycle scripts (copies - user curates IMAGES=() per theme). Any existing
-# cycle/ is moved aside so the user's curated image lists survive reinstall.
+# Cycle scripts (copies - user curates IMAGES=() per theme). File-level
+# backup preserves the user's curated IMAGES=() lists across reinstall:
+# scripts they edited get their prior version saved as <name>.bak-<ts>,
+# user-authored scripts not shipped by dotctl stay put, untouched.
 info "Installing cycle scripts to $CONFIG_HOME/dotctl/cycle/…"
-if [[ -d "$CONFIG_HOME/dotctl/cycle" ]]; then
-  cycle_backup="$CONFIG_HOME/dotctl/cycle.bak-${BACKUP_TS}"
-  mv "$CONFIG_HOME/dotctl/cycle" "$cycle_backup"
-  ok "backed up existing cycle/ → $cycle_backup"
-fi
-mkdir -p "$CONFIG_HOME/dotctl/cycle"
-cp -a "$STAGE/cycle/." "$CONFIG_HOME/dotctl/cycle/"
+copy_config "$STAGE/cycle" "$CONFIG_HOME/dotctl/cycle"
 chmod +x "$CONFIG_HOME/dotctl/cycle"/cycle-hyprpaper-*
-ok "$CONFIG_HOME/dotctl/cycle/"
 
 # Hypr color template - apply_hypr reads it from ~/.local/share/dotctl/
 info "Installing hypr color template to $DATA_HOME/dotctl/…"
