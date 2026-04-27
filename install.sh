@@ -55,7 +55,7 @@ This script will:
      lm-sensors, libnotify, pavucontrol, …)
   3. Symlink ${BOLD}$SYS_BIN/${RST}{dotctl, power, launcher, cputemp,
      ws-cycle, audio-output, audio-output-menu, audio-output-status,
-     audio-hotplug-watch} → repo
+     audio-hotplug-watch, keybinds} → repo
   4. Optionally symlink ${BOLD}$SYS_BIN/${RST}{vpnctl, vpn-status-indicator} → repo
   4a. Optionally symlink ${BOLD}$SYS_BIN/gputemp${RST} → repo (skip on machines
       without a discrete GPU - the waybar module stays authored either way)
@@ -579,6 +579,16 @@ ${BOLD}Next steps:${RST}
      ${CYN}force_default_wallpaper = 0${RST}
 
    Then: ${CYN}hyprctl reload${RST}
+
+5. ${BOLD}Optional:${RST} the ${CYN}keybinds${RST} module is an opt-in wofi cheatsheet
+   that reads ~/.config/hypr/hyprland.conf, follows ${CYN}source =${RST} directives
+   recursively, and surfaces every bind that carries a trailing
+   ${CYN}# Label${RST} comment. ${BOLD}hyprland.conf is never modified${RST} - you opt in
+   per-bind. Bind it with:
+
+     ${CYN}bind = ALT, B, exec, keybinds   # Keybinds cheatsheet${RST}
+
+   See ${CYN}keybinds --help${RST} for the full annotation grammar.
 
 ${DIM}VPN module setup (if enabled): $STAGE/snippets/vpn/README.md${RST}
 

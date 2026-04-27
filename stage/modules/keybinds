@@ -1,0 +1,308 @@
+#!/bin/bash
+# keybinds - hyprland keybinds cheatsheet (wofi)
+#
+# Reads ~/.config/hypr/hyprland.conf, follows `source = ...` recursively,
+# and emits a wofi menu of bind lines that have a trailing `# Label`
+# annotation. hyprland.conf itself is never modified - users opt in by
+# adding labels to whichever binds they want surfaced.
+#
+# See `keybinds --help` for the annotation grammar.
+
+set -euo pipefail
+
+# Toggle off if wofi is already up
+if pgrep -x wofi >/dev/null; then
+  pkill -x wofi
+  exit 0
+fi
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  Config
+# ──────────────────────────────────────────────────────────────────────────────
+
+readonly HYPR_CONF="${HYPR_CONF:-$HOME/.config/hypr/hyprland.conf}"
+readonly DEFAULT_HEADER_COLOR='#83a598'
+HEADER_COLOR="${KEYBINDS_HEADER_COLOR:-$DEFAULT_HEADER_COLOR}"
+PRINT_ONLY=false
+
+die()  { printf 'keybinds: %s\n' "$*" >&2; exit 1; }
+warn() { printf 'keybinds: %s\n' "$*" >&2; }
+
+case "${1:-}" in
+  -h|--help|help)
+    cat <<'EOF'
+keybinds - hyprland keybinds cheatsheet (wofi)
+
+USAGE
+  keybinds            Toggle the cheatsheet (open if closed, close if open)
+  keybinds --print    Dump the cheatsheet to stdout instead of wofi
+  keybinds -h         This help
+
+ANNOTATION GRAMMAR
+  Add a trailing `# Label` to any bind line you want to appear:
+
+    # Browser binds                            ← section header
+    bind = $mainMod, B, exec, $browser  # Brave             ← row label
+    bind = $mainMod SHIFT, B, exec, $bp # Brave (Incognito)
+
+  Bindings without a trailing `# Label` are silently skipped, so the
+  cheatsheet only ever shows what you explicitly opted in.
+
+  Section headers come from the FIRST stand-alone `# ...` comment line
+  of each comment block preceding a group of binds. Multi-line block
+  comments use only the first line, so noisy explainer paragraphs do
+  not pollute the section name. Blank lines reset the block.
+
+  All `bind*` variants are recognised: bind, bindd, bindel, bindl,
+  bindm, binde. Commented-out binds (`#bind = ...`) with a trailing
+  label are still surfaced - useful for "disabled but documented".
+
+  Sourced .conf files are followed automatically via `source = ...`,
+  so dotctl-keybinds.conf and any other helpers you source are
+  included with no extra wiring.
+
+ENV
+  HYPR_CONF              Path to hyprland.conf
+                         (default: ~/.config/hypr/hyprland.conf)
+  KEYBINDS_HEADER_COLOR  Pango color for section headers
+                         (default: #83a598)
+EOF
+    exit 0;;
+  --print) PRINT_ONLY=true;;
+  '') ;;
+  *) die "unknown argument: $1 (try \`keybinds --help\`)";;
+esac
+
+command -v wofi >/dev/null 2>&1 || [[ "$PRINT_ONLY" == "true" ]] || die "wofi not found in PATH"
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  Parser state
+# ──────────────────────────────────────────────────────────────────────────────
+
+declare -a SECTIONS=()
+declare -A SECTION_ROWS=()
+declare -A SEEN_FILES=()
+SECTION_CANDIDATE=""
+PREV_WAS_COMMENT=false
+MAIN_MOD="SUPER"
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  Helpers
+# ──────────────────────────────────────────────────────────────────────────────
+
+trim() {
+  local s="$1"
+  s="${s#"${s%%[![:space:]]*}"}"
+  s="${s%"${s##*[![:space:]]}"}"
+  printf '%s' "$s"
+}
+
+resolve_path() {
+  local p="$1"
+  p="${p/#\~/$HOME}"
+  p="${p//\$HOME/$HOME}"
+  printf '%s' "$p"
+}
+
+# Strip leading/trailing #, -, space from a comment line so headers like
+# "### MONITORS ###" or "# --- Audio output switching ---" become "MONITORS"
+# and "Audio output switching" respectively.
+clean_section() {
+  printf '%s' "$1" | sed -E 's/^[[:space:]#\-]+//; s/[[:space:]#\-]+$//'
+}
+
+fmt_mod() {
+  case "$1" in
+    '$mainMod')                                printf '%s' "$MAIN_MOD" ;;
+    Control_L|Control_R|CONTROL|Control|Ctrl) printf 'CTRL' ;;
+    CTRL_ALT)                                  printf 'CTRL + ALT' ;;
+    ALT_SHIFT)                                 printf 'ALT + SHIFT' ;;
+    SHIFT_ALT)                                 printf 'SHIFT + ALT' ;;
+    *_*)                                       printf '%s' "${1//_/ + }" ;;
+    *)                                         printf '%s' "$1" ;;
+  esac
+}
+
+fmt_key() {
+  case "$1" in
+    left|Left)             printf '←' ;;
+    right|Right)           printf '→' ;;
+    up|Up)                 printf '↑' ;;
+    down|Down)             printf '↓' ;;
+    mouse_down)            printf 'wheel ↓' ;;
+    mouse_up)              printf 'wheel ↑' ;;
+    mouse:272)             printf 'LMB' ;;
+    mouse:273)             printf 'RMB' ;;
+    XF86AudioRaiseVolume)  printf 'Volume +' ;;
+    XF86AudioLowerVolume)  printf 'Volume −' ;;
+    XF86AudioMute)         printf 'Mute' ;;
+    XF86AudioMicMute)      printf 'Mic Mute' ;;
+    XF86AudioPlay)         printf 'Play' ;;
+    XF86AudioPause)        printf 'Pause' ;;
+    XF86AudioNext)         printf 'Next' ;;
+    XF86AudioPrev)         printf 'Prev' ;;
+    XF86MonBrightnessUp)   printf 'Brightness +' ;;
+    XF86MonBrightnessDown) printf 'Brightness −' ;;
+    *)                     printf '%s' "$1" ;;
+  esac
+}
+
+format_combo() {
+  local mods_raw="$1" key="$2" out="" tok
+  for tok in $mods_raw; do
+    [[ -n "$tok" ]] || continue
+    out+="$(fmt_mod "$tok") + "
+  done
+  out+="$(fmt_key "$key")"
+  printf '%s' "$out"
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  Recursive parser
+# ──────────────────────────────────────────────────────────────────────────────
+
+parse_file() {
+  local file="$1"
+  [[ -f "$file" ]] || return 0
+  [[ -n "${SEEN_FILES[$file]:-}" ]] && return 0
+  SEEN_FILES[$file]=1
+
+  local line trimmed body label rest mods_raw key sect target hdr
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    trimmed="$(trim "$line")"
+
+    # Blank line: reset comment-block tracking, but keep section_candidate
+    # so the next bind still inherits the previous header.
+    if [[ -z "$trimmed" ]]; then
+      PREV_WAS_COMMENT=false
+      continue
+    fi
+
+    # source = directive (recursive include)
+    if [[ "$trimmed" =~ ^source[[:space:]]*=[[:space:]]*(.+)$ ]]; then
+      target="${BASH_REMATCH[1]}"
+      target="${target%%#*}"
+      target="$(resolve_path "$(trim "$target")")"
+      PREV_WAS_COMMENT=false
+      parse_file "$target"
+      continue
+    fi
+
+    # $mainMod assignment - capture so $mainMod renders as the user's choice
+    if [[ "$trimmed" =~ ^\$mainMod[[:space:]]*=[[:space:]]*([A-Za-z][A-Za-z0-9_]*) ]]; then
+      MAIN_MOD="${BASH_REMATCH[1]}"
+      PREV_WAS_COMMENT=false
+      continue
+    fi
+
+    # bind line (active OR commented-out). Match before the comment branch
+    # so `#bind = ...` is treated as a bind, not a section header.
+    if [[ "$trimmed" =~ ^#?bind[a-z]?[[:space:]]*= ]]; then
+      # Extract trailing label: greedy match up to the LAST `#` that is
+      # preceded by something non-`#`. Bind lines never legitimately
+      # contain `#` in their dispatcher args, so this is safe.
+      if [[ "$trimmed" =~ ^(#?bind[a-z]?[[:space:]]*=[^#]*)\#[[:space:]]*(.+)$ ]]; then
+        body="${BASH_REMATCH[1]}"
+        label="$(trim "${BASH_REMATCH[2]}")"
+      else
+        PREV_WAS_COMMENT=false
+        continue  # no label → opt-out
+      fi
+
+      # Strip optional comment-out marker, then `bind* = `
+      body="$(trim "${body#\#}")"
+      rest="$(trim "${body#*=}")"
+
+      # Split first two comma fields: MODS, KEY
+      mods_raw="$(trim "${rest%%,*}")"
+      rest="${rest#*,}"
+      key="$(trim "${rest%%,*}")"
+
+      sect="${SECTION_CANDIDATE:-Other}"
+      sect="${sect% binds}"
+      sect="${sect% bind}"
+
+      if [[ -z "${SECTION_ROWS[$sect]:-}" ]]; then
+        SECTIONS+=("$sect")
+        SECTION_ROWS[$sect]=""
+      fi
+      SECTION_ROWS[$sect]+="$label"$'\t'"$(format_combo "$mods_raw" "$key")"$'\n'
+      PREV_WAS_COMMENT=false
+      continue
+    fi
+
+    # Section header: stand-alone comment line. Only the FIRST comment of
+    # each block becomes the candidate; subsequent comment lines (descriptive
+    # body text) are ignored so they do not override the title.
+    if [[ "$trimmed" =~ ^# ]]; then
+      if ! $PREV_WAS_COMMENT; then
+        hdr="$(clean_section "$trimmed")"
+        if [[ "$hdr" =~ [A-Za-z] ]]; then
+          SECTION_CANDIDATE="$hdr"
+        fi
+      fi
+      PREV_WAS_COMMENT=true
+      continue
+    fi
+
+    # Anything else (config blocks, windowrules, workspace=, etc.)
+    PREV_WAS_COMMENT=false
+  done < "$file"
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  Render
+# ──────────────────────────────────────────────────────────────────────────────
+
+render() {
+  local sect rows label combo width=0
+
+  for sect in "${SECTIONS[@]}"; do
+    while IFS=$'\t' read -r label combo; do
+      [[ -z "$label" ]] && continue
+      (( ${#label} > width )) && width=${#label}
+    done <<< "${SECTION_ROWS[$sect]}"
+  done
+  (( width > 32 )) && width=32
+
+  local first=true
+  for sect in "${SECTIONS[@]}"; do
+    rows="${SECTION_ROWS[$sect]}"
+    [[ -z "$rows" ]] && continue
+    $first || printf '\n'
+    first=false
+    printf '<span foreground="%s"><b>──────── %s</b></span>\n' "$HEADER_COLOR" "$sect"
+    while IFS=$'\t' read -r label combo; do
+      [[ -z "$label" ]] && continue
+      printf '󰆍 %-*s → %s\n' "$width" "$label" "$combo"
+    done <<< "$rows"
+  done
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  Main
+# ──────────────────────────────────────────────────────────────────────────────
+
+[[ -f "$HYPR_CONF" ]] || die "hyprland.conf not found at $HYPR_CONF"
+
+parse_file "$HYPR_CONF"
+
+if (( ${#SECTIONS[@]} == 0 )); then
+  die "no annotated binds found in $HYPR_CONF (or any sourced files). See \`keybinds --help\` for the annotation grammar."
+fi
+
+if [[ "$PRINT_ONLY" == "true" ]]; then
+  render
+  exit 0
+fi
+
+render | wofi \
+  --dmenu \
+  --allow-markup \
+  --prompt 'Keybindings' \
+  --location 7 \
+  --width 700 \
+  --height 1100 \
+  --xoffset 10 \
+  --yoffset -35 \
+  --insensitive

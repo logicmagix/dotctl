@@ -48,7 +48,7 @@ VPN helpers but drop the rest). Nothing is removed without confirmation.
 
 Groups you'll be asked about:
   - dotctl core scripts in $SYS_BIN
-     (dotctl, power, launcher, cputemp, ws-cycle, audio-*)
+     (dotctl, power, launcher, cputemp, ws-cycle, audio-*, keybinds)
   - Optional modules that were opt-in at install time (VPN, GPU temp) -
     only prompted if currently symlinked
   - Element configs in $CONFIG_HOME/{cava, kitty, mako, wofi, waybar}
@@ -116,7 +116,7 @@ link_points_to_repo() {
 
 # Split the module set so we can prompt per opt-in group instead of ripping
 # every symlink out in one sweep. Anything not named here is treated as core.
-CORE_MODULES=( power launcher cputemp ws-cycle audio-output audio-output-menu audio-output-status audio-hotplug-watch )
+CORE_MODULES=( power launcher cputemp ws-cycle audio-output audio-output-menu audio-output-status audio-hotplug-watch keybinds )
 VPN_MODULES=( vpnctl vpn-status-indicator )
 GPU_MODULES=( gputemp )
 

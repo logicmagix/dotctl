@@ -556,6 +556,55 @@ All other theme changes go through the CLI.
 never edits
 .I hyprland.conf
 itself.
+.SS Keybinds cheatsheet
+The
+.B keybinds
+module is an opt-in wofi popup that reads
+.IR ~/.config/hypr/hyprland.conf ,
+follows every
+.B source =
+directive recursively (so
+.I dotctl-keybinds.conf
+is included for free), and renders a grouped cheatsheet of the binds
+you have explicitly labelled.
+.B hyprland.conf
+is never modified.
+.PP
+Two annotations drive the output:
+.TP
+section header
+The first stand-alone
+.B # ...
+comment in a comment block preceding a group of binds.
+.TP
+row label
+A trailing
+.B # Label
+on the bind line itself.
+.PP
+Bindings without a trailing label are silently skipped. Example:
+.PP
+.EX
+# Browser binds                                         ← section header
+bind = $mainMod, B, exec, $browser    # Brave           ← row label
+bind = $mainMod SHIFT, B, exec, $bp   # Brave (Incognito)
+.EE
+.PP
+Bind the popup to a key of your choice:
+.PP
+.EX
+bind = ALT, B, exec, keybinds   # Keybinds cheatsheet
+.EE
+.PP
+.B keybinds --print
+dumps the same output to stdout for preview/debugging.
+See
+.BR keybinds (1)
+or
+.B keybinds --help
+for the full grammar (commented-out binds, all
+.B bind*
+variants, env overrides).
 .SH FILES
 .TP
 .I ~/.config/dotctl/config

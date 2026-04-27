@@ -109,7 +109,8 @@ The installer is interactive and walks you through:
 2. Optionally `pacman -S` / `emerge` / etc. the runtime elements.
 3. Symlink the CLI + module scripts (`dotctl`, `power`, `launcher`,
    `cputemp`, `gputemp`, `ws-cycle`, `audio-output`, `audio-output-menu`,
-   `audio-output-status`, `audio-hotplug-watch`) into `/usr/local/bin/`.
+   `audio-output-status`, `audio-hotplug-watch`, `keybinds`) into
+   `/usr/local/bin/`.
 4. Optionally symlink the VPN module (`vpnctl`, `vpn-status-indicator`).
 5. Copy themed configs into `~/.config/{cava,kitty,mako,wofi,waybar}`.
 6. Copy wallpaper cycle scripts + template into `~/.config/dotctl/cycle/`.
@@ -169,6 +170,53 @@ You now have:
 - `ALT+SHIFT+S` - route audio to headset / bluetooth
 - `ALT+SHIFT+H` - route audio to HDMI / DisplayPort
 - `ALT+SHIFT+M` - toggle mute on the default sink
+
+### Keybinds cheatsheet (`keybinds`)
+
+The `keybinds` module is an opt-in wofi popup that reads your
+`~/.config/hypr/hyprland.conf`, follows every `source = ...` directive
+recursively (so `dotctl-keybinds.conf` is included for free), and
+renders a grouped cheatsheet of every bind you have explicitly
+labelled. `hyprland.conf` is never modified - you opt in by adding
+trailing comments to the binds you want surfaced.
+
+#### Annotation grammar
+
+Two things drive the cheatsheet:
+
+- A **section header** is the first stand-alone `# ...` comment in a
+  block of comments preceding a group of binds.
+- A **row label** is a trailing `# Label` on the bind line itself.
+
+```ini
+# Browser binds                                         ← section header
+bind = $mainMod, B, exec, $browser    # Brave           ← row label
+bind = $mainMod SHIFT, B, exec, $bp   # Brave (Incognito)
+
+# Email binds
+bind = $mainMod ALT, G, exec, $gmail  # Gmail
+```
+
+Bindings without a trailing `# Label` are silently skipped, so the
+cheatsheet only ever shows what you explicitly opt in. Commented-out
+binds that carry a label (`#bind = ... # Label`) are surfaced too -
+useful for "disabled but documented".
+
+All `bind*` variants are recognised: `bind`, `bindd`, `bindel`,
+`bindl`, `bindm`, `binde`. `$mainMod` renders as whichever modifier
+you assigned it to in `hyprland.conf`.
+
+#### Invoking it
+
+Bind it to whatever combo you like (or run it from a terminal):
+
+```ini
+bind = ALT, B, exec, keybinds   # Keybinds cheatsheet
+```
+
+`keybinds --print` dumps the same output to stdout if you want to
+preview without spawning wofi. `KEYBINDS_HEADER_COLOR=#83a598` and
+`HYPR_CONF=...` override the defaults.
 
 ## Quick start
 
@@ -407,7 +455,7 @@ dotctl/
 └── stage/                    everything that gets installed
     ├── dotctl                the CLI (single bash script)
     ├── dotctl.1              the man page (source; installed gzipped)
-    ├── modules/              power, launcher, cputemp, gputemp, audio-*, vpnctl, …
+    ├── modules/              power, launcher, cputemp, gputemp, audio-*, vpnctl, keybinds, …
     ├── cycle/                cycle-hyprpaper-* scripts + _cycle-hyprpaper.template
     ├── hypr/                 sourceable hyprland snippets + color template
     └── snippets/             extras (waybar css/jsonc snippets, vpn setup README)
