@@ -214,6 +214,9 @@ pkg_installed() {
     # Font packages: test via fontconfig instead of command -v
     noto-fonts-emoji)     fc-list : family | grep -qi 'Noto Color Emoji' ;;
     nerd-fonts-symbols)   fc-list : family | grep -qi 'Symbols Nerd Font' ;;
+    # pavucontrol: accept pavucontrol-qt as an equivalent alternative
+    pavucontrol)          command -v pavucontrol >/dev/null 2>&1 ||
+                          command -v pavucontrol-qt >/dev/null 2>&1 ;;
     # Everything else: look for the binary it provides
     *) local bin
        bin="$(pkg_binary "$1")"
