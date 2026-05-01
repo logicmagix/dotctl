@@ -90,7 +90,9 @@ tooltip {
 #cpu,
 #custom-cputemp,
 #memory,
+/* GPU:BEGIN */
 #custom-gpu,
+/* GPU:END */
 #custom-workspace-prev,
 #clock,
 #custom-workspace-next,
@@ -115,15 +117,28 @@ tooltip {
 /* -- Warning / Critical ------------------------------------------- */
 #memory.warning,
 #cpu.warning,
-#custom-cputemp.warning,
-#custom-gpu.warning {
+#custom-cputemp.warning {
   border-color: @warning;
   color: @warning;
 }
 
 #memory.critical,
 #cpu.critical,
-#custom-cputemp.critical,
+#custom-cputemp.critical {
+  border-color: @critical;
+  color: @critical;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+  animation-name: blink-critical;
+  animation-duration: 1s;
+}
+
+/* GPU:BEGIN */
+#custom-gpu.warning {
+  border-color: @warning;
+  color: @warning;
+}
 #custom-gpu.critical {
   border-color: @critical;
   color: @critical;
@@ -133,6 +148,7 @@ tooltip {
   animation-name: blink-critical;
   animation-duration: 1s;
 }
+/* GPU:END */
 
 /* ===================================================================
    LEFT SIDE
@@ -210,10 +226,12 @@ tooltip {
   border-color: @mint;
 }
 
+/* GPU:BEGIN */
 #custom-gpu {
   color: @cyan;
   border-color: @cyan;
 }
+/* GPU:END */
 
 /* ===================================================================
    CENTER

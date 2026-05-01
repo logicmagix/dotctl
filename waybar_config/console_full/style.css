@@ -123,7 +123,9 @@ tooltip {
 #memory.warning,
 #cpu.warning,
 #custom-cputemp.warning,
+/* GPU:BEGIN */
 #custom-gpu.warning,
+/* GPU:END */
 #temperature.warning,
 #battery.warning.discharging {
   color: @warning;
@@ -134,7 +136,9 @@ tooltip {
 #memory.critical,
 #cpu.critical,
 #custom-cputemp.critical,
+/* GPU:BEGIN */
 #custom-gpu.critical,
+/* GPU:END */
 #temperature.critical,
 #battery.critical.discharging {
   color: @critical;
@@ -232,6 +236,7 @@ tooltip {
   color: @black;
 }
 
+/* GPU:BEGIN */
 /* GPU info */
 #custom-gpu {
   background: @olive;
@@ -239,6 +244,7 @@ tooltip {
   padding-left: 13px;
   padding-right: 11px;
 }
+/* GPU:END */
 
 /* Left-side chevrons () - each bridges two adjacent blocks */
 #custom-rarrow1  { color: @red;   background: @teal;       } /* power  launcher       */
@@ -246,8 +252,11 @@ tooltip {
 #custom-rarrow3  { color: @plum;  background: @lime;       } /* workspace area  cpu       */
 #custom-rarrow4  { color: @lime;  background: @olive;      } /* cpu  cputemp              */
 #custom-rarrow5  { color: @olive; background: @mint;       } /* cputemp  memory           */
-#custom-rarrow6  { color: @mint;  background: @olive;      } /* memory  gpu               */
+#custom-rarrow6  { color: @mint;  background: transparent; } /* memory  bar (end-cap when gpu absent) */
+/* GPU:BEGIN */
+#custom-rarrow6  { color: @mint;  background: @olive;      } /* memory  gpu (override when gpu enabled) */
 #custom-rarrow7  { color: @olive; background: transparent; } /* gpu  bar background       */
+/* GPU:END */
 
 /* ===================================================================
    CENTER - clock with decorative bookend arrows
@@ -342,7 +351,9 @@ tooltip {
 #custom-rarrow4,
 #custom-rarrow5,
 #custom-rarrow6,
+/* GPU:BEGIN */
 #custom-rarrow7,
+/* GPU:END */
 #custom-rarrow-center-l,
 #custom-rarrow-center-r,
 #custom-rsep-terminal,

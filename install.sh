@@ -365,12 +365,20 @@ info "Installing user configs to $CONFIG_HOME/…"
 # Shared timestamp so every backup from one install run sorts together.
 BACKUP_TS="$(date +%Y%m%d-%H%M%S)"
 
-# Element config dirs - copy (not symlink) so user edits stay private.
-# File-level backup: for each file we're about to drop in, rename any
-# conflicting target file to <file>.bak-<timestamp> in place. Files the
-# user added (that don't exist in the repo source) and files that already
-# match byte-for-byte are left untouched. This preserves user customizations
-# across reinstalls instead of burying them in a stale whole-dir backup.
+# A reinstall is any run where the user already has a dotctl state file -
+# meaning these config paths are already owned by dotctl, not the user's
+# pre-dotctl setup. Used to suppress .bak creation on reinstall (dotctl
+# apply rewrites these files anyway, and per-reinstall .bak files just
+# pile up).
+IS_REINSTALL=0
+[[ -f "$CONFIG_HOME/dotctl/config" ]] && IS_REINSTALL=1
+
+# Element config dirs - copy (not symlink). On the FIRST install, back up
+# any pre-existing user files that diverge from the shipped copy (so we
+# don't silently overwrite a hand-curated config). On REINSTALL, just
+# overwrite - dotctl owns these paths, the state file carries the user's
+# actual preferences, and `dotctl apply` regenerates the files anyway.
+# Files the user added that aren't in the repo source are always preserved.
 copy_config() {
   local src="$1" dest="$2"
   [[ -d "$src" ]] || { warn "missing: $src"; return 1; }
@@ -380,14 +388,13 @@ copy_config() {
     rel="${f#"$src"/}"
     target="$dest/$rel"
     mkdir -p "$(dirname "$target")"
-    if [[ -e "$target" || -L "$target" ]]; then
-      if cmp -s "$f" "$target" 2>/dev/null; then
-        continue
+    if (( IS_REINSTALL == 0 )) && [[ -e "$target" || -L "$target" ]]; then
+      if ! cmp -s "$f" "$target" 2>/dev/null; then
+        mv "$target" "${target}.bak-${BACKUP_TS}"
+        ok "backed up ${target} → ${target}.bak-${BACKUP_TS}"
       fi
-      mv "$target" "${target}.bak-${BACKUP_TS}"
-      ok "backed up ${target} → ${target}.bak-${BACKUP_TS}"
     fi
-    cp -a "$f" "$target"
+    cp -af "$f" "$target"
   done < <(find "$src" \( -type f -o -type l \) -print0)
   ok "$dest"
 }
@@ -397,6 +404,50 @@ copy_config "$REPO/kitty_config"  "$CONFIG_HOME/kitty"
 copy_config "$REPO/mako_config"   "$CONFIG_HOME/mako"
 copy_config "$REPO/wofi_config"   "$CONFIG_HOME/wofi"
 copy_config "$REPO/waybar_config" "$CONFIG_HOME/waybar"
+
+# Marker-strip helper for waybar configs. Mirrors apply_waybar's awk: drops
+# the marker comment lines themselves, and when keep=0 also drops everything
+# between BEGIN/END. Targets every variant's config.jsonc/style.css plus the
+# currently-active ~/.config/waybar/{config.jsonc,style.css} (if present), so
+# waybar stops referencing the just-opted-out binary on next reload without
+# requiring a `dotctl apply` first.
+strip_waybar_marker() {
+  local marker="$1" keep="$2" f
+  shopt -s nullglob
+  local files=(
+    "$CONFIG_HOME/waybar/config.jsonc"
+    "$CONFIG_HOME/waybar/style.css"
+    "$CONFIG_HOME/waybar"/*/config.jsonc
+    "$CONFIG_HOME/waybar"/*/style.css
+  )
+  shopt -u nullglob
+  for f in "${files[@]}"; do
+    [[ -f "$f" ]] || continue
+    awk -v marker="$marker" -v keep="$keep" '
+      $0 ~ "/\\* " marker ":BEGIN" { if (keep != 1) skip = 1; next }
+      $0 ~ "/\\* " marker ":END"   { skip = 0; next }
+      !skip { print }
+    ' "$f" > "$f.tmp" && mv -f "$f.tmp" "$f"
+  done
+}
+
+# Apply opt-in choices to the waybar configs we just copied. WANT_VPN/WANT_GPU
+# = 1 leaves the blocks intact (just strips the marker comments); = 0 drops
+# the blocks entirely.
+strip_waybar_marker VPN "$WANT_VPN"
+strip_waybar_marker GPU "$WANT_GPU"
+
+# Regenerate the active ~/.config/waybar/{config.jsonc,style.css} from the
+# user's chosen variant. apply_waybar reads from the variant subdir we just
+# stripped, re-injects the active palette + font, and lands a clean active
+# config that matches the install-time opt-in choices. Pre-marker installs
+# left active configs without /* GPU:BEGIN */ markers, so the strip above
+# can't reach them - this catch-up regenerate is what actually fixes the
+# "still seeing custom/gpu in waybar" symptom.
+if [[ -f "$CONFIG_HOME/dotctl/config" ]] && command -v dotctl >/dev/null 2>&1; then
+  info "Re-applying themed config so opt-in changes land in the active bar…"
+  dotctl apply || warn "dotctl apply failed - run 'dotctl apply' manually"
+fi
 
 # ── Fonts ──────────────────────────────────────────────────────────────────
 # Install bundled Nerd Fonts (MesloLGS NF, Phoenix) so waybar chevrons,

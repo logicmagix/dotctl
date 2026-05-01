@@ -10,8 +10,10 @@
     "hyprland/workspaces",
     "cpu",
     "custom/cputemp",
-    "memory",
-    "custom/gpu"
+    "memory"
+    /* GPU:BEGIN */
+    , "custom/gpu"
+    /* GPU:END */
   ],
   // CENTER
   "modules-center": [
@@ -107,6 +109,7 @@
     "format": "RAM Usage: {used:0.1f}G/{total:0.1f}G",
     "tooltip": true
   },
+  /* GPU:BEGIN */
   "custom/gpu": {
     "exec": "gputemp",
     "return-type": "json",
@@ -114,6 +117,7 @@
     "interval": 2,
     "tooltip": true
   },
+  /* GPU:END */
   "clock": {
     "format": "[{:%a %I:%M:%S}]",
     "format-alt": "[{:%A, %B %d, %Y}]",

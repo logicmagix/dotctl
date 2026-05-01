@@ -85,6 +85,31 @@ else
   SUDO=""
 fi
 
+# ── Helper: strip a marker block from every waybar config ──────────────────
+# Mirrors install.sh strip_waybar_marker. Targets every variant's
+# config.jsonc/style.css plus the active ~/.config/waybar/{config.jsonc,
+# style.css}. Called when the user removes an opt-in module's symlink so the
+# bar stops referencing the now-missing binary on next reload.
+strip_waybar_marker() {
+  local marker="$1" f
+  shopt -s nullglob
+  local files=(
+    "$CONFIG_HOME/waybar/config.jsonc"
+    "$CONFIG_HOME/waybar/style.css"
+    "$CONFIG_HOME/waybar"/*/config.jsonc
+    "$CONFIG_HOME/waybar"/*/style.css
+  )
+  shopt -u nullglob
+  for f in "${files[@]}"; do
+    [[ -f "$f" ]] || continue
+    awk -v marker="$marker" '
+      $0 ~ "/\\* " marker ":BEGIN" { skip = 1; next }
+      $0 ~ "/\\* " marker ":END"   { skip = 0; next }
+      !skip { print }
+    ' "$f" > "$f.tmp" && mv -f "$f.tmp" "$f"
+  done
+}
+
 # ── Helper: remove symlink only if it resolves into our repo ────────────────
 
 unlink_if_repo() {
@@ -146,6 +171,15 @@ if (( vpn_present == 1 )); then
     for name in "${VPN_MODULES[@]}"; do
       unlink_if_repo "$SYS_BIN/$name"
     done
+    strip_waybar_marker VPN
+    ok "stripped VPN block from waybar variant configs"
+    # Force WAYBAR_VPN=off in user state so the next apply doesn't re-add
+    # the block from a stale "on" setting. Then re-run apply to rebuild the
+    # active config.jsonc/style.css from the now-stripped variant.
+    if [[ -f "$CONFIG_HOME/dotctl/config" ]] && command -v dotctl >/dev/null 2>&1; then
+      sed -i -E 's/^WAYBAR_VPN=.*/WAYBAR_VPN=off/' "$CONFIG_HOME/dotctl/config"
+      dotctl apply >/dev/null 2>&1 || warn "dotctl apply failed - run it manually"
+    fi
   else
     skip "kept VPN module symlinks"
   fi
@@ -161,6 +195,14 @@ if (( gpu_present == 1 )); then
     for name in "${GPU_MODULES[@]}"; do
       unlink_if_repo "$SYS_BIN/$name"
     done
+    strip_waybar_marker GPU
+    ok "stripped GPU block from waybar variant configs"
+    # apply_waybar checks `command -v gputemp` to gate the GPU block; with
+    # the symlink just removed it will keep=0 and rebuild the active
+    # config.jsonc/style.css without the gpu module.
+    if [[ -f "$CONFIG_HOME/dotctl/config" ]] && command -v dotctl >/dev/null 2>&1; then
+      dotctl apply >/dev/null 2>&1 || warn "dotctl apply failed - run it manually"
+    fi
   else
     skip "kept gputemp symlink"
   fi
@@ -227,10 +269,13 @@ if [[ -f "$DATA_HOME/dotctl/dotctl-colors.conf.tmpl" ]]; then
   fi
 fi
 
-# ── Remove hypr snippets ────────────────────────────────────────────────────
-# Hyprland will emit a parse error for a `source = …` line pointing at a
-# missing file, so warn the user to strip those two lines from hyprland.conf
-# after removal (already covered in the post-uninstall summary).
+# ── Neutralize hypr snippets ───────────────────────────────────────────────
+# Deleting these files outright breaks any `source = ~/.config/hypr/dotctl-*`
+# directive the user added to hyprland.conf - hyprland emits parse errors on
+# every reload until the source= lines are stripped by hand. Instead, blank
+# them out: empty (comment-only) files still satisfy the source= directive,
+# so hyprland stays quiet. The user can delete the source= lines + files at
+# their own pace.
 
 hypr_present=0
 for f in "$CONFIG_HOME/hypr/dotctl-keybinds.conf" "$CONFIG_HOME/hypr/dotctl-colors.conf"; do
@@ -238,11 +283,15 @@ for f in "$CONFIG_HOME/hypr/dotctl-keybinds.conf" "$CONFIG_HOME/hypr/dotctl-colo
 done
 if (( hypr_present == 1 )); then
   echo
-  if confirm "Remove hypr snippets (dotctl-keybinds.conf, dotctl-colors.conf) from $CONFIG_HOME/hypr/?" y; then
+  if confirm "Blank hypr snippets (dotctl-keybinds.conf, dotctl-colors.conf) so hyprland source= stays quiet?" y; then
     for f in "$CONFIG_HOME/hypr/dotctl-keybinds.conf" "$CONFIG_HOME/hypr/dotctl-colors.conf"; do
       if [[ -f "$f" ]]; then
-        rm -f "$f"
-        ok "removed $f"
+        cat > "$f" <<STUB
+# dotctl uninstalled - this file is an intentional empty stub so hyprland's
+# \`source = $f\` directive keeps resolving. Remove the source= line in
+# ~/.config/hypr/hyprland.conf, then delete this file when convenient.
+STUB
+        ok "blanked $f"
       fi
     done
   else
@@ -251,33 +300,25 @@ if (( hypr_present == 1 )); then
 fi
 
 # ── Remove element configs (mirror of install copy_config) ──────────────────
-# Walk each repo source dir; for every file we shipped, remove the target
-# iff it still matches our copy byte-for-byte. User-modified files and
-# user-added files are left alone. Empty dirs cleaned up after.
-# This step exists because leaving configs active while removing the scripts
-# they reference makes waybar spam "failed to start module" errors for
-# cputemp/gputemp/audio-*/ws-cycle on every reload.
+# Walk each repo source dir; for every file dotctl ships, remove the target
+# at the matching relative path. dotctl owns these paths - the state file
+# (~/.config/dotctl/config) is what carries the user's actual choices, and
+# the config files themselves are regenerable. Files the user added that
+# aren't in the repo source are left untouched. Empty dirs cleaned up after.
 
 remove_shipped_files() {
   local src="$1" dest="$2"
   [[ -d "$src" && -d "$dest" ]] || return 0
-  local f rel target kept=0
+  local f rel target
   while IFS= read -r -d '' f; do
     rel="${f#"$src"/}"
     target="$dest/$rel"
     [[ -e "$target" || -L "$target" ]] || continue
-    if cmp -s "$f" "$target" 2>/dev/null; then
-      rm -f "$target"
-      ok "removed $target"
-    else
-      skip "$target diverged from repo - kept as your customization"
-      kept=1
-    fi
+    rm -f "$target"
+    ok "removed $target"
   done < <(find "$src" \( -type f -o -type l \) -print0)
   find "$dest" -mindepth 1 -depth -type d -empty -delete 2>/dev/null || true
-  if (( kept == 0 )); then
-    rmdir "$dest" 2>/dev/null || true
-  fi
+  rmdir "$dest" 2>/dev/null || true
 }
 
 ELEMENT_CONFIGS=(
@@ -288,15 +329,39 @@ ELEMENT_CONFIGS=(
   "$REPO/waybar_config:$CONFIG_HOME/waybar"
 )
 
+# Active config files generated by `dotctl apply` (no repo equivalent at the
+# top level - the repo only has variant subdirs/templates). These have to be
+# removed explicitly or they survive remove_shipped_files entirely.
+ACTIVE_GENERATED=(
+  "$CONFIG_HOME/cava/config"
+  "$CONFIG_HOME/kitty/kitty.conf"
+  "$CONFIG_HOME/mako/config"
+  "$CONFIG_HOME/wofi/style.css"
+  "$CONFIG_HOME/waybar/config.jsonc"
+  "$CONFIG_HOME/waybar/style.css"
+)
+
 element_present=0
 for pair in "${ELEMENT_CONFIGS[@]}"; do
   [[ -d "${pair#*:}" ]] && { element_present=1; break; }
 done
 if (( element_present == 1 )); then
   echo
-  if confirm "Remove dotctl-shipped element configs from $CONFIG_HOME/{cava,kitty,mako,wofi,waybar}? (your customizations and .bak-<ts> files are preserved)" y; then
+  if confirm "Remove dotctl-shipped element configs from $CONFIG_HOME/{cava,kitty,mako,wofi,waybar}?" y; then
     for pair in "${ELEMENT_CONFIGS[@]}"; do
       remove_shipped_files "${pair%%:*}" "${pair#*:}"
+    done
+    for f in "${ACTIVE_GENERATED[@]}"; do
+      if [[ -e "$f" ]]; then
+        rm -f "$f"
+        ok "removed $f"
+      fi
+    done
+    # Drop now-empty parent dirs (cava, kitty, mako, wofi, waybar) but only
+    # if the user has nothing else in them. Anything they added on their own
+    # makes the rmdir fail safely.
+    for d in cava kitty mako wofi waybar; do
+      rmdir "$CONFIG_HOME/$d" 2>/dev/null || true
     done
   else
     skip "kept element configs"
@@ -349,7 +414,9 @@ cat <<DONE
 
 ${BOLD}${GRN}dotctl uninstalled.${RST}
 
-${DIM}Remove these lines from ~/.config/hypr/hyprland.conf if you added them:${RST}
+${DIM}If you blanked the hypr snippets, hyprland source= directives stay quiet.
+When convenient, remove these lines from ~/.config/hypr/hyprland.conf and
+delete the now-empty stub files:${RST}
 
     source = ~/.config/hypr/dotctl-keybinds.conf
     source = ~/.config/hypr/dotctl-colors.conf

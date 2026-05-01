@@ -575,28 +575,35 @@ apply_waybar() {
     !skip { print }
   ' "$WAYBAR_DIR/style.css" > "$WAYBAR_DIR/style.css.tmp" && mv -f "$WAYBAR_DIR/style.css.tmp" "$WAYBAR_DIR/style.css"
 
-  # VPN gate: the canonical files always contain VPN blocks wrapped in
-  # `/* VPN:BEGIN */ ... /* VPN:END */`. At apply time we always strip the
-  # marker comment lines themselves. When WAYBAR_VPN != on we additionally
-  # drop everything between them.
+  # VPN gate: canonical files wrap the VPN blocks in
+  # `/* VPN:BEGIN */ ... /* VPN:END */`. When WAYBAR_VPN != on, drop the
+  # block + markers. When on, preserve both so install/uninstall can locate
+  # and re-strip later (waybar parses jsonc comments fine).
   local _f _vpn_on=0
   [[ "$WAYBAR_VPN" == "on" ]] && _vpn_on=1
   for _f in "$WAYBAR_DIR/config.jsonc" "$WAYBAR_DIR/style.css"; do
     awk -v keep="$_vpn_on" '
-      /\/\* VPN:BEGIN/ { if (keep != 1) skip = 1; next }
-      /\/\* VPN:END/   { skip = 0; next }
+      /\/\* VPN:BEGIN/ { if (keep != 1) { skip = 1; next } }
+      /\/\* VPN:END/   { if (keep != 1) { skip = 0; next } }
       !skip { print }
     ' "$_f" > "$_f.tmp" && mv -f "$_f.tmp" "$_f"
   done
 
-  # GPU gate: when `gputemp` isn't on PATH (user opted out at install),
-  # the memory-end chevron would otherwise point into a now-empty gpu
-  # slot. Fade #custom-rarrow6's background to transparent so the left
-  # chain tapers out after the RAM block. Only affects console_full -
-  # pill_* has no chevrons, and console_minimal has no gpu block.
-  if ! command -v gputemp >/dev/null 2>&1; then
-    sed -i -E 's/(#custom-rarrow6[[:space:]]+\{[^}]*background:[[:space:]]*)@olive/\1transparent/' "$WAYBAR_DIR/style.css"
-  fi
+  # GPU gate: same pattern. When `gputemp` isn't on PATH (user opted out
+  # at install), drop block + markers. When on, preserve both. The style.css
+  # canonical form has rarrow6's bg=transparent as the default with an
+  # /* GPU:BEGIN */-wrapped override to @olive, so stripping the GPU block
+  # automatically leaves rarrow6 as the transparent end-cap (no separate
+  # sed-repaint needed).
+  local _gpu_on=0
+  command -v gputemp >/dev/null 2>&1 && _gpu_on=1
+  for _f in "$WAYBAR_DIR/config.jsonc" "$WAYBAR_DIR/style.css"; do
+    awk -v keep="$_gpu_on" '
+      /\/\* GPU:BEGIN/ { if (keep != 1) { skip = 1; next } }
+      /\/\* GPU:END/   { if (keep != 1) { skip = 0; next } }
+      !skip { print }
+    ' "$_f" > "$_f.tmp" && mv -f "$_f.tmp" "$_f"
+  done
 
   # Decorator injection: for console style, swap the canonical pointed glyphs
   # with the active decorator's target glyphs in config.jsonc. The decorator
