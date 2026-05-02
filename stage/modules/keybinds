@@ -267,23 +267,37 @@ parse_file() {
 # ──────────────────────────────────────────────────────────────────────────────
 
 render() {
-  local sect rows label combo width=0
+  local sect rows label combo width=0 row_width=0 line_width
 
   for sect in "${SECTIONS[@]}"; do
     while IFS=$'\t' read -r label combo; do
       [[ -z "$label" ]] && continue
       (( ${#label} > width )) && width=${#label}
+      line_width=$(( ${#label} + ${#combo} ))
+      (( line_width > row_width )) && row_width=$line_width
     done <<< "${SECTION_ROWS[$sect]}"
   done
   (( width > 32 )) && width=32
 
-  local first=true
+  # Header rule total width: match the widest row (label + " → " + combo) so
+  # the divider sits flush with the row content and never overflows.
+  local target=$(( row_width + 5 ))
+
+  local first=true dashes_l dashes_r pad l r
   for sect in "${SECTIONS[@]}"; do
     rows="${SECTION_ROWS[$sect]}"
     [[ -z "$rows" ]] && continue
     $first || printf '\n'
     first=false
-    printf '<span foreground="%s"><b>──────── %s</b></span>\n' "$HEADER_COLOR" "$sect"
+    pad=$(( target - ${#sect} - 2 ))
+    (( pad < 4 )) && pad=4
+    l=$(( pad / 2 )); r=$(( pad - l ))
+    printf -v dashes_l '%*s' "$l" ''
+    printf -v dashes_r '%*s' "$r" ''
+    dashes_l="${dashes_l// /─}"
+    dashes_r="${dashes_r// /─}"
+    printf '<span foreground="%s"><b>%s %s %s</b></span>\n' \
+      "$HEADER_COLOR" "$dashes_l" "$sect" "$dashes_r"
     while IFS=$'\t' read -r label combo; do
       [[ -z "$label" ]] && continue
       printf '󰆍 %-*s → %s\n' "$width" "$label" "$combo"
@@ -313,7 +327,7 @@ render | wofi \
   --allow-markup \
   --prompt 'Keybindings' \
   --location 7 \
-  --width 700 \
+  --width 750 \
   --height 1100 \
   --xoffset 10 \
   --yoffset -35 \
