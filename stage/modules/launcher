@@ -25,9 +25,84 @@ APP_DIRS=(
 )
 
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/wofi"
-CACHE_FILE="$CACHE_DIR/gui_apps.tsv"
+# v2 cache adds a resolved icon path column; renamed to invalidate v1 caches.
+CACHE_FILE="$CACHE_DIR/gui_apps_v2.tsv"
 STAMP_FILE="$CACHE_DIR/.stamp"
 mkdir -p "$CACHE_DIR"
+
+# Icon-name -> absolute path index, populated lazily during cache rebuild.
+declare -A ICON_MAP
+
+build_icon_index() {
+  local roots=(
+    "$HOME/.local/share/icons"
+    "$HOME/.icons"
+    "/usr/local/share/icons"
+    "/usr/share/icons"
+    "/usr/share/pixmaps"
+    "$HOME/.local/share/flatpak/exports/share/icons"
+    "/var/lib/flatpak/exports/share/icons"
+  )
+  local f base score existing existing_score
+  while IFS= read -r -d '' f; do
+    base="${f##*/}"; base="${base%.*}"
+    # Skip files whose stripped basename is empty (e.g. ".png") - bash
+    # forbids empty array subscripts and would error under set -e.
+    [[ -z "$base" ]] && continue
+    # Lower score = preferred at wofi's image-size=32.
+    score=5
+    case "$f" in
+      */32x32/*)    score=0 ;;
+      */48x48/*)    score=1 ;;
+      */scalable/*) score=2 ;;
+      */64x64/*)    score=3 ;;
+      */pixmaps/*)  score=4 ;;
+      */16x16/*)    score=6 ;;
+    esac
+    existing="${ICON_MAP[$base]:-}"
+    if [[ -z "$existing" ]]; then
+      ICON_MAP[$base]="${score}|${f}"
+    else
+      existing_score="${existing%%|*}"
+      if (( score < existing_score )); then
+        ICON_MAP[$base]="${score}|${f}"
+      fi
+    fi
+  done < <(
+    for d in "${roots[@]}"; do
+      [[ -d "$d" ]] && find "$d" -type f \( -name '*.png' -o -name '*.svg' -o -name '*.xpm' \) -print0 2>/dev/null
+    done
+  )
+}
+
+resolve_icon() {
+  # Always returns 0 - missing icons are normal and must not trip `set -e`
+  # when the result is captured via $(resolve_icon ...).
+  local key="$1"
+  [[ -z "$key" ]] && return 0
+  # Absolute path in Icon= - accept only if it points at a real image file
+  # (some .desktop files set Icon= to a non-image binary, e.g. a game launcher).
+  if [[ "$key" = /* ]]; then
+    case "${key,,}" in
+      *.png|*.svg|*.xpm|*.jpg|*.jpeg|*.gif|*.bmp|*.webp)
+        [[ -f "$key" ]] && printf '%s' "$key"
+        ;;
+    esac
+    return 0
+  fi
+  # Spec says Icon= should be a name without extension, but some files include one.
+  local stripped="${key%.*}"
+  local entry=""
+  if [[ -n "$stripped" && -n "${ICON_MAP[$stripped]:-}" ]]; then
+    entry="${ICON_MAP[$stripped]}"
+  elif [[ -n "${ICON_MAP[$key]:-}" ]]; then
+    entry="${ICON_MAP[$key]}"
+  fi
+  if [[ -n "$entry" ]]; then
+    printf '%s' "${entry#*|}"
+  fi
+  return 0
+}
 
 # Apps to always exclude by name (case-insensitive match)
 BLACKLIST=("Terminology")
@@ -64,7 +139,7 @@ parse_desktop() {
     BEGIN{
       in_entry=0
       name=""; exec=""; nodisplay=""; hidden=""; terminal=""
-      cats=""; tryexec=""; onlyshowin=""; notshowin=""
+      cats=""; tryexec=""; onlyshowin=""; notshowin=""; icon=""
     }
 
     # tolerate UTF-8 BOM
@@ -96,6 +171,8 @@ parse_desktop() {
         sub(/^OnlyShowIn=/,""); onlyshowin=trim($0)
       } else if ($0 ~ /^NotShowIn=/ && notshowin=="") {
         sub(/^NotShowIn=/,""); notshowin=trim($0)
+      } else if ($0 ~ /^Icon=/ && icon=="") {
+        sub(/^Icon=/,""); icon=trim($0)
       }
     }
 
@@ -103,7 +180,7 @@ parse_desktop() {
       if (name=="" || exec=="") exit
       if (nodisplay=="true" || hidden=="true") exit
       if (terminal=="") terminal="false"
-      printf("%s\t%s\t%s\t%s\t%s\t%s\t%s\n", cats, name, exec, terminal, tryexec, onlyshowin, notshowin)
+      printf("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", cats, name, exec, terminal, tryexec, onlyshowin, notshowin, icon)
     }
   ' "$file"
 }
@@ -114,6 +191,9 @@ build_cache() {
     : > "$CACHE_FILE"
   unset SEEN_DESKTOP
   declare -A SEEN_DESKTOP
+
+  # Build the icon index once per cache rebuild.
+  build_icon_index
 
   for d in "${APP_DIRS[@]}"; do
     [[ -d "$d" ]] || continue
@@ -132,10 +212,13 @@ build_cache() {
   done
 
 
-  awk -F'\t' '
+  # Use \x1f (Unit Separator) between awk and the while-read - bash collapses
+  # consecutive IFS-whitespace separators (incl. tab) so empty middle fields
+  # would shift later columns left. \x1f is non-whitespace so empties survive.
+  awk -F'\t' 'BEGIN{OFS="\x1f"}
     function strip_codes(s){ gsub(/%[fFuUdDnNickvm]/,"",s); return s }
-    { print $1 "\t" $2 "\t" strip_codes($3) "\t" $4 "\t" $5 "\t" $6 "\t" $7 }
-  ' "$CACHE_FILE" | while IFS=$'\t' read -r cats name exec term tryexec onlyshowin notshowin; do
+    { print $1, $2, strip_codes($3), $4, $5, $6, $7, $8 }
+  ' "$CACHE_FILE" | while IFS=$'\x1f' read -r cats name exec term tryexec onlyshowin notshowin icon; do
     # Skip if TryExec binary is not installed
     if [[ -n "$tryexec" ]]; then
       cmd="${tryexec%% *}"
@@ -154,7 +237,8 @@ build_cache() {
       [[ "${name,,}" == "${bl,,}" ]] && continue 2
     done
     norm="$(normalize_category "$cats")"
-    printf '%s\t%s\t%s\t%s\n' "$norm" "$name" "$exec" "$term"
+    icon_path="$(resolve_icon "$icon")"
+    printf '%s\t%s\t%s\t%s\t%s\n' "$norm" "$name" "$exec" "$term" "$icon_path"
   done | sort -f -k1,1 -k2,2 > "${CACHE_FILE}.tmp"
 
     mv "${CACHE_FILE}.tmp" "$CACHE_FILE"
@@ -164,13 +248,15 @@ build_cache() {
   if [[ -f "$imager_desktop" ]] && ! grep -qi $'\tRaspberry Pi Imager\t' "$CACHE_FILE"; then
     line="$(parse_desktop "$imager_desktop" || true)"
     if [[ -n "${line:-}" ]]; then
-      IFS=$'\t' read -r cats name exec term tryexec <<< "$line"
+      # Convert tabs to \x1f so empty middle fields aren't collapsed by IFS-whitespace.
+      IFS=$'\x1f' read -r cats name exec term tryexec onlyshowin notshowin icon <<< "${line//$'\t'/$'\x1f'}"
       norm="$(normalize_category "$cats")"
 
       # Use a clean, known-good Exec instead of the crazy file-forwarding one
       exec="flatpak run org.raspberrypi.rpi-imager"
+      icon_path="$(resolve_icon "$icon")"
 
-      printf '%s\t%s\t%s\t%s\n' "$norm" "$name" "$exec" "$term" >> "$CACHE_FILE"
+      printf '%s\t%s\t%s\t%s\t%s\n' "$norm" "$name" "$exec" "$term" "$icon_path" >> "$CACHE_FILE"
       # keep cache sorted by category, then name (case-insensitive)
       sort -f -k1,1 -k2,2 "$CACHE_FILE" -o "$CACHE_FILE"
     fi
@@ -228,7 +314,7 @@ MENU_DISPLAY=()
 current_cat=""
 : > "$RUNTIME_MAP"
 
-while IFS=$'\t' read -r cat name exec term; do
+while IFS=$'\t' read -r cat name exec term icon; do
   # respect --include-terminal flag here
   if [[ "$INCLUDE_TERMINAL" != "true" && "$term" == "true" ]]; then
     continue
@@ -253,7 +339,15 @@ while IFS=$'\t' read -r cat name exec term; do
   MENU_DISPLAY+=("$header_markup")
 fi
   short="$name"; (( ${#short} > 60 )) && short="${short:0:60}…"
-  MENU_DISPLAY+=("$short")
+  # wofi 1.4.1 dmenu image-escape format: "img:<path>:text:<label>" on one line.
+  # The parser walks the line by colons, switching modes when it hits a known
+  # token ("img", "text", etc.); the literal ":text:" terminates the path and
+  # routes the rest into the label widget.
+  if [[ -n "$icon" ]]; then
+    MENU_DISPLAY+=("img:${icon}:text:${short}")
+  else
+    MENU_DISPLAY+=("$short")
+  fi
   printf '%s\t%s\t%s\n' "$short" "$exec" "$term" >> "$RUNTIME_MAP"
 
 done < "$CACHE_FILE"
@@ -262,7 +356,8 @@ done < "$CACHE_FILE"
 while :; do
   selection="$(
   printf '%s\n' "${MENU_DISPLAY[@]}" \
-  | wofi --dmenu --allow-markup \
+  | wofi --dmenu --allow-markup --allow-images \
+       --define=dmenu-parse_action=true \
        --prompt "Launch" \
        --location 1 --width 500 --height 1000 \
        --xoffset 10 --yoffset 10 \
@@ -271,7 +366,9 @@ while :; do
 
 )" || exit 0
 
-# strip pango tags so header detection still works
+# dmenu-parse_action=true makes wofi strip image escapes from the returned
+# line (so app rows come back as bare labels), but it does NOT strip pango
+# markup - headers still include their <b><span> tags, so sed them off here.
 plain_sel="$(sed -E 's/<[^>]+>//g' <<< "$selection")"
 if [[ "$plain_sel" == "== "* ]]; then
   continue
