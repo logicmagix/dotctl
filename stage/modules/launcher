@@ -275,6 +275,11 @@ needs_rebuild() {
   cache_mtime=$(stat -c %Y "$CACHE_FILE" 2>/dev/null || stat -f %m "$CACHE_FILE" 2>/dev/null || echo 0)
   for d in "${APP_DIRS[@]}"; do
     [[ -d "$d" ]] || continue
+    # Dir mtime updates on file add/remove/rename - catches uninstalls,
+    # which leave no *.desktop file newer than the cache.
+    if find "$d" -maxdepth 0 -newermt "@$cache_mtime" | read -r _; then
+      return 0
+    fi
     if find "$d" -type f -name '*.desktop' -newermt "@$cache_mtime" | read -r _; then
       return 0
     fi
