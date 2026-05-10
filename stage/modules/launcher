@@ -27,10 +27,12 @@ APP_DIRS=(
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/wofi"
 # v2 cache adds a resolved icon path column; renamed to invalidate v1 caches.
 CACHE_FILE="$CACHE_DIR/gui_apps_v2.tsv"
+ICON_CACHE_FILE="$CACHE_DIR/icon_index.tsv"
 STAMP_FILE="$CACHE_DIR/.stamp"
 mkdir -p "$CACHE_DIR"
 
-# Icon-name -> absolute path index, populated lazily during cache rebuild.
+# Icon-name -> "score|path" index. Persisted to $ICON_CACHE_FILE so the
+# expensive find across icon roots only runs on --rebuild (or first run).
 declare -A ICON_MAP
 
 build_icon_index() {
@@ -44,6 +46,7 @@ build_icon_index() {
     "/var/lib/flatpak/exports/share/icons"
   )
   local f base score existing existing_score
+  ICON_MAP=()
   while IFS= read -r -d '' f; do
     base="${f##*/}"; base="${base%.*}"
     # Skip files whose stripped basename is empty (e.g. ".png") - bash
@@ -73,6 +76,35 @@ build_icon_index() {
       [[ -d "$d" ]] && find "$d" -type f \( -name '*.png' -o -name '*.svg' -o -name '*.xpm' \) -print0 2>/dev/null
     done
   )
+
+  # Persist so subsequent runs skip the find walk entirely.
+  local tmp="${ICON_CACHE_FILE}.tmp"
+  : > "$tmp"
+  local k
+  for k in "${!ICON_MAP[@]}"; do
+    printf '%s\t%s\n' "$k" "${ICON_MAP[$k]}" >> "$tmp"
+  done
+  mv "$tmp" "$ICON_CACHE_FILE"
+}
+
+load_icon_index() {
+  ICON_MAP=()
+  local key entry
+  while IFS=$'\t' read -r key entry; do
+    [[ -z "$key" ]] && continue
+    ICON_MAP[$key]="$entry"
+  done < "$ICON_CACHE_FILE"
+}
+
+ensure_icon_index() {
+  # Rebuild on --rebuild or when the persisted index is missing; otherwise
+  # reuse what we scanned last time. New/removed icons are picked up on the
+  # next --rebuild, matching how desktop deletions are handled.
+  if $FORCE_REBUILD || [[ ! -s "$ICON_CACHE_FILE" ]]; then
+    build_icon_index
+  else
+    load_icon_index
+  fi
 }
 
 resolve_icon() {
@@ -192,8 +224,8 @@ build_cache() {
   unset SEEN_DESKTOP
   declare -A SEEN_DESKTOP
 
-  # Build the icon index once per cache rebuild.
-  build_icon_index
+  # Load the persisted icon index, or rebuild it on --rebuild / first run.
+  ensure_icon_index
 
   for d in "${APP_DIRS[@]}"; do
     [[ -d "$d" ]] || continue
