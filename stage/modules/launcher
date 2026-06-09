@@ -73,7 +73,15 @@ build_icon_index() {
     fi
   done < <(
     for d in "${roots[@]}"; do
-      [[ -d "$d" ]] && find "$d" -type f \( -name '*.png' -o -name '*.svg' -o -name '*.xpm' \) -print0 2>/dev/null
+      [[ -d "$d" ]] || continue
+      # Follow symlinks (-L) only under flatpak exports, where icons are
+      # symlinks into ../../app/.... Plain find elsewhere: system icon themes
+      # use inheritance symlinks that -L would chase into huge/looping walks.
+      if [[ "$d" == *"/flatpak/"* ]]; then
+        find -L "$d" -type f \( -name '*.png' -o -name '*.svg' -o -name '*.xpm' \) -print0 2>/dev/null
+      else
+        find "$d" -type f \( -name '*.png' -o -name '*.svg' -o -name '*.xpm' \) -print0 2>/dev/null
+      fi
     done
   )
 
@@ -240,7 +248,9 @@ build_cache() {
       line="$(parse_desktop "$f" || true)"
       [[ -n "$line" ]] || continue
       printf '%s\n' "$line" >> "$CACHE_FILE"
-    done < <(find "$d" -type f -name '*.desktop' -print0 2>/dev/null)
+      # -L follows symlinks: flatpak exports its *.desktop files as symlinks
+      # into ../../app/..., which a bare `-type f` would skip.
+    done < <(find -L "$d" -type f -name '*.desktop' -print0 2>/dev/null)
   done
 
 
@@ -292,7 +302,7 @@ needs_rebuild() {
     if find "$d" -maxdepth 0 -newermt "@$cache_mtime" | read -r _; then
       return 0
     fi
-    if find "$d" -type f -name '*.desktop' -newermt "@$cache_mtime" | read -r _; then
+    if find -L "$d" -type f -name '*.desktop' -newermt "@$cache_mtime" | read -r _; then
       return 0
     fi
   done
