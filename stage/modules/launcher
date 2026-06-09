@@ -275,26 +275,6 @@ build_cache() {
 
     mv "${CACHE_FILE}.tmp" "$CACHE_FILE"
 
-  # --- Force-add Raspberry Pi Imager if it got skipped upstream ---
-  local imager_desktop="$HOME/.local/share/flatpak/exports/share/applications/org.raspberrypi.rpi-imager.desktop"
-  if [[ -f "$imager_desktop" ]] && ! grep -qi $'\tRaspberry Pi Imager\t' "$CACHE_FILE"; then
-    line="$(parse_desktop "$imager_desktop" || true)"
-    if [[ -n "${line:-}" ]]; then
-      # Convert tabs to \x1f so empty middle fields aren't collapsed by IFS-whitespace.
-      IFS=$'\x1f' read -r cats name exec term tryexec onlyshowin notshowin icon <<< "${line//$'\t'/$'\x1f'}"
-      norm="$(normalize_category "$cats")"
-
-      # Use a clean, known-good Exec instead of the crazy file-forwarding one
-      exec="flatpak run org.raspberrypi.rpi-imager"
-      icon_path="$(resolve_icon "$icon")"
-
-      printf '%s\t%s\t%s\t%s\t%s\n' "$norm" "$name" "$exec" "$term" "$icon_path" >> "$CACHE_FILE"
-      # keep cache sorted by category, then name (case-insensitive)
-      sort -f -k1,1 -k2,2 "$CACHE_FILE" -o "$CACHE_FILE"
-    fi
-  fi
-  # --- end force-add block ---
-
   date +%s > "$STAMP_FILE"
 }
 
@@ -356,18 +336,6 @@ while IFS=$'\t' read -r cat name exec term icon; do
   if [[ "$INCLUDE_TERMINAL" != "true" && "$term" == "true" ]]; then
     continue
   fi
-
-    # If this is a flatpak app, only allow Heroic and Pi Imager
-  if [[ "$exec" == *flatpak* ]]; then
-    case "$exec" in
-      *com.heroicgameslauncher.hgl*|*org.raspberrypi.rpi-imager*)
-        ;;  # allowed
-      *)
-        continue  # skip other flatpak apps
-        ;;
-    esac
-  fi
-
 
  if [[ "$cat" != "$current_cat" ]]; then
   current_cat="$cat"
