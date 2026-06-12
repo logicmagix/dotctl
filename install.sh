@@ -626,10 +626,10 @@ ${BOLD}Next steps:${RST}
 
      ${CYN}waybar & disown${RST}
 
-4. ${BOLD}Recommended:${RST} add these settings to ~/.config/hypr/hyprland.conf
-   for smooth wofi fade animations and flicker-free wallpaper cycling:
+4. ${BOLD}Recommended:${RST} add these settings for smooth wofi fade animations
+   and flicker-free wallpaper cycling:
 
-   In your ${BOLD}animations${RST} block, replace or add:
+   ${DIM}For hyprland.conf (legacy/hyprlang):${RST}
 
      ${CYN}animation = fade,          1, 8,  easeOutQuint${RST}
      ${CYN}animation = layers,        1, 4,  easeOutQuint${RST}
@@ -637,20 +637,33 @@ ${BOLD}Next steps:${RST}
      ${CYN}animation = layersOut,     1, 3,  easeOutQuint, fade${RST}
      ${CYN}animation = fadeLayersIn,  1, 8,  almostLinear${RST}
      ${CYN}animation = fadeLayersOut, 1, 6,  almostLinear${RST}
-
-   Disable the default wallpaper (prevents a flash during cycling):
-
      ${CYN}force_default_wallpaper = 0${RST}
+
+   ${DIM}For hyprland.lua (v0.55+):${RST}
+
+     ${CYN}hl.config({${RST}
+     ${CYN}    animations = {${RST}
+     ${CYN}        animation = {${RST}
+     ${CYN}            { "fade",          1, 8, "easeOutQuint" },${RST}
+     ${CYN}            { "layers",        1, 4, "easeOutQuint" },${RST}
+     ${CYN}            { "layersIn",      1, 4, "easeOutQuint", "fade" },${RST}
+     ${CYN}            { "layersOut",     1, 3, "easeOutQuint", "fade" },${RST}
+     ${CYN}            { "fadeLayersIn",  1, 8, "almostLinear" },${RST}
+     ${CYN}            { "fadeLayersOut", 1, 6, "almostLinear" },${RST}
+     ${CYN}        },${RST}
+     ${CYN}    },${RST}
+     ${CYN}    misc = { force_default_wallpaper = 0 },${RST}
+     ${CYN}})${RST}
 
    Then: ${CYN}hyprctl reload${RST}
 
 5. ${BOLD}Optional:${RST} the ${CYN}keybinds${RST} module is an opt-in wofi cheatsheet
-   that reads ~/.config/hypr/hyprland.conf, follows ${CYN}source =${RST} directives
-   recursively, and surfaces every bind that carries a trailing
-   ${CYN}# Label${RST} comment. ${BOLD}hyprland.conf is never modified${RST} - you opt in
-   per-bind. Bind it with:
+   that reads your hyprland config, follows ${CYN}source =${RST} / ${CYN}dofile()${RST}
+   directives recursively, and surfaces every bind that carries a
+   trailing ${CYN}# Label${RST} or ${CYN}-- Label${RST} comment. Bind it with:
 
-     ${CYN}bind = ALT, B, exec, keybinds   # Keybinds cheatsheet${RST}
+   ${DIM}Legacy:${RST} ${CYN}bind = ALT, B, exec, keybinds   # Keybinds cheatsheet${RST}
+   ${DIM}Lua:${RST}    ${CYN}hl.bind("ALT + B", hl.dsp.exec_cmd("keybinds"))  -- Keybinds cheatsheet${RST}
 
    See ${CYN}keybinds --help${RST} for the full annotation grammar.
 
