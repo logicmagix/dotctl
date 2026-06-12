@@ -5,11 +5,23 @@ DIR="${1:-next}"     # "next" or "prev"
 MIN="${2:-1}"        # lowest workspace number
 MAX="${3:-10}"       # highest workspace number
 
+# Runtime detection for Hyprland Lua config (v0.55+).
+# Try legacy dispatch first; if it fails with lua parse error, use eval.
+dispatch_workspace() {
+  local ws="$1"
+  local out
+  out=$(hyprctl dispatch workspace "$ws" 2>&1)
+  if [[ "$out" == *"hl.dispatch"* ]]; then
+    # Lua config detected - use eval syntax
+    hyprctl eval "hl.dispatch(hl.dsp.focus({workspace=$ws}))" >/dev/null 2>&1
+  fi
+}
+
 cur="$(hyprctl -j activeworkspace | jq -r '.id')"
 
 # If you are on a "special" workspace (negative id), go to MIN
 if [[ "$cur" -lt 0 ]]; then
-  hyprctl dispatch workspace "$MIN"
+  dispatch_workspace "$MIN"
   exit 0
 fi
 
@@ -21,5 +33,4 @@ else
   [[ "$nxt" -gt "$MAX" ]] && nxt="$MIN"
 fi
 
-hyprctl dispatch workspace "$nxt"
-
+dispatch_workspace "$nxt"

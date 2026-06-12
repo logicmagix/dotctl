@@ -522,10 +522,13 @@ info "Installing cycle scripts to $CONFIG_HOME/dotctl/cycle/…"
 copy_config "$STAGE/cycle" "$CONFIG_HOME/dotctl/cycle"
 chmod +x "$CONFIG_HOME/dotctl/cycle"/cycle-hyprpaper-*
 
-# Hypr color template - apply_hypr reads it from ~/.local/share/dotctl/
-info "Installing hypr color template to $DATA_HOME/dotctl/…"
+# Hypr color templates - apply_hypr reads from ~/.local/share/dotctl/ and
+# selects the correct one based on HYPR_CONFIG (legacy or lua).
+info "Installing hypr color templates to $DATA_HOME/dotctl/…"
 install -Dm644 "$STAGE/hypr/dotctl-colors.conf.tmpl" "$DATA_HOME/dotctl/dotctl-colors.conf.tmpl"
-ok "$DATA_HOME/dotctl/dotctl-colors.conf.tmpl"
+ok "$DATA_HOME/dotctl/dotctl-colors.conf.tmpl (legacy/hyprlang)"
+install -Dm644 "$STAGE/hypr/dotctl-colors.lua.tmpl" "$DATA_HOME/dotctl/dotctl-colors.lua.tmpl"
+ok "$DATA_HOME/dotctl/dotctl-colors.lua.tmpl (lua v0.55+)"
 
 # Hypr snippets (keybinds + color stub). The color stub is a neutral-grey
 # placeholder so hyprland's `source = ~/.config/hypr/dotctl-colors.conf`
@@ -533,13 +536,16 @@ ok "$DATA_HOME/dotctl/dotctl-colors.conf.tmpl"
 # palette-driven values on first run.
 if [[ -d "$CONFIG_HOME/hypr" ]]; then
   info "Installing hypr snippets to $CONFIG_HOME/hypr/…"
+  # Install both keybind formats - user sources the appropriate one
   if [[ -e "$CONFIG_HOME/hypr/dotctl-keybinds.conf" ]]; then
     kb_backup="$CONFIG_HOME/hypr/dotctl-keybinds.conf.bak-${BACKUP_TS}"
     mv "$CONFIG_HOME/hypr/dotctl-keybinds.conf" "$kb_backup"
     ok "backed up existing dotctl-keybinds.conf → $kb_backup"
   fi
   cp -a "$STAGE/hypr/dotctl-keybinds.conf" "$CONFIG_HOME/hypr/dotctl-keybinds.conf"
-  ok "$CONFIG_HOME/hypr/dotctl-keybinds.conf"
+  ok "$CONFIG_HOME/hypr/dotctl-keybinds.conf (legacy/hyprlang)"
+  cp -a "$STAGE/hypr/dotctl-keybinds.lua" "$CONFIG_HOME/hypr/dotctl-keybinds.lua"
+  ok "$CONFIG_HOME/hypr/dotctl-keybinds.lua (lua v0.55+)"
 
   if [[ ! -f "$CONFIG_HOME/hypr/dotctl-colors.conf" ]]; then
     cat > "$CONFIG_HOME/hypr/dotctl-colors.conf" <<'STUB'
@@ -600,11 +606,15 @@ ${BOLD}${GRN}dotctl installed.${RST}
 
 ${BOLD}Next steps:${RST}
 
-1. Add these two lines to the ${BOLD}bottom${RST} of ~/.config/hypr/hyprland.conf
-   (the bottom matters - later entries override earlier ones):
+1. Add dotctl snippets to your hyprland config:
 
+   ${DIM}For hyprland.conf (legacy/hyprlang):${RST}
      ${CYN}source = ~/.config/hypr/dotctl-keybinds.conf${RST}
      ${CYN}source = ~/.config/hypr/dotctl-colors.conf${RST}
+
+   ${DIM}For hyprland.lua (v0.55+):${RST}
+     ${CYN}dofile(os.getenv("HOME") .. "/.config/hypr/dotctl-keybinds.lua")${RST}
+     ${CYN}dofile(os.getenv("HOME") .. "/.config/hypr/dotctl-colors.lua")${RST}
 
    Then: ${CYN}hyprctl reload${RST}
 

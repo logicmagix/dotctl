@@ -1,0 +1,20 @@
+-- dotctl - hyprland border/glow colors (Lua format for v0.55+)
+-- Generated from the active waybar palette - do not hand-edit.
+-- Regenerated on every `dotctl apply` and sourced from hyprland.lua.
+--
+-- To activate, add this line to ~/.config/hypr/hyprland.lua:
+--     dofile(os.getenv("HOME") .. "/.config/hypr/dotctl-colors.lua")
+
+hl.config({
+    general = {
+        col = {
+            active_border   = { colors = {"rgba(__CYAN__ee)", "rgba(__YELLOW__ee)"}, angle = 45 },
+            inactive_border = "rgba(__BG3__aa)",
+        },
+    },
+    decoration = {
+        shadow = {
+            color = "rgba(__SHADOW_COLOR____SHADOW_ALPHA__)",
+        },
+    },
+})

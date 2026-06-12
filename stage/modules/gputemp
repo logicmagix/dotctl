@@ -23,7 +23,7 @@ pick_temp() {
   for d in /sys/class/hwmon/hwmon*; do
     [[ -r "$d/name" ]] || continue
     name=$(<"$d/name")
-    if [[ "$name" == *gpu* || "$name" == amdgpu || "$name" == nouveau ]]; then
+    if [[ "$name" == *gpu* || "$name" == amdgpu || "$name" == nouveau || "$name" == radeon ]]; then
       input=$(ls "$d"/temp*_input 2>/dev/null | head -n1)
       if [[ -r "$input" ]]; then
         t=$(<"$input")

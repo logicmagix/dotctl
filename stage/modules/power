@@ -35,8 +35,18 @@ else
   reboot_cmd="reboot"
 fi
 
+# Runtime detection for Hyprland Lua config (v0.55+).
+# Try legacy dispatch first; if it fails with lua parse error, use eval.
+hypr_exit() {
+  out=$(hyprctl dispatch exit 2>&1)
+  if echo "$out" | grep -q "hl.dispatch"; then
+    # Lua config detected - use eval syntax
+    hyprctl eval 'hl.dispatch(hl.dsp.exit())'
+  fi
+}
+
 case "$choice" in
   " Poweroff") $poweroff_cmd ;;
   " Reboot")   $reboot_cmd ;;
-  "󰒲 Logout")  hyprctl dispatch exit ;;
+  "󰒲 Logout")  hypr_exit ;;
 esac

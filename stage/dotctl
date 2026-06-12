@@ -48,6 +48,7 @@ readonly LOG_FILE="/tmp/dotctl.log"
 cycle_script() { printf '%s/cycle-hyprpaper-%s\n' "$CYCLE_DIR" "$1"; }
 
 readonly STATE_KEYS=(
+  HYPR_CONFIG
   CAVA_COLOR
   KITTY_COLOR   KITTY_FONT   KITTY_FONT_SIZE
   MAKO_COLOR    MAKO_FONT    MAKO_FONT_SIZE
@@ -59,6 +60,7 @@ readonly STATE_KEYS=(
 
 # Defaults used when first-run has no state yet AND when older state files
 # don't yet have the font-size fields (soft migration).
+readonly DEFAULT_HYPR_CONFIG=legacy
 readonly DEFAULT_KITTY_FONT_SIZE=18
 readonly DEFAULT_MAKO_FONT_SIZE=14
 readonly DEFAULT_WOFI_FONT_SIZE=26
@@ -224,6 +226,7 @@ load_state() {
   source "$STATE_FILE"
   # Soft migration: font-size fields added after first release - if a state
   # file predates them, fall back to the hardcoded defaults so we don't die.
+  : "${HYPR_CONFIG:=$DEFAULT_HYPR_CONFIG}"
   : "${KITTY_FONT_SIZE:=$DEFAULT_KITTY_FONT_SIZE}"
   : "${MAKO_FONT_SIZE:=$DEFAULT_MAKO_FONT_SIZE}"
   : "${WOFI_FONT_SIZE:=$DEFAULT_WOFI_FONT_SIZE}"
@@ -670,15 +673,27 @@ apply_wallpaper() {
 
 # Resolve the hyprland color template - installed copy first, then the
 # source tree copy next to this script (for uninstalled testing).
+# Returns the correct template based on HYPR_CONFIG (legacy or lua).
 _hypr_template_path() {
-  [[ -f "$HYPR_COLORS_TEMPLATE" ]] && { printf '%s\n' "$HYPR_COLORS_TEMPLATE"; return 0; }
+  local ext="conf"
+  [[ "${HYPR_CONFIG:-legacy}" == "lua" ]] && ext="lua"
+  local tmpl_name="dotctl-colors.${ext}.tmpl"
+  local installed="$HOME/.local/share/dotctl/$tmpl_name"
+  [[ -f "$installed" ]] && { printf '%s\n' "$installed"; return 0; }
   local self_dir
   self_dir=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
-  if [[ -f "$self_dir/hypr/dotctl-colors.conf.tmpl" ]]; then
-    printf '%s\n' "$self_dir/hypr/dotctl-colors.conf.tmpl"
+  if [[ -f "$self_dir/hypr/$tmpl_name" ]]; then
+    printf '%s\n' "$self_dir/hypr/$tmpl_name"
     return 0
   fi
   return 1
+}
+
+# Resolve the hyprland colors output file based on HYPR_CONFIG.
+_hypr_colors_file() {
+  local ext="conf"
+  [[ "${HYPR_CONFIG:-legacy}" == "lua" ]] && ext="lua"
+  printf '%s/dotctl-colors.%s\n' "$HYPR_DIR" "$ext"
 }
 
 # Parse a waybar `.palette` file into stdout as `NAME<space>HEX` lines,
@@ -698,8 +713,9 @@ _parse_palette() {
 
 apply_hypr() {
   local palette="$WAYBAR_DIR/palettes/${WAYBAR_COLOR}.palette"
-  local template
+  local template output_file
   template=$(_hypr_template_path) || { warn "hypr colors template missing - skipping apply_hypr"; return 0; }
+  output_file=$(_hypr_colors_file)
   [[ -f "$palette" ]] || { warn "hypr: palette missing: $palette"; return 0; }
   [[ -d "$HYPR_DIR" ]] || { log "hypr: $HYPR_DIR absent - skipping"; return 0; }
 
@@ -755,12 +771,12 @@ apply_hypr() {
     -e "s/__BG3__/${bg3}/g" \
     -e "s/__SHADOW_COLOR__/${shadow_color}/g" \
     -e "s/__SHADOW_ALPHA__/${shadow_alpha}/g" \
-    "$template" > "$HYPR_COLORS_FILE.tmp" && mv -f "$HYPR_COLORS_FILE.tmp" "$HYPR_COLORS_FILE"
+    "$template" > "$output_file.tmp" && mv -f "$output_file.tmp" "$output_file"
 
   # Reload hyprland in place if running. Silent on failure - the user may
-  # not yet have sourced the file from their hyprland.conf.
+  # not yet have sourced the file from their hyprland.conf/lua.
   hyprctl reload >/dev/null 2>&1 || true
-  log "apply hypr: colors from ${WAYBAR_COLOR}.palette → $HYPR_COLORS_FILE (effect=${HYPR_EFFECT:-shadow})"
+  log "apply hypr: colors from ${WAYBAR_COLOR}.palette → $output_file (config=${HYPR_CONFIG:-legacy}, effect=${HYPR_EFFECT:-shadow})"
 }
 
 apply_all() {
@@ -1468,6 +1484,7 @@ EOF
     # Seed empty defaults; first option in each prompt will be picked.
     local k; for k in "${STATE_KEYS[@]}"; do declare -g "$k="; done
     # Font sizes need numeric defaults so the ladder highlights a sensible pick.
+    HYPR_CONFIG="$DEFAULT_HYPR_CONFIG"
     KITTY_FONT_SIZE="$DEFAULT_KITTY_FONT_SIZE"
     MAKO_FONT_SIZE="$DEFAULT_MAKO_FONT_SIZE"
     WOFI_FONT_SIZE="$DEFAULT_WOFI_FONT_SIZE"
@@ -1518,20 +1535,25 @@ EOF
   (( ${#waybar_colors[@]} > 0 )) || die "no waybar colors detected in $WAYBAR_DIR"
   (( ${#wallpapers[@]}    > 0 )) || die "no wallpaper themes detected in $WALLPAPER_ROOT (with matching cycle scripts)"
 
-  # Total step count in prompt labels (5 UI elements + wallpaper).
-  local total=6
+  # Total step count in prompt labels (hypr config + 5 UI elements + wallpaper).
+  local total=7
 
-  CAVA_COLOR=$(prompt_select      "[1/$total] cava color"               "$CAVA_COLOR"   "${cava_colors[@]}")
+  # Hyprland config format - must be first so all subsequent apply steps know
+  # whether to emit legacy (hyprlang) or lua config syntax.
+  local hypr_configs=( "legacy|hyprlang format (hyprland.conf)" "lua|Lua format (hyprland.lua - v0.55+)" )
+  HYPR_CONFIG=$(prompt_select     "[1/$total] hyprland config format"   "$HYPR_CONFIG"  "${hypr_configs[@]}")
 
-  KITTY_COLOR=$(prompt_select     "[2/$total] kitty color"              "$KITTY_COLOR"  "${kitty_colors[@]}")
+  CAVA_COLOR=$(prompt_select      "[2/$total] cava color"               "$CAVA_COLOR"   "${cava_colors[@]}")
+
+  KITTY_COLOR=$(prompt_select     "[3/$total] kitty color"              "$KITTY_COLOR"  "${kitty_colors[@]}")
   KITTY_FONT=$(prompt_select      "      kitty font"               "$KITTY_FONT"   "${kitty_fonts[@]}")
   KITTY_FONT_SIZE=$(prompt_font_size "      kitty font size"          "$KITTY_FONT_SIZE")
 
-  MAKO_COLOR=$(prompt_select      "[3/$total] mako color"               "$MAKO_COLOR"   "${mako_colors[@]}")
+  MAKO_COLOR=$(prompt_select      "[4/$total] mako color"               "$MAKO_COLOR"   "${mako_colors[@]}")
   MAKO_FONT=$(prompt_select       "      mako font"                "$MAKO_FONT"    "${mako_fonts[@]}")
   MAKO_FONT_SIZE=$(prompt_font_size  "      mako font size"           "$MAKO_FONT_SIZE")
 
-  WOFI_COLOR=$(prompt_select      "[4/$total] wofi color"               "$WOFI_COLOR"   "${wofi_colors[@]}")
+  WOFI_COLOR=$(prompt_select      "[5/$total] wofi color"               "$WOFI_COLOR"   "${wofi_colors[@]}")
   WOFI_FONT=$(prompt_select       "      wofi font"                "$WOFI_FONT"    "${wofi_fonts[@]}")
   WOFI_FONT_SIZE=$(prompt_font_size  "      wofi font size"           "$WOFI_FONT_SIZE")
 
@@ -1553,7 +1575,7 @@ EOF
   done
   WOFI_VARIANT=$(prompt_select    "      wofi variant"             "$WOFI_VARIANT" "${wv_opts[@]}")
 
-  WAYBAR_COLOR=$(prompt_select      "[5/$total] waybar color"             "$WAYBAR_COLOR" "${waybar_colors[@]}")
+  WAYBAR_COLOR=$(prompt_select      "[6/$total] waybar color"             "$WAYBAR_COLOR" "${waybar_colors[@]}")
   WAYBAR_FONT=$(prompt_select       "      waybar font"              "$WAYBAR_FONT"  "${waybar_fonts[@]}")
   WAYBAR_FONT_SIZE=$(prompt_font_size  "      waybar font size"         "$WAYBAR_FONT_SIZE")
   WAYBAR_STYLE=$(prompt_select      "      waybar style"             "$WAYBAR_STYLE" "${waybar_styles[@]}")
@@ -1585,11 +1607,12 @@ EOF
   done
   WAYBAR_EDITOR=$(prompt_select "      waybar editor" "$WAYBAR_EDITOR" "${we_opts[@]}")
 
-  WALLPAPER=$(prompt_select        "[6/$total] wallpaper theme"       "$WALLPAPER"    "${wallpapers[@]}")
+  WALLPAPER=$(prompt_select        "[7/$total] wallpaper theme"       "$WALLPAPER"    "${wallpapers[@]}")
 
   # Summary
   info ""
   info "  ── summary ──"
+  printf '  %-10s %s\n' "hyprland"  "$HYPR_CONFIG"
   printf '  %-10s %s\n' "cava"      "$CAVA_COLOR"
   printf '  %-10s %s / %s / size %s\n' "kitty" "$KITTY_COLOR" "$KITTY_FONT" "$KITTY_FONT_SIZE"
   printf '  %-10s %s / %s / size %s\n' "mako"  "$MAKO_COLOR" "$MAKO_FONT" "$MAKO_FONT_SIZE"
@@ -1645,6 +1668,7 @@ _load_preset_into_state() {
   source "$path"
   # Presets written before a key was added are missing it - fall back to
   # defaults so apply_* doesn't see an empty variable.
+  : "${HYPR_CONFIG:=$DEFAULT_HYPR_CONFIG}"
   : "${KITTY_FONT_SIZE:=$DEFAULT_KITTY_FONT_SIZE}"
   : "${MAKO_FONT_SIZE:=$DEFAULT_MAKO_FONT_SIZE}"
   : "${WOFI_FONT_SIZE:=$DEFAULT_WOFI_FONT_SIZE}"
