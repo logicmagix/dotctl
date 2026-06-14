@@ -79,7 +79,7 @@ emit() {
 
   mute=$(pac get-sink-mute "$sink" | awk '{print $2}') || mute=no
   vol=$(pac get-sink-volume "$sink" \
-    | awk 'NR==1 { for (i=1;i<=NF;i++) if ($i ~ /%$/) { gsub("%","",$i); print $i+0; exit } }')
+    | awk 'NR==1 { for (i=1;i<=NF;i++) if ($i ~ /%$/) { gsub("%","",$i); print $i+0; exit } }') || vol=0
   [ -z "${vol:-}" ] && vol=0
 
   data=$(pac list sinks | awk -v s="$sink" '
@@ -93,7 +93,7 @@ emit() {
         print "type=" substr($0, RSTART+6, RLENGTH-6)
       }
     }
-  ')
+  ') || data=''
 
   desc=$(awk -F= '$1=="desc"{sub(/^desc=/,""); print; exit}' <<<"$data")
   port_type=$(awk -F= '$1=="type"{sub(/^type=/,""); print; exit}' <<<"$data")
@@ -133,11 +133,11 @@ placeholder "audio starting"
 # pactl subscribe exits immediately — retry so waybar keeps getting updates
 # once the server comes online.
 while :; do
-  emit
+  emit || true
   pactl subscribe 2>/dev/null | while IFS= read -r line; do
     case "$line" in
       *"'change' on sink"*|*"'change' on server"*|*"'new' on sink"*|*"'remove' on sink"*)
-        emit
+        emit || true
         ;;
     esac
   done || true
