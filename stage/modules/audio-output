@@ -29,7 +29,7 @@ PROFILE="${1:-}"
 notify() { notify-send "$@" 2>/dev/null || true; }
 
 if [ -z "$PROFILE" ]; then
-  notify "Audio" "Usage: audio-output {headset|hdmi|speaker|aux|bluetooth|toggle-mute}"
+  notify "Audio" "Usage: audio-output {headset|hdmi|speaker|aux|usb|bluetooth|toggle-mute}"
   exit 1
 fi
 
@@ -80,15 +80,29 @@ rx_ci() {
   return 1
 }
 
-is_headset_row() {
+is_headset_brand_row() {
   local s="$1" t="$2" d="$3"
   rx_ci "$s $d" "$DOTCTL_AUDIO_HEADSET_MATCH" && return 0
   [[ "$s" =~ ^bluez_output\. ]] && return 0
-  [[ "$t" == "Headphones" || "$t" == "Headset" ]] && return 0
-  # Brand-name match on description, but skip USB "Headset Adapter" dongles.
-  rx_ci "$d" "Adapter" && return 1
-  rx_ci "$d" "$HEADSET_BRANDS" && return 0
+  # Brand-name match - skip USB "Headset Adapter" dongles
+  if ! rx_ci "$d" "Adapter"; then
+    rx_ci "$d" "$HEADSET_BRANDS" && return 0
+  fi
   return 1
+}
+
+is_headset_port_row() {
+  local s="$1" t="$2" d="$3"
+  # Port type match for generic headphones (fallback)
+  [[ "$t" == "Headphones" || "$t" == "Headset" ]] && return 0
+  return 1
+}
+
+# Combined check for exclusions (aux/speaker need to exclude headset brands only)
+# Port type "Headphones" on built-in audio should NOT count as headset - that's just
+# aux with headphones plugged in. Only brand-matched devices are true headsets.
+is_headset_row() {
+  is_headset_brand_row "$@"
 }
 
 is_hdmi_row() {
@@ -138,10 +152,16 @@ is_bluetooth_row() {
   [[ "$s" =~ ^bluez_output\. ]]
 }
 
+is_usb_audio_row() {
+  local s="$1"
+  [[ "$s" =~ ^alsa_output\.usb- ]]
+}
+
 case "$PROFILE" in
   headset)
     label='Headset'; icon='🎧'
-    picked=$(pick_row is_headset_row || true)
+    # Only brand-matched headsets (Barracuda, etc.) - not built-in audio with headphones plugged in
+    picked=$(pick_row is_headset_brand_row || true)
     ;;
   hdmi)
     label='HDMI Output'; icon='🖥️'
@@ -157,7 +177,16 @@ case "$PROFILE" in
     ;;
   aux)
     label='AUX / Analog'; icon='🎚️'
-    picked=$(pick_row is_aux_row is_headset_row is_hdmi_row || true)
+    # Prefer built-in audio for aux (pci-* sinks), fall back to USB audio
+    picked=$(pick_row is_aux_row is_headset_row is_hdmi_row is_usb_audio_row || true)
+    if [ -z "$picked" ]; then
+      picked=$(pick_row is_aux_row is_headset_row is_hdmi_row || true)
+    fi
+    ;;
+  usb)
+    label='USB Audio'; icon='🔌'
+    # Generic USB audio adapters (USB-to-aux cables, etc.) - excludes brand headsets
+    picked=$(pick_row is_usb_audio_row is_headset_brand_row || true)
     ;;
   bluetooth|bluez|bt)
     label='Bluetooth'; icon='🔵'

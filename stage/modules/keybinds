@@ -21,7 +21,21 @@ fi
 #  Config
 # ──────────────────────────────────────────────────────────────────────────────
 
-readonly HYPR_CONF="${HYPR_CONF:-$HOME/.config/hypr/hyprland.conf}"
+# Detect config format from dotctl state (lua vs legacy)
+readonly STATE_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/dotctl/config"
+HYPR_CONFIG="legacy"
+if [[ -f "$STATE_FILE" ]]; then
+  while IFS='=' read -r key val; do
+    [[ "$key" == "HYPR_CONFIG" ]] && { HYPR_CONFIG="${val//\'/}"; break; }
+  done < "$STATE_FILE"
+fi
+
+# Set default config path based on format
+if [[ "$HYPR_CONFIG" == "lua" ]]; then
+  readonly HYPR_CONF="${HYPR_CONF:-$HOME/.config/hypr/hyprland.lua}"
+else
+  readonly HYPR_CONF="${HYPR_CONF:-$HOME/.config/hypr/hyprland.conf}"
+fi
 readonly DEFAULT_HEADER_COLOR='#83a598'
 HEADER_COLOR="${KEYBINDS_HEADER_COLOR:-$DEFAULT_HEADER_COLOR}"
 PRINT_ONLY=false
@@ -40,31 +54,39 @@ USAGE
   keybinds -h         This help
 
 ANNOTATION GRAMMAR
-  Add a trailing `# Label` to any bind line you want to appear:
+  Add a trailing comment label to any bind line you want to appear.
 
+  HyprLang (hyprland.conf):
     # Browser binds                            ← section header
     bind = $mainMod, B, exec, $browser  # Brave             ← row label
     bind = $mainMod SHIFT, B, exec, $bp # Brave (Incognito)
 
-  Bindings without a trailing `# Label` are silently skipped, so the
+  Lua (hyprland.lua, v0.55+):
+    -- Browser binds                                        -- section header
+    hl.bind("SUPER + B", hl.dsp.exec_cmd("brave"))          -- Brave
+    hl.bind("SUPER + SHIFT + B", hl.dsp.exec_cmd("brave --incognito"))  -- Brave (Incognito)
+
+  Bindings without a trailing label are silently skipped, so the
   cheatsheet only ever shows what you explicitly opted in.
 
-  Section headers come from the FIRST stand-alone `# ...` comment line
-  of each comment block preceding a group of binds. Multi-line block
-  comments use only the first line, so noisy explainer paragraphs do
-  not pollute the section name. Blank lines reset the block.
+  Section headers come from the FIRST stand-alone comment line of each
+  comment block preceding a group of binds. Multi-line block comments
+  use only the first line, so noisy explainer paragraphs do not pollute
+  the section name. Blank lines reset the block.
 
-  All `bind*` variants are recognised: bind, bindd, bindel, bindl,
-  bindm, binde. Commented-out binds (`#bind = ...`) with a trailing
-  label are still surfaced - useful for "disabled but documented".
+  For HyprLang: all `bind*` variants are recognised (bind, bindd, bindel,
+  bindl, bindm, binde). Commented-out binds (`#bind = ...`) with a
+  trailing label are still surfaced - useful for "disabled but documented".
 
-  Sourced .conf files are followed automatically via `source = ...`,
-  so dotctl-keybinds.conf and any other helpers you source are
-  included with no extra wiring.
+  Sourced files are followed automatically (`source = ...` in HyprLang,
+  `dofile(...)` in Lua), so dotctl-keybinds.conf/.lua and any other
+  helpers you source are included with no extra wiring.
+
+  The config format is auto-detected from dotctl state (HYPR_CONFIG).
 
 ENV
-  HYPR_CONF              Path to hyprland.conf
-                         (default: ~/.config/hypr/hyprland.conf)
+  HYPR_CONF              Path to hyprland config
+                         (default: ~/.config/hypr/hyprland.conf or .lua)
   KEYBINDS_HEADER_COLOR  Pango color for section headers
                          (default: #83a598)
 EOF
@@ -109,10 +131,12 @@ resolve_path() {
 
 # Strip leading/trailing #, -, space from a comment line so headers like
 # "### MONITORS ###" or "# --- Audio output switching ---" become "MONITORS"
-# and "Audio output switching" respectively.
+# and "Audio output switching" respectively. Also handles Lua `--` comments.
 clean_section() {
   local s="$1"
+  # Strip leading comment markers, dashes, and whitespace
   s="${s##+([[:space:]#\-])}"
+  # Strip trailing comment markers, dashes, and whitespace
   s="${s%%+([[:space:]#\-])}"
   REPLY="$s"
 }
@@ -177,7 +201,12 @@ parse_file() {
   [[ -n "${SEEN_FILES[$file]:-}" ]] && return 0
   SEEN_FILES[$file]=1
 
-  local line trimmed body label rest mods_raw key sect target hdr
+  local line trimmed body label rest mods_raw key sect target hdr combo_str
+
+  # Determine comment prefix based on file extension
+  local comment_prefix='#'
+  [[ "$file" == *.lua ]] && comment_prefix='--'
+
   while IFS= read -r line || [[ -n "$line" ]]; do
     trim "$line"; trimmed="$REPLY"
 
@@ -188,7 +217,7 @@ parse_file() {
       continue
     fi
 
-    # source = directive (recursive include)
+    # source = directive (recursive include) - HyprLang
     if [[ "$trimmed" =~ ^source[[:space:]]*=[[:space:]]*(.+)$ ]]; then
       target="${BASH_REMATCH[1]}"
       target="${target%%#*}"
@@ -199,14 +228,112 @@ parse_file() {
       continue
     fi
 
-    # $mainMod assignment - capture so $mainMod renders as the user's choice
+    # dofile(...) directive (recursive include) - Lua
+    # Matches: dofile("path") or dofile(os.getenv("HOME") .. "/.config/hypr/file.lua")
+    if [[ "$trimmed" =~ ^dofile\( ]]; then
+      # Extract path from various dofile patterns
+      if [[ "$trimmed" =~ dofile\(\"([^\"]+)\"\) ]]; then
+        # Simple: dofile("/path/to/file.lua")
+        target="${BASH_REMATCH[1]}"
+      elif [[ "$trimmed" =~ dofile\(os\.getenv\(\"HOME\"\)[[:space:]]*\.\.[[:space:]]*\"([^\"]+)\"\) ]]; then
+        # Common: dofile(os.getenv("HOME") .. "/.config/hypr/file.lua")
+        target="$HOME${BASH_REMATCH[1]}"
+      else
+        PREV_WAS_COMMENT=false
+        continue
+      fi
+      resolve_path "$target"; target="$REPLY"
+      PREV_WAS_COMMENT=false
+      parse_file "$target"
+      continue
+    fi
+
+    # $mainMod assignment - capture so $mainMod renders as the user's choice (HyprLang)
     if [[ "$trimmed" =~ ^\$mainMod[[:space:]]*=[[:space:]]*([A-Za-z][A-Za-z0-9_]*) ]]; then
       MAIN_MOD="${BASH_REMATCH[1]}"
       PREV_WAS_COMMENT=false
       continue
     fi
 
-    # bind line (active OR commented-out). Match before the comment branch
+    # mainMod assignment - Lua format: local mainMod = "SUPER"
+    if [[ "$trimmed" =~ ^local[[:space:]]+mainMod[[:space:]]*=[[:space:]]*\"([A-Za-z][A-Za-z0-9_]*)\" ]]; then
+      MAIN_MOD="${BASH_REMATCH[1]}"
+      PREV_WAS_COMMENT=false
+      continue
+    fi
+
+    # Lua hl.bind() syntax - two forms:
+    #   1. Literal:  hl.bind("MODS + KEY", ...)  -- Label
+    #   2. Concat:   hl.bind(mainMod .. " + KEY", ...)  -- Label
+    # The (--)?  makes the leading comment marker optional for active vs commented-out binds
+    if [[ "$trimmed" =~ ^(--)?hl\.bind\( ]]; then
+      combo_str=""
+
+      # Try literal string first: hl.bind("MODS + KEY", ...)
+      if [[ "$trimmed" =~ ^(--)?hl\.bind\(\"([^\"]+)\" ]]; then
+        combo_str="${BASH_REMATCH[2]}"
+      # Try variable concatenation: hl.bind(var .. " + KEY", ...)
+      elif [[ "$trimmed" =~ ^(--)?hl\.bind\(([a-zA-Z_][a-zA-Z0-9_]*)[[:space:]]*\.\.[[:space:]]*\"([^\"]+)\" ]]; then
+        local var_name="${BASH_REMATCH[2]}"
+        local str_part="${BASH_REMATCH[3]}"
+        # Resolve common variable names
+        case "$var_name" in
+          mainMod) combo_str="$MAIN_MOD$str_part" ;;
+          *)       combo_str="$var_name$str_part" ;;  # fallback: use var name literally
+        esac
+      else
+        PREV_WAS_COMMENT=false
+        continue  # unrecognized bind format
+      fi
+
+      # Check for trailing -- Label comment (after the closing paren)
+      # Use \) to anchor after the hl.bind() call, avoiding the leading -- on commented-out binds
+      if [[ "$trimmed" =~ \)[[:space:]]*--[[:space:]]*(.+)$ ]]; then
+        trim "${BASH_REMATCH[1]}"; label="$REPLY"
+        [[ -z "$label" ]] && { PREV_WAS_COMMENT=false; continue; }
+      else
+        PREV_WAS_COMMENT=false
+        continue  # no label → opt-out
+      fi
+
+      # Parse combo string: split on " + " to get mods and key
+      # The last element is the key, everything before is mods
+      local -a parts=()
+      local IFS_OLD="$IFS"
+      IFS='+' read -ra parts <<< "$combo_str"
+      IFS="$IFS_OLD"
+
+      if (( ${#parts[@]} == 0 )); then
+        PREV_WAS_COMMENT=false
+        continue
+      fi
+
+      # Last part is the key
+      trim "${parts[-1]}"; key="$REPLY"
+
+      # Everything else is mods
+      mods_raw=""
+      local i
+      for (( i=0; i<${#parts[@]}-1; i++ )); do
+        trim "${parts[i]}"
+        [[ -n "$REPLY" ]] && mods_raw+="$REPLY "
+      done
+
+      sect="${SECTION_CANDIDATE:-Other}"
+      sect="${sect% binds}"
+      sect="${sect% bind}"
+
+      if [[ -z "${SECTION_ROWS[$sect]:-}" ]]; then
+        SECTIONS+=("$sect")
+        SECTION_ROWS[$sect]=""
+      fi
+      format_combo "$mods_raw" "$key"
+      SECTION_ROWS[$sect]+="$label"$'\t'"$COMBO"$'\n'
+      PREV_WAS_COMMENT=false
+      continue
+    fi
+
+    # HyprLang bind line (active OR commented-out). Match before the comment branch
     # so `#bind = ...` is treated as a bind, not a section header.
     if [[ "$trimmed" =~ ^#?bind[a-z]?[[:space:]]*= ]]; then
       # Extract trailing label: greedy match up to the LAST `#` that is
@@ -243,13 +370,26 @@ parse_file() {
       continue
     fi
 
-    # Section header: stand-alone comment line. Only the FIRST comment of
-    # each block becomes the candidate; subsequent comment lines (descriptive
-    # body text) are ignored so they do not override the title.
-    if [[ "$trimmed" =~ ^# ]]; then
+    # Section header: stand-alone comment line (# for HyprLang, -- for Lua)
+    # Only the FIRST comment of each block becomes the candidate; subsequent
+    # comment lines (descriptive body text) are ignored so they do not
+    # override the title.
+    if [[ "$comment_prefix" == "--" && "$trimmed" =~ ^-- ]] || \
+       [[ "$comment_prefix" == "#" && "$trimmed" =~ ^# ]]; then
       if ! $PREV_WAS_COMMENT; then
         clean_section "$trimmed"; hdr="$REPLY"
-        if [[ "$hdr" =~ [A-Za-z] ]]; then
+        # For Lua, be stricter: skip if it looks like code or noise
+        # - Contains (){}= (code)
+        # - Contains :letter (method call like :set_enabled)
+        # - Contains :// (URL)
+        # - Starts with "local " (variable declaration)
+        # - Too long (>50 chars) - real section headers are short
+        if [[ "$hdr" =~ [A-Za-z] ]] && \
+           (( ${#hdr} <= 50 )) && \
+           ! [[ "$hdr" =~ [\(\)\{\}=] ]] && \
+           ! [[ "$hdr" =~ :[a-zA-Z] ]] && \
+           ! [[ "$hdr" =~ :// ]] && \
+           ! [[ "$hdr" =~ ^local\  ]]; then
           SECTION_CANDIDATE="$hdr"
         fi
       fi
@@ -296,8 +436,10 @@ render() {
     printf -v dashes_r '%*s' "$r" ''
     dashes_l="${dashes_l// /─}"
     dashes_r="${dashes_r// /─}"
+    # Escape & for Pango markup (XML)
+    local sect_escaped="${sect//&/&amp;}"
     printf '<span foreground="%s"><b>%s %s %s</b></span>\n' \
-      "$HEADER_COLOR" "$dashes_l" "$sect" "$dashes_r"
+      "$HEADER_COLOR" "$dashes_l" "$sect_escaped" "$dashes_r"
     while IFS=$'\t' read -r label combo; do
       [[ -z "$label" ]] && continue
       printf '󰆍 %-*s → %s\n' "$width" "$label" "$combo"
@@ -309,7 +451,7 @@ render() {
 #  Main
 # ──────────────────────────────────────────────────────────────────────────────
 
-[[ -f "$HYPR_CONF" ]] || die "hyprland.conf not found at $HYPR_CONF"
+[[ -f "$HYPR_CONF" ]] || die "hyprland config not found at $HYPR_CONF"
 
 parse_file "$HYPR_CONF"
 

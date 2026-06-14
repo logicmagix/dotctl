@@ -43,18 +43,19 @@ classify() {
   if [[ "$port_type" == "HDMI" ]] || [[ "$sink" == *hdmi* ]]; then
     printf hdmi; return
   fi
-  if [[ "$port_type" == "Headphones" || "$port_type" == "Headset" ]]; then
-    printf headset; return
-  fi
 
-  # Brand-name match (case-insensitive) on description, but skip USB
-  # "Headset Adapter" dongles which advertise misleading form_factor.
+  # Brand-name match for headsets (Barracuda, etc.)
   shopt -s nocasematch
   if [[ ! "$desc" =~ Adapter ]] && [[ "$desc" =~ ($HEADSET_BRANDS) ]]; then
     shopt -u nocasematch
     printf headset; return
   fi
   shopt -u nocasematch
+
+  # Generic USB audio adapters (not brand headsets)
+  if [[ "$sink" =~ ^alsa_output\.usb- ]]; then
+    printf usb; return
+  fi
 
   printf aux
 }
@@ -104,6 +105,7 @@ emit() {
     aux)       type_icon='🎚️' ;;
     hdmi)      type_icon='🖥️' ;;
     headset)   type_icon='🎧' ;;
+    usb)       type_icon='🔌' ;;
     bluetooth) type_icon='🔵' ;;
     *)         type_icon='🔊' ;;
   esac
