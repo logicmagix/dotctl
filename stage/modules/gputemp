@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # waybar-gputemp - print GPU temp + waybar state class (JSON).
-# Works with NVIDIA (nvidia-smi), AMD (sensors edge), and Intel (GPU hwmon).
+# Works with NVIDIA (nvidia-smi), AMD (sensors edge/junction), and any chip that
+# exposes a GPU temp via an lm-sensors "GPU" label (e.g. ThinkPad EC on hybrid
+# laptops) or a GPU-named hwmon device.
 # Output: {"text":"GPU Temp: N°C","class":"normal|warning|critical","alt":"..."}
 
 pick_temp() {
@@ -12,9 +14,13 @@ pick_temp() {
     [[ -n "$t" && "$t" =~ ^[0-9]+$ ]] && { printf '%s\n' "$t"; return 0; }
   fi
 
-  # AMD / generic via lm-sensors "edge" label
+  # lm-sensors: GPU temp under a recognizable label.
+  #   edge/junction -> AMD;  GPU -> ThinkPad EC and other labeled sensors.
+  # Case-insensitive match on the label so it works across chips/drivers. This
+  # also covers hybrid/Optimus laptops where nvidia-smi can't read a powered-down
+  # or driverless dGPU but the EC still reports a GPU temperature.
   if command -v sensors >/dev/null 2>&1; then
-    t=$(sensors 2>/dev/null | awk '/edge:/ {gsub(/[+°C]/,"",$2); print int($2); exit}')
+    t=$(sensors 2>/dev/null | awk 'tolower($1) ~ /^(edge|junction|gpu):$/ {gsub(/[+°C]/,"",$2); print int($2); exit}')
     [[ -n "$t" && "$t" =~ ^[0-9]+$ ]] && { printf '%s\n' "$t"; return 0; }
   fi
 
@@ -23,7 +29,7 @@ pick_temp() {
   for d in /sys/class/hwmon/hwmon*; do
     [[ -r "$d/name" ]] || continue
     name=$(<"$d/name")
-    if [[ "$name" == *gpu* || "$name" == amdgpu || "$name" == nouveau || "$name" == radeon ]]; then
+    if [[ "$name" == *gpu* || "$name" == amdgpu || "$name" == nouveau || "$name" == radeon || "$name" == nvidia || "$name" == i915 ]]; then
       input=$(ls "$d"/temp*_input 2>/dev/null | head -n1)
       if [[ -r "$input" ]]; then
         t=$(<"$input")
