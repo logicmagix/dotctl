@@ -158,7 +158,7 @@ tooltip {
   background: @bg1;
   color: @red;
   border-color: @red;
-  font-size: 16px;
+  font-size: 1.07em;   /* power - scales with base font */
   padding: 0 11px;
 }
 
@@ -166,7 +166,7 @@ tooltip {
   background: @bg1;
   color: @teal;
   border-color: @teal;
-  font-size: 18px;
+  font-size: 1.2em;   /* system logo - scales with base font */
   padding: 0 11px;
 }
 

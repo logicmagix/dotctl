@@ -1,7 +1,7 @@
 {
   "layer": "top",
   "position": "top",
-  "height": 34,
+  // height omitted -> waybar sizes the bar to its (font-relative) content, so it tracks the waybar font size
   "exclusive": true,
   // LEFT
   "modules-left": [

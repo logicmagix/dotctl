@@ -146,7 +146,7 @@ tooltip {
   background: @red;
   color: @hover_fg;   /* palette-aware */
   font-family: "Symbols Nerd Font";
-  font-size: 26px;
+  font-size: 1.73em;   /* power - scales with base font */
   padding-left: 11px;
   padding-right: 11px;
 }
@@ -156,7 +156,7 @@ tooltip {
   background: @teal;
   color: @hover_fg;   /* palette-aware */
   font-family: "Symbols Nerd Font";
-  font-size: 32px;
+  font-size: 2.13em;   /* system logo - scales with base font */
   padding-left: 11px;
   padding-right: 11px;
 }
@@ -319,10 +319,10 @@ tooltip {
 #custom-rsep-vpn,
 /* VPN:END */
 #custom-rsep-pulse {
-  font-size: 27px;
+  font-size: 1.8em;
   padding-top: 0px;
   padding-bottom: 0px;
-  min-height: 33px;
+  min-height: 1.22em;
   transition-property: background-color, color;
   transition-duration: 0.18s;
   transition-timing-function: ease-out;
