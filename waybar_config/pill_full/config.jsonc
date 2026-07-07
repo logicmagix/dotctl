@@ -32,6 +32,9 @@
     "custom/vpn",
     /* VPN:END */
     "custom/audio"
+    /* BATTERY:BEGIN */
+    , "battery"
+    /* BATTERY:END */
   ],
   // ===== Modules =====
   "custom/power": {
@@ -140,6 +143,17 @@
     "on-scroll-up":   "pactl set-sink-volume @DEFAULT_SINK@ +2%",
     "on-scroll-down": "pactl set-sink-volume @DEFAULT_SINK@ -2%"
   },
+  /* BATTERY:BEGIN */
+  "battery": {
+    "interval": 30,
+    "states": { "warning": 30, "critical": 15 },
+    "format": "{capacity}% {icon}",
+    "format-charging": "{capacity}% \uf0e7",
+    "format-plugged": "{capacity}% \uf1e6",
+    "format-icons": ["\uf244", "\uf243", "\uf242", "\uf241", "\uf240"],
+    "tooltip-format": "{capacity}% · {timeTo}"
+  },
+  /* BATTERY:END */
   "hyprland/workspaces": {
     "disable-scroll": false,
     "on-click": "activate"

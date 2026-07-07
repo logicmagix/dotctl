@@ -53,7 +53,7 @@ readonly STATE_KEYS=(
   KITTY_COLOR   KITTY_FONT   KITTY_FONT_SIZE
   MAKO_COLOR    MAKO_FONT    MAKO_FONT_SIZE
   WOFI_COLOR    WOFI_FONT    WOFI_FONT_SIZE  WOFI_VARIANT
-  WAYBAR_COLOR  WAYBAR_FONT  WAYBAR_FONT_SIZE WAYBAR_STYLE WAYBAR_SCOPE WAYBAR_DECOR WAYBAR_VPN WAYBAR_TRANSPARENT WAYBAR_OPACITY WAYBAR_LAUNCHER_LOGO WAYBAR_EDITOR
+  WAYBAR_COLOR  WAYBAR_FONT  WAYBAR_FONT_SIZE WAYBAR_STYLE WAYBAR_SCOPE WAYBAR_DECOR WAYBAR_GPU WAYBAR_VPN WAYBAR_BATTERY WAYBAR_TRANSPARENT WAYBAR_OPACITY WAYBAR_LAUNCHER_LOGO WAYBAR_EDITOR
   HYPR_EFFECT
   WALLPAPER
 )
@@ -67,6 +67,11 @@ readonly DEFAULT_WOFI_FONT_SIZE=26
 readonly DEFAULT_WAYBAR_FONT_SIZE=10
 readonly DEFAULT_WAYBAR_DECOR=pointed
 readonly DEFAULT_WAYBAR_VPN=off
+# GPU defaults to on (not off like vpn/battery): pre-existing installs had no
+# WAYBAR_GPU key and gated purely on `command -v gputemp`. Soft-migrating to
+# `on` keeps the effective gate (state AND binary) identical for them.
+readonly DEFAULT_WAYBAR_GPU=on
+readonly DEFAULT_WAYBAR_BATTERY=off
 readonly DEFAULT_WAYBAR_TRANSPARENT=on
 readonly DEFAULT_WAYBAR_OPACITY=0.6
 readonly DEFAULT_WAYBAR_LAUNCHER_LOGO=tux
@@ -233,6 +238,8 @@ load_state() {
   : "${WAYBAR_FONT_SIZE:=$DEFAULT_WAYBAR_FONT_SIZE}"
   : "${WAYBAR_DECOR:=$DEFAULT_WAYBAR_DECOR}"
   : "${WAYBAR_VPN:=$DEFAULT_WAYBAR_VPN}"
+  : "${WAYBAR_GPU:=$DEFAULT_WAYBAR_GPU}"
+  : "${WAYBAR_BATTERY:=$DEFAULT_WAYBAR_BATTERY}"
   : "${WAYBAR_TRANSPARENT:=$DEFAULT_WAYBAR_TRANSPARENT}"
   : "${WAYBAR_OPACITY:=$DEFAULT_WAYBAR_OPACITY}"
   : "${WAYBAR_LAUNCHER_LOGO:=$DEFAULT_WAYBAR_LAUNCHER_LOGO}"
@@ -352,6 +359,8 @@ detect_wofi_variants() {
 detect_waybar_styles()         { printf '%s\n' pill console; }
 detect_waybar_scopes()         { printf '%s\n' full minimal; }
 detect_waybar_vpns()           { printf '%s\n' off on; }
+detect_waybar_gpus()           { printf '%s\n' off on; }
+detect_waybar_batteries()      { printf '%s\n' off on; }
 detect_waybar_transparents()   { printf '%s\n' on off; }
 detect_waybar_opacities()      { printf '%s\n' "${OPACITY_LADDER[@]}"; }
 detect_hypr_effects()          { printf '%s\n' shadow glow; }
@@ -442,6 +451,19 @@ validate_waybar_vpn()           { _in_list "$1" on off; }
 # Is the VPN module actually usable? Both scripts must be resolvable.
 waybar_vpn_available() {
   command -v vpnctl >/dev/null 2>&1 && command -v vpn-status-indicator >/dev/null 2>&1
+}
+validate_waybar_gpu()           { _in_list "$1" on off; }
+# Is the GPU temp module actually usable? gputemp must be resolvable (opt-in
+# symlink at install time).
+waybar_gpu_available() {
+  command -v gputemp >/dev/null 2>&1
+}
+validate_waybar_battery()       { _in_list "$1" on off; }
+# Is the battery module actually meaningful? Only on machines that expose a
+# battery power supply (laptops). Uses the native waybar `battery` module, so
+# there's no binary to check - just the presence of /sys/class/power_supply/BAT*.
+waybar_battery_available() {
+  compgen -G '/sys/class/power_supply/BAT*' >/dev/null 2>&1
 }
 validate_waybar_transparent()   { _in_list "$1" on off; }
 validate_waybar_opacity() {
@@ -592,18 +614,33 @@ apply_waybar() {
     ' "$_f" > "$_f.tmp" && mv -f "$_f.tmp" "$_f"
   done
 
-  # GPU gate: same pattern. When `gputemp` isn't on PATH (user opted out
-  # at install), drop block + markers. When on, preserve both. The style.css
-  # canonical form has rarrow6's bg=transparent as the default with an
-  # /* GPU:BEGIN */-wrapped override to @olive, so stripping the GPU block
-  # automatically leaves rarrow6 as the transparent end-cap (no separate
-  # sed-repaint needed).
+  # GPU gate: same pattern, but doubly gated - WAYBAR_GPU must be `on` AND
+  # `gputemp` must be on PATH (opt-in symlink; uninstall relies on the binary
+  # check to strip the block after unlink). The style.css canonical form has
+  # rarrow6's bg=transparent as the default with an /* GPU:BEGIN */-wrapped
+  # override to @olive, so stripping the GPU block automatically leaves
+  # rarrow6 as the transparent end-cap (no separate sed-repaint needed).
   local _gpu_on=0
-  command -v gputemp >/dev/null 2>&1 && _gpu_on=1
+  [[ "$WAYBAR_GPU" == "on" ]] && command -v gputemp >/dev/null 2>&1 && _gpu_on=1
   for _f in "$WAYBAR_DIR/config.jsonc" "$WAYBAR_DIR/style.css"; do
     awk -v keep="$_gpu_on" '
       /\/\* GPU:BEGIN/ { if (keep != 1) { skip = 1; next } }
       /\/\* GPU:END/   { if (keep != 1) { skip = 0; next } }
+      !skip { print }
+    ' "$_f" > "$_f.tmp" && mv -f "$_f.tmp" "$_f"
+  done
+
+  # Battery gate: state-driven like VPN (the native `battery` module has no
+  # binary to detect). When WAYBAR_BATTERY != on, drop the /* BATTERY:BEGIN */
+  # ... /* BATTERY:END */ block + markers; when on, keep both so install /
+  # uninstall can locate and re-strip later. The battery block sits to the
+  # right of audio, so dropping it just restores audio as the right end-cap.
+  local _bat_on=0
+  [[ "$WAYBAR_BATTERY" == "on" ]] && _bat_on=1
+  for _f in "$WAYBAR_DIR/config.jsonc" "$WAYBAR_DIR/style.css"; do
+    awk -v keep="$_bat_on" '
+      /\/\* BATTERY:BEGIN/ { if (keep != 1) { skip = 1; next } }
+      /\/\* BATTERY:END/   { if (keep != 1) { skip = 0; next } }
       !skip { print }
     ' "$_f" > "$_f.tmp" && mv -f "$_f.tmp" "$_f"
   done
@@ -661,7 +698,7 @@ apply_waybar() {
   ' "$WAYBAR_DIR/config.jsonc" > "$WAYBAR_DIR/config.jsonc.tmp" && mv -f "$WAYBAR_DIR/config.jsonc.tmp" "$WAYBAR_DIR/config.jsonc"
 
   pkill -SIGUSR2 -x waybar 2>/dev/null || warn "waybar reload signal failed (waybar running?)"
-  log "apply waybar: ${WAYBAR_STYLE}_${WAYBAR_SCOPE} color=${WAYBAR_COLOR} font=${WAYBAR_FONT}/${WAYBAR_FONT_SIZE} decor=${WAYBAR_DECOR} vpn=${WAYBAR_VPN} transparent=${WAYBAR_TRANSPARENT}/opacity=${WAYBAR_OPACITY} logo=${WAYBAR_LAUNCHER_LOGO} editor=${WAYBAR_EDITOR}"
+  log "apply waybar: ${WAYBAR_STYLE}_${WAYBAR_SCOPE} color=${WAYBAR_COLOR} font=${WAYBAR_FONT}/${WAYBAR_FONT_SIZE} decor=${WAYBAR_DECOR} gpu=${WAYBAR_GPU} vpn=${WAYBAR_VPN} battery=${WAYBAR_BATTERY} transparent=${WAYBAR_TRANSPARENT}/opacity=${WAYBAR_OPACITY} logo=${WAYBAR_LAUNCHER_LOGO} editor=${WAYBAR_EDITOR}"
 }
 
 apply_wallpaper() {
@@ -838,8 +875,8 @@ EOF
   printf '  %-10s color=%s  font=%s  size=%s\n' "mako"  "$MAKO_COLOR" "$MAKO_FONT" "$MAKO_FONT_SIZE"
   printf '  %-10s color=%s  font=%s  size=%s  variant=%s\n' \
     "wofi" "$WOFI_COLOR" "$WOFI_FONT" "$WOFI_FONT_SIZE" "$WOFI_VARIANT"
-  printf '  %-10s color=%s  font=%s  size=%s  style=%s  scope=%s  decor=%s  vpn=%s  transparent=%s  opacity=%s  logo=%s  editor=%s\n' \
-    "waybar" "$WAYBAR_COLOR" "$WAYBAR_FONT" "$WAYBAR_FONT_SIZE" "$WAYBAR_STYLE" "$WAYBAR_SCOPE" "$WAYBAR_DECOR" "$WAYBAR_VPN" "$WAYBAR_TRANSPARENT" "$WAYBAR_OPACITY" "$WAYBAR_LAUNCHER_LOGO" "$WAYBAR_EDITOR"
+  printf '  %-10s color=%s  font=%s  size=%s  style=%s  scope=%s  decor=%s  gpu=%s  vpn=%s  battery=%s  transparent=%s  opacity=%s  logo=%s  editor=%s\n' \
+    "waybar" "$WAYBAR_COLOR" "$WAYBAR_FONT" "$WAYBAR_FONT_SIZE" "$WAYBAR_STYLE" "$WAYBAR_SCOPE" "$WAYBAR_DECOR" "$WAYBAR_GPU" "$WAYBAR_VPN" "$WAYBAR_BATTERY" "$WAYBAR_TRANSPARENT" "$WAYBAR_OPACITY" "$WAYBAR_LAUNCHER_LOGO" "$WAYBAR_EDITOR"
   printf '  %-10s effect=%s\n' "hypr" "$HYPR_EFFECT"
   printf '  %-10s %s\n' "wallpaper" "$WALLPAPER"
 
@@ -898,7 +935,9 @@ cmd_list() {
     styles)             detect_waybar_styles;;
     scopes)             detect_waybar_scopes;;
     waybar-decors|decors) detect_waybar_decors;;
+    waybar-gpus|gpus) detect_waybar_gpus;;
     waybar-vpns|vpns) detect_waybar_vpns;;
+    waybar-batteries|batteries) detect_waybar_batteries;;
     waybar-transparents|transparents) detect_waybar_transparents;;
     waybar-opacities|opacities) detect_waybar_opacities;;
     hypr-effects|effects) detect_hypr_effects;;
@@ -932,7 +971,9 @@ axes:
   styles           waybar style axis  (pill | console)
   scopes           waybar scope axis  (full | minimal)
   waybar-decors    waybar decorator glyph sets (pointed | round)
+  waybar-gpus      waybar gpu temp module toggle (off | on)
   waybar-vpns      waybar vpn module toggle (off | on)
+  waybar-batteries waybar battery module toggle (off | on)
   waybar-transparents  waybar transparent bar bg toggle (on | off)
   waybar-opacities     waybar bar opacity ladder [0.0-1.0]
   hypr-effects         hyprland window effect (shadow | glow)
@@ -974,7 +1015,7 @@ cmd_set() {
   local new_kitty_color='' new_kitty_font='' new_kitty_font_size=''
   local new_mako_color='' new_mako_font='' new_mako_font_size=''
   local new_wofi_color='' new_wofi_font='' new_wofi_font_size='' new_wofi_variant=''
-  local new_waybar_color='' new_waybar_font='' new_waybar_font_size='' new_waybar_style='' new_waybar_scope='' new_waybar_decor='' new_waybar_vpn='' new_waybar_transparent='' new_waybar_opacity='' new_waybar_launcher_logo='' new_waybar_editor='' new_hypr_effect=''
+  local new_waybar_color='' new_waybar_font='' new_waybar_font_size='' new_waybar_style='' new_waybar_scope='' new_waybar_decor='' new_waybar_gpu='' new_waybar_vpn='' new_waybar_battery='' new_waybar_transparent='' new_waybar_opacity='' new_waybar_launcher_logo='' new_waybar_editor='' new_hypr_effect=''
   local new_wallpaper=''
   local preset_name=''
 
@@ -1000,7 +1041,9 @@ cmd_set() {
       --waybar-style|-s)     new_waybar_style="$2"; shift 2;;
       --waybar-scope)        new_waybar_scope="$2"; shift 2;;
       --waybar-decor)        new_waybar_decor="$2"; shift 2;;
+      --waybar-gpu)          new_waybar_gpu="$2"; shift 2;;
       --waybar-vpn)          new_waybar_vpn="$2"; shift 2;;
+      --waybar-battery)      new_waybar_battery="$2"; shift 2;;
       --waybar-transparent)  new_waybar_transparent="$2"; shift 2;;
       --waybar-opacity)      new_waybar_opacity="$2"; shift 2;;
       --waybar-launcher-logo|--launcher-logo)
@@ -1078,6 +1121,20 @@ cmd_set() {
     fi
     WAYBAR_VPN="$new_waybar_vpn"
   fi
+  if [[ -n "$new_waybar_gpu" ]]; then
+    validate_waybar_gpu "$new_waybar_gpu" || die "invalid waybar gpu: $new_waybar_gpu (must be on|off)"
+    if [[ "$new_waybar_gpu" == "on" ]] && ! waybar_gpu_available; then
+      die "waybar gpu module not installed. Re-run install.sh with the GPU temp option, or symlink gputemp from stage/modules/ onto PATH."
+    fi
+    WAYBAR_GPU="$new_waybar_gpu"
+  fi
+  if [[ -n "$new_waybar_battery" ]]; then
+    validate_waybar_battery "$new_waybar_battery" || die "invalid waybar battery: $new_waybar_battery (must be on|off)"
+    if [[ "$new_waybar_battery" == "on" ]] && ! waybar_battery_available; then
+      die "no battery detected (/sys/class/power_supply/BAT*). The battery module is for laptops - if you're sure, add the module manually."
+    fi
+    WAYBAR_BATTERY="$new_waybar_battery"
+  fi
   [[ -n "$new_waybar_transparent" ]]&& { validate_waybar_transparent "$new_waybar_transparent" || die "invalid waybar transparent: $new_waybar_transparent (must be on|off)"; WAYBAR_TRANSPARENT="$new_waybar_transparent"; }
   [[ -n "$new_waybar_opacity" ]]    && { validate_waybar_opacity "$new_waybar_opacity" || die "invalid waybar opacity: $new_waybar_opacity (must be a number in [0, 1])"; WAYBAR_OPACITY="$new_waybar_opacity"; }
   [[ -n "$new_waybar_launcher_logo" ]] && { validate_waybar_launcher_logo "$new_waybar_launcher_logo" || die "invalid waybar launcher logo: $new_waybar_launcher_logo (try \`dotctl list launcher-logos\`)"; WAYBAR_LAUNCHER_LOGO="$new_waybar_launcher_logo"; }
@@ -1116,7 +1173,9 @@ dotctl set [FLAGS]
   -s, --waybar-style <S>   pill | console
   --waybar-scope <SC>      full | minimal
   --waybar-decor <D>       console decorator glyphs (pointed | round)
+  --waybar-gpu <S>         waybar gpu temp module (on | off) - requires gputemp on PATH
   --waybar-vpn <S>         waybar vpn module (on | off) - requires vpnctl + vpn-status-indicator on PATH
+  --waybar-battery <S>     waybar battery module (on | off) - for laptops; needs a /sys/class/power_supply/BAT* battery
   --waybar-transparent <S> waybar bar background (on = transparent, off = opaque palette fill)
   --waybar-opacity <N>     waybar bar opacity [0.0-1.0] - only applies when transparent=off
   --hypr-effect <E>        hyprland window effect (shadow | glow)
@@ -1304,8 +1363,8 @@ cmd_sync() {
 dotctl sync <target> <source>
 
 Copy color (and font, where both have a font axis) from <source> to <target>.
-Never copies style, scope, variant, decor, vpn, transparent, or opacity -
-those stay on the target.
+Never copies style, scope, variant, decor, gpu, vpn, battery, transparent,
+or opacity - those stay on the target.
 
   target ∈ { cava, kitty, mako, wofi, waybar, wallpaper, all }
   source ∈ { cava, kitty, mako, wofi, waybar, wallpaper }
@@ -1491,6 +1550,8 @@ EOF
     WAYBAR_FONT_SIZE="$DEFAULT_WAYBAR_FONT_SIZE"
     WAYBAR_DECOR="$DEFAULT_WAYBAR_DECOR"
     WAYBAR_VPN="$DEFAULT_WAYBAR_VPN"
+    WAYBAR_GPU="$DEFAULT_WAYBAR_GPU"
+    WAYBAR_BATTERY="$DEFAULT_WAYBAR_BATTERY"
     WAYBAR_TRANSPARENT="$DEFAULT_WAYBAR_TRANSPARENT"
     WAYBAR_OPACITY="$DEFAULT_WAYBAR_OPACITY"
     WAYBAR_LAUNCHER_LOGO="$DEFAULT_WAYBAR_LAUNCHER_LOGO"
@@ -1506,7 +1567,7 @@ EOF
   # Discover options per element
   local cava_colors kitty_colors kitty_fonts mako_colors mako_fonts
   local wofi_colors wofi_fonts wofi_variants
-  local waybar_colors waybar_fonts waybar_styles waybar_scopes waybar_decors waybar_vpns waybar_transparents waybar_opacities hypr_effects
+  local waybar_colors waybar_fonts waybar_styles waybar_scopes waybar_decors waybar_gpus waybar_vpns waybar_batteries waybar_transparents waybar_opacities hypr_effects
   local wallpapers
 
   mapfile -t cava_colors    < <(detect_cava_colors)
@@ -1522,7 +1583,9 @@ EOF
   mapfile -t waybar_styles  < <(detect_waybar_styles)
   mapfile -t waybar_scopes  < <(detect_waybar_scopes)
   mapfile -t waybar_decors  < <(detect_waybar_decors)
+  mapfile -t waybar_gpus    < <(detect_waybar_gpus)
   mapfile -t waybar_vpns    < <(detect_waybar_vpns)
+  mapfile -t waybar_batteries < <(detect_waybar_batteries)
   mapfile -t waybar_transparents < <(detect_waybar_transparents)
   mapfile -t waybar_opacities    < <(detect_waybar_opacities)
   mapfile -t hypr_effects        < <(detect_hypr_effects)
@@ -1581,11 +1644,23 @@ EOF
   WAYBAR_STYLE=$(prompt_select      "      waybar style"             "$WAYBAR_STYLE" "${waybar_styles[@]}")
   WAYBAR_SCOPE=$(prompt_select      "      waybar scope"             "$WAYBAR_SCOPE" "${waybar_scopes[@]}")
   WAYBAR_DECOR=$(prompt_select      "      waybar decor (console style)" "$WAYBAR_DECOR" "${waybar_decors[@]}")
+  if waybar_gpu_available; then
+    WAYBAR_GPU=$(prompt_select      "      waybar gpu temp module"   "$WAYBAR_GPU"   "${waybar_gpus[@]}")
+  else
+    WAYBAR_GPU=off
+    info "      waybar gpu temp module: skipped - gputemp not on PATH"
+  fi
   if waybar_vpn_available; then
     WAYBAR_VPN=$(prompt_select      "      waybar vpn module"        "$WAYBAR_VPN"   "${waybar_vpns[@]}")
   else
     WAYBAR_VPN=off
     info "      waybar vpn module: skipped - vpnctl / vpn-status-indicator not on PATH"
+  fi
+  if waybar_battery_available; then
+    WAYBAR_BATTERY=$(prompt_select  "      waybar battery module"    "$WAYBAR_BATTERY" "${waybar_batteries[@]}")
+  else
+    WAYBAR_BATTERY=off
+    info "      waybar battery module: skipped - no battery detected (desktop)"
   fi
   WAYBAR_TRANSPARENT=$(prompt_select "      waybar transparent bg"    "$WAYBAR_TRANSPARENT" "${waybar_transparents[@]}")
   WAYBAR_OPACITY=$(prompt_opacity   "      waybar bg opacity (when active)" "$WAYBAR_OPACITY")
@@ -1617,7 +1692,7 @@ EOF
   printf '  %-10s %s / %s / size %s\n' "kitty" "$KITTY_COLOR" "$KITTY_FONT" "$KITTY_FONT_SIZE"
   printf '  %-10s %s / %s / size %s\n' "mako"  "$MAKO_COLOR" "$MAKO_FONT" "$MAKO_FONT_SIZE"
   printf '  %-10s %s / %s / size %s / variant %s\n' "wofi" "$WOFI_COLOR" "$WOFI_FONT" "$WOFI_FONT_SIZE" "$WOFI_VARIANT"
-  printf '  %-10s %s / %s / size %s / %s_%s / decor %s / vpn %s / transparent %s (%s) / logo %s / editor %s\n' "waybar" "$WAYBAR_COLOR" "$WAYBAR_FONT" "$WAYBAR_FONT_SIZE" "$WAYBAR_STYLE" "$WAYBAR_SCOPE" "$WAYBAR_DECOR" "$WAYBAR_VPN" "$WAYBAR_TRANSPARENT" "$WAYBAR_OPACITY" "$WAYBAR_LAUNCHER_LOGO" "$WAYBAR_EDITOR"
+  printf '  %-10s %s / %s / size %s / %s_%s / decor %s / gpu %s / vpn %s / battery %s / transparent %s (%s) / logo %s / editor %s\n' "waybar" "$WAYBAR_COLOR" "$WAYBAR_FONT" "$WAYBAR_FONT_SIZE" "$WAYBAR_STYLE" "$WAYBAR_SCOPE" "$WAYBAR_DECOR" "$WAYBAR_GPU" "$WAYBAR_VPN" "$WAYBAR_BATTERY" "$WAYBAR_TRANSPARENT" "$WAYBAR_OPACITY" "$WAYBAR_LAUNCHER_LOGO" "$WAYBAR_EDITOR"
   printf '  %-10s effect %s\n' "hypr" "$HYPR_EFFECT"
   printf '  %-10s %s\n' "wallpaper" "$WALLPAPER"
   info ""
@@ -1675,6 +1750,8 @@ _load_preset_into_state() {
   : "${WAYBAR_FONT_SIZE:=$DEFAULT_WAYBAR_FONT_SIZE}"
   : "${WAYBAR_DECOR:=$DEFAULT_WAYBAR_DECOR}"
   : "${WAYBAR_VPN:=$DEFAULT_WAYBAR_VPN}"
+  : "${WAYBAR_GPU:=$DEFAULT_WAYBAR_GPU}"
+  : "${WAYBAR_BATTERY:=$DEFAULT_WAYBAR_BATTERY}"
   : "${WAYBAR_TRANSPARENT:=$DEFAULT_WAYBAR_TRANSPARENT}"
   : "${WAYBAR_OPACITY:=$DEFAULT_WAYBAR_OPACITY}"
   : "${WAYBAR_LAUNCHER_LOGO:=$DEFAULT_WAYBAR_LAUNCHER_LOGO}"

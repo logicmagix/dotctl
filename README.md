@@ -22,7 +22,7 @@ dotctl cycle wallpaper next        # keybind entry point
 | **kitty**     |   ✓   |  ✓   |  ✓   |                                                               |
 | **mako**      |   ✓   |  ✓   |  ✓   |                                                               |
 | **wofi**      |   ✓   |  ✓   |  ✓   | subvariant (1/2)                                              |
-| **waybar**    |   ✓   |  ✓   |  ✓   | style, scope, decor, vpn, transparent, opacity, launcher logo, editor |
+| **waybar**    |   ✓   |  ✓   |  ✓   | style, scope, decor, gpu, vpn, battery, transparent, opacity, launcher logo, editor |
 | **hypr**      |   ✓   |      |      | window effect (shadow/glow)                                   |
 | **wallpaper** |   ✓   |      |      | cycle script per theme                                        |
 
@@ -111,7 +111,9 @@ The installer is interactive and walks you through:
    `cputemp`, `gputemp`, `ws-cycle`, `audio-output`, `audio-output-menu`,
    `audio-output-status`, `audio-hotplug-watch`, `keybinds`) into
    `/usr/local/bin/`.
-4. Optionally symlink the VPN module (`vpnctl`, `vpn-status-indicator`).
+4. Optionally symlink the VPN module (`vpnctl`, `vpn-status-indicator`),
+   the GPU temp module (`gputemp`), and enable the battery module (native
+   waybar `battery` readout for laptops, shown right of audio).
 5. Copy themed configs into `~/.config/{cava,kitty,mako,wofi,waybar}`.
 6. Copy wallpaper cycle scripts + template into `~/.config/dotctl/cycle/`.
 7. Drop the hyprland snippets into `~/.config/hypr/`.
@@ -237,7 +239,9 @@ dotctl set --waybar-color gruvbox          # drift waybar off the shared theme
 dotctl sync all kitty                      # re-unify: all take kitty's color+font
 dotctl set --waybar-style console --waybar-decor round
 dotctl set --waybar-transparent off --waybar-opacity 0.60
+dotctl set --waybar-gpu off                # hide gpu temp without unlinking gputemp
 dotctl set --waybar-vpn on                 # needs vpnctl + vpn-status-indicator
+dotctl set --waybar-battery on             # laptop charge %, right of audio
 dotctl set --hypr-effect glow              # colored glow instead of drop shadow
 dotctl set --launcher-logo nixos           # survives cycle waybar rotations
 dotctl set --waybar-editor tide42          # TUIs use kitty/foot/alacritty; GUI editors launch direct
@@ -301,7 +305,9 @@ KITTY_FONT_SIZE=11
 WAYBAR_STYLE=console
 WAYBAR_SCOPE=full
 WAYBAR_DECOR=round
+WAYBAR_GPU=on
 WAYBAR_VPN=on
+WAYBAR_BATTERY=off
 WAYBAR_TRANSPARENT=on
 WAYBAR_OPACITY=0.30
 WAYBAR_LAUNCHER_LOGO=gentoo

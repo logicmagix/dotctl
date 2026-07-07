@@ -104,6 +104,9 @@ tooltip {
 /* VPN:BEGIN */
 #custom-vpn,
 /* VPN:END */
+/* BATTERY:BEGIN */
+#battery,
+/* BATTERY:END */
 #custom-audio {
   border-radius: 14px;
   margin: 5px 3px;
@@ -276,6 +279,26 @@ tooltip {
   border-color: @rose;
 }
 
+/* BATTERY:BEGIN - stripped when WAYBAR_BATTERY=off */
+#battery {
+  color: @yellow;
+  border-color: @yellow;
+}
+#battery.warning.discharging {
+  color: @warning;
+  border-color: @warning;
+}
+#battery.critical.discharging {
+  color: @critical;
+  border-color: @critical;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+  animation-name: blink-critical;
+  animation-duration: 1s;
+}
+/* BATTERY:END */
+
 /* VPN:BEGIN - stripped when WAYBAR_VPN=off */
 #custom-vpn.on              { color: @green; border-color: @green; }
 #custom-vpn.on.killswitch   { color: @mint;  border-color: @mint;  }
@@ -301,6 +324,9 @@ tooltip {
 #custom-editor:hover         { background: @olive; color: @hover_fg; }
 #custom-browser:hover         { background: @gold;  color: @hover_fg; }
 #custom-audio:hover           { background: @rose;  color: @hover_fg; }
+/* BATTERY:BEGIN */
+#battery:hover                { background: @yellow; color: @hover_fg; }
+/* BATTERY:END */
 #clock:hover                { background: @blue;  color: @hover_fg; }
 /* VPN:BEGIN */
 #custom-vpn.on:hover              { background: @green; color: @hover_fg; }

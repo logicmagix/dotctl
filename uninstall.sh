@@ -197,10 +197,11 @@ if (( gpu_present == 1 )); then
     done
     strip_waybar_marker GPU
     ok "stripped GPU block from waybar variant configs"
-    # apply_waybar checks `command -v gputemp` to gate the GPU block; with
-    # the symlink just removed it will keep=0 and rebuild the active
-    # config.jsonc/style.css without the gpu module.
+    # apply_waybar gates the GPU block on WAYBAR_GPU=on AND `command -v
+    # gputemp`; the symlink is gone so keep=0 either way, but force the
+    # state key off too so `dotctl show`/`configure` reflect reality.
     if [[ -f "$CONFIG_HOME/dotctl/config" ]] && command -v dotctl >/dev/null 2>&1; then
+      sed -i -E 's/^WAYBAR_GPU=.*/WAYBAR_GPU=off/' "$CONFIG_HOME/dotctl/config"
       dotctl apply >/dev/null 2>&1 || warn "dotctl apply failed - run it manually"
     fi
   else

@@ -296,7 +296,9 @@ tooltip {
 #tray        { background: @black; }
 #network     { background: @plum;  color: @white; }
 #custom-audio  { background: @rose;  color: @black; }
-#battery     { background: @teal;  color: @white; }
+/* BATTERY:BEGIN - stripped when WAYBAR_BATTERY=off */
+#battery     { background: @yellow; color: @black; }
+/* BATTERY:END */
 #temperature { background: @lime;  color: @black; }
 
 /* Right-side chevrons () - each bridges two adjacent blocks */
@@ -339,6 +341,11 @@ tooltip {
 #custom-rsep-pulse.off.killswitch { background: @red;   }
 /* VPN:END */
 
+/* BATTERY:BEGIN - stripped when WAYBAR_BATTERY=off */
+/* Left chevron leading into the battery block: audio (@rose) → battery (@yellow). */
+#custom-rsep-battery { color: @yellow; background: @rose; }
+/* BATTERY:END */
+
 /* ===================================================================
    CHEVRON SIZING & TRANSITIONS
    Applied to all arrow/chevron glyphs for consistent height
@@ -364,6 +371,9 @@ tooltip {
 /* VPN:BEGIN */
 #custom-rsep-vpn,
 /* VPN:END */
+/* BATTERY:BEGIN */
+#custom-rsep-battery,
+/* BATTERY:END */
 #custom-rsep-pulse {
   font-size: 1.8em;
   padding-top: 0px;
@@ -422,7 +432,9 @@ tooltip {
 }
 
 /* System module hover */
-#battery:hover    { background: shade(@teal, 1.22); }
+/* BATTERY:BEGIN */
+#battery:hover    { background: shade(@yellow, 1.22); }
+/* BATTERY:END */
 #network:hover    { background: shade(@plum, 1.22); color: @hover_fg; }
 #custom-audio:hover { background: shade(@rose, 1.22); }
 

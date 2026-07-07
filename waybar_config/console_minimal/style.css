@@ -264,6 +264,9 @@ tooltip {
 /* System modules (right side) */
 #tray        { background: @black; }
 #custom-audio  { background: @rose;  color: @black; }
+/* BATTERY:BEGIN - stripped when WAYBAR_BATTERY=off */
+#battery     { background: @yellow; color: @black; }
+/* BATTERY:END */
 
 /* Right-side chevrons () - each bridges two adjacent blocks */
 #custom-rsep-browser  { color: @gold;  background: transparent; } /* bar bg  browser          */
@@ -302,6 +305,11 @@ tooltip {
 #custom-rsep-pulse.off.killswitch { background: @red;   }
 /* VPN:END */
 
+/* BATTERY:BEGIN - stripped when WAYBAR_BATTERY=off */
+/* Left chevron leading into the battery block: audio (@rose) → battery (@yellow). */
+#custom-rsep-battery { color: @yellow; background: @rose; }
+/* BATTERY:END */
+
 /* ===================================================================
    CHEVRON SIZING & TRANSITIONS
    Applied to all arrow/chevron glyphs for consistent height
@@ -318,6 +326,9 @@ tooltip {
 /* VPN:BEGIN */
 #custom-rsep-vpn,
 /* VPN:END */
+/* BATTERY:BEGIN */
+#custom-rsep-battery,
+/* BATTERY:END */
 #custom-rsep-pulse {
   font-size: 1.8em;
   padding-top: 0px;
@@ -340,6 +351,9 @@ tooltip {
 #custom-launcher,
 /* NOTE: gpu / cputemp intentionally NOT here */
 #custom-browser,
+/* BATTERY:BEGIN */
+#battery,
+/* BATTERY:END */
 #custom-audio {
   transition: background-color 0.18s ease-out, color 0.18s ease-out;
 }
@@ -356,6 +370,9 @@ tooltip {
 
 /* System module hover */
 #custom-audio:hover { background: shade(@rose, 1.22); }
+/* BATTERY:BEGIN */
+#battery:hover      { background: shade(@yellow, 1.22); }
+/* BATTERY:END */
 
 /* Center clock - keep its own opaque bg so it stays readable even when
    the bar is transparent (otherwise GTK's default hover leaks through). */

@@ -59,6 +59,8 @@ This script will:
   4. Optionally symlink ${BOLD}$SYS_BIN/${RST}{vpnctl, vpn-status-indicator} → repo
   4a. Optionally symlink ${BOLD}$SYS_BIN/gputemp${RST} → repo (skip on machines
       without a discrete GPU - the waybar module stays authored either way)
+  4b. Optionally enable the ${BOLD}battery module${RST} (laptop charge % in waybar,
+      to the right of audio - native waybar module, no binary to symlink)
   5. Copy ${BOLD}~/.config/${RST}{cava, kitty, mako, wofi, waybar} from repo config dirs
      (conflicting files are renamed to ${BOLD}<file>.bak-<timestamp>${RST} in place;
      user-added files and untouched files are left alone - no whole-directory
@@ -291,6 +293,19 @@ if confirm "Install the optional GPU temp module (gputemp - skip on non-discrete
   WANT_GPU=1
 fi
 
+# ── Gate: battery module (opt-in) ───────────────────────────────────────────
+# Native waybar `battery` module - shows charge % to the right of audio. No
+# binary to symlink; this only decides whether the /* BATTERY */ block stays
+# in the copied waybar configs. Meant for laptops - default yes only when a
+# battery is present under /sys/class/power_supply/BAT*.
+
+WANT_BATTERY=0
+_bat_default=n
+compgen -G '/sys/class/power_supply/BAT*' >/dev/null 2>&1 && _bat_default=y
+if confirm "Install the optional battery module (laptop charge % in waybar)?" "$_bat_default"; then
+  WANT_BATTERY=1
+fi
+
 # ── Sudo tick ───────────────────────────────────────────────────────────────
 
 if [[ $EUID -ne 0 ]]; then
@@ -405,14 +420,19 @@ copy_config "$REPO/mako_config"   "$CONFIG_HOME/mako"
 copy_config "$REPO/wofi_config"   "$CONFIG_HOME/wofi"
 copy_config "$REPO/waybar_config" "$CONFIG_HOME/waybar"
 
-# Marker-strip helper for waybar configs. Mirrors apply_waybar's awk: drops
-# the marker comment lines themselves, and when keep=0 also drops everything
-# between BEGIN/END. Targets every variant's config.jsonc/style.css plus the
-# currently-active ~/.config/waybar/{config.jsonc,style.css} (if present), so
-# waybar stops referencing the just-opted-out binary on next reload without
-# requiring a `dotctl apply` first.
+# Marker-strip helper for waybar configs. keep=0 drops everything between
+# /* MARKER:BEGIN */ and /* MARKER:END */ including the marker lines. keep=1
+# leaves the files COMPLETELY untouched - markers must survive, because the
+# apply-time gates in `dotctl apply` (and uninstall.sh's re-strip) locate the
+# blocks by those markers; stripping them here would freeze the module on
+# permanently, immune to `dotctl set --waybar-* off`. Targets every variant's
+# config.jsonc/style.css plus the currently-active
+# ~/.config/waybar/{config.jsonc,style.css} (if present), so waybar stops
+# referencing the just-opted-out binary on next reload without requiring a
+# `dotctl apply` first.
 strip_waybar_marker() {
   local marker="$1" keep="$2" f
+  (( keep == 1 )) && return 0
   shopt -s nullglob
   local files=(
     "$CONFIG_HOME/waybar/config.jsonc"
@@ -423,8 +443,8 @@ strip_waybar_marker() {
   shopt -u nullglob
   for f in "${files[@]}"; do
     [[ -f "$f" ]] || continue
-    awk -v marker="$marker" -v keep="$keep" '
-      $0 ~ "/\\* " marker ":BEGIN" { if (keep != 1) skip = 1; next }
+    awk -v marker="$marker" '
+      $0 ~ "/\\* " marker ":BEGIN" { skip = 1; next }
       $0 ~ "/\\* " marker ":END"   { skip = 0; next }
       !skip { print }
     ' "$f" > "$f.tmp" && mv -f "$f.tmp" "$f"
@@ -436,6 +456,7 @@ strip_waybar_marker() {
 # the blocks entirely.
 strip_waybar_marker VPN "$WANT_VPN"
 strip_waybar_marker GPU "$WANT_GPU"
+strip_waybar_marker BATTERY "$WANT_BATTERY"
 
 # Regenerate the active ~/.config/waybar/{config.jsonc,style.css} from the
 # user's chosen variant. apply_waybar reads from the variant subdir we just

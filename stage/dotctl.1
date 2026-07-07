@@ -61,7 +61,9 @@ decorator glyph set
 or
 .BR round ,
 console-only),
-VPN module toggle, transparent-bar toggle, explicit bar opacity (used when
+GPU temp module toggle, VPN module toggle, battery module toggle (laptop
+charge %, right of audio), transparent-bar toggle, explicit bar opacity
+(used when
 transparent is off), and launcher logo (the distro glyph in the
 .B custom/launcher
 module). Active files:
@@ -76,7 +78,8 @@ block, the palette is injected into the
 .B @define-color
 block on every apply, the launcher glyph is rewritten inside the
 .B custom/launcher
-block, and the VPN module is stripped from both files when disabled. Reloaded
+block, and the VPN and battery modules are stripped from both files when
+disabled. Reloaded
 with
 .BR "pkill -SIGUSR2 waybar" .
 .TP
@@ -212,7 +215,9 @@ List valid values for one axis. Axes:
 .BR styles ,
 .BR scopes ,
 .BR waybar-decors ,
+.BR waybar-gpus ,
 .BR waybar-vpns ,
+.BR waybar-batteries ,
 .BR waybar-transparents ,
 .BR waybar-opacities ,
 .BR hypr-effects ,
@@ -374,6 +379,17 @@ variants; has no effect on
 .B pill_*
 variants.
 .TP
+.BI "--waybar-gpu " on|off
+Toggle the waybar GPU temp module. When
+.BR on ,
+.B gputemp
+must be available on
+.B PATH
+(the install-time opt-in symlink). The block is only rendered when both the
+state key is
+.B on
+and the binary resolves, so removing the symlink also hides the module.
+.TP
 .BI "--waybar-vpn " on|off
 Toggle the waybar VPN module. When
 .BR on ,
@@ -385,6 +401,23 @@ must be available on
 When
 .BR off ,
 the VPN block is stripped from both
+.I config.jsonc
+and
+.IR style.css
+on apply.
+.TP
+.BI "--waybar-battery " on|off
+Toggle the waybar battery module - a native
+.B battery
+readout (charge %, charging/plugged icons) shown to the right of the audio
+module. Intended for laptops; when
+.BR on ,
+a battery must be present under
+.IR /sys/class/power_supply/BAT* .
+In the console style it gets its own amber chevron block; in the pill style,
+an amber outlined bubble. When
+.BR off ,
+the battery block is stripped from both
 .I config.jsonc
 and
 .IR style.css
@@ -618,7 +651,9 @@ are automatically migrated to the new location on first run; older state
 files without the
 .BR *_FONT_SIZE ,
 .BR WAYBAR_DECOR ,
+.BR WAYBAR_GPU ,
 .BR WAYBAR_VPN ,
+.BR WAYBAR_BATTERY ,
 .BR WAYBAR_TRANSPARENT ,
 .BR WAYBAR_OPACITY ,
 .BR WAYBAR_LAUNCHER_LOGO ,
@@ -721,6 +756,12 @@ Enable the VPN module (requires vpnctl + vpn-status-indicator on PATH):
 .PP
 .EX
 dotctl set --waybar-vpn on
+.EE
+.PP
+Enable the battery module on a laptop (charge % right of audio):
+.PP
+.EX
+dotctl set --waybar-battery on
 .EE
 .PP
 Swap hyprland to a colored glow instead of a drop shadow:
