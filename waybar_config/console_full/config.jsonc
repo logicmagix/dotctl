@@ -74,6 +74,7 @@
     "tooltip": false
   },
   /* VPN:END */
+  "custom/rsep-pulse":     { "format": "", "tooltip": false },
   /* VPN:BEGIN */
   "custom/rsep-pulse": {
     "exec": "vpn-status-indicator",
