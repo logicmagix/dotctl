@@ -5,11 +5,28 @@
 # laptops) or a GPU-named hwmon device.
 # Output: {"text":"GPU Temp: N°C","class":"normal|warning|critical","alt":"..."}
 
+# True if an NVIDIA GPU is present and runtime-suspended (hybrid/Optimus
+# laptops power the dGPU down to D3 when idle). nvidia-smi wakes the card on
+# every call, so polling it from waybar would keep the dGPU awake permanently
+# and burn battery — skip nvidia-smi entirely while the card sleeps.
+nvidia_suspended() {
+  local d
+  for d in /sys/bus/pci/devices/*; do
+    [[ -r "$d/vendor" && $(<"$d/vendor") == 0x10de ]] || continue
+    [[ -r "$d/class"  && $(<"$d/class")  == 0x03*  ]] || continue
+    [[ -r "$d/power/runtime_status" && $(<"$d/power/runtime_status") == suspended ]] && return 0
+  done
+  return 1
+}
+
 pick_temp() {
   local t=""
 
-  # NVIDIA
+  # NVIDIA — but never wake a sleeping dGPU just to read its temperature
   if command -v nvidia-smi >/dev/null 2>&1; then
+    if nvidia_suspended; then
+      printf 'sleeping\n'; return 0
+    fi
     t=$(nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader,nounits 2>/dev/null | head -n1 | tr -d '[:space:]')
     [[ -n "$t" && "$t" =~ ^[0-9]+$ ]] && { printf '%s\n' "$t"; return 0; }
   fi
@@ -17,8 +34,8 @@ pick_temp() {
   # lm-sensors: GPU temp under a recognizable label.
   #   edge/junction -> AMD;  GPU -> ThinkPad EC and other labeled sensors.
   # Case-insensitive match on the label so it works across chips/drivers. This
-  # also covers hybrid/Optimus laptops where nvidia-smi can't read a powered-down
-  # or driverless dGPU but the EC still reports a GPU temperature.
+  # also covers hybrid/Optimus laptops where nvidia-smi can't read a driverless
+  # dGPU but the EC still reports a GPU temperature.
   if command -v sensors >/dev/null 2>&1; then
     t=$(sensors 2>/dev/null | awk 'tolower($1) ~ /^(edge|junction|gpu):$/ {gsub(/[+°C]/,"",$2); print int($2); exit}')
     [[ -n "$t" && "$t" =~ ^[0-9]+$ ]] && { printf '%s\n' "$t"; return 0; }
@@ -45,6 +62,11 @@ temp="$(pick_temp || true)"
 
 if [[ -z "$temp" ]]; then
   printf '{"text":"GPU Temp: --","class":"unknown","alt":"unknown"}\n'
+  exit 0
+fi
+
+if [[ "$temp" == "sleeping" ]]; then
+  printf '{"text":"GPU Temp: zzz","class":"normal","alt":"sleeping"}\n'
   exit 0
 fi
 
