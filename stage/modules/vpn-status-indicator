@@ -31,13 +31,14 @@ fi
 classes="$state"
 [[ "$ks" == "true" ]] && classes="$classes killswitch"
 
-# Icons
+# Icons as JSON \uXXXX escapes (waybar parses this output as JSON) - literal
+# PUA glyphs are invisible in editors and get silently dropped by tooling.
 if [[ "$state" == "on" ]]; then
-  text=" VPN"
+  text='\uf023 VPN'
   [[ -n "$loc" ]] && text+=" ${loc}"
   alt="on"
 else
-  text=" VPN OFF"
+  text='\uf09c VPN OFF'
   alt="off"
 fi
 

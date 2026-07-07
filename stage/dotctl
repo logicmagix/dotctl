@@ -646,16 +646,31 @@ apply_waybar() {
   done
 
   # Decorator injection: for console style, swap the canonical pointed glyphs
-  # with the active decorator's target glyphs in config.jsonc. The decorator
-  # file holds one `FROM TO` pair per non-comment line.
+  # with the active decorator's targets in config.jsonc. The decorator file
+  # holds one `FROM TO` pair per non-comment line as bare 4-digit hex
+  # codepoints (e.g. `e0b0 e0b4`). For each pair we rewrite both the JSON
+  # escape form (\uFROM -> \uTO) and any literal glyph occurrences - the
+  # canonical configs carry escapes (PUA glyphs are invisible and get
+  # silently dropped by text tooling; that's how rsep-pulse lost its chevron
+  # twice), but user-copied configs from older installs may still hold
+  # literals. Legacy decorator files with literal-glyph pairs still work via
+  # the fallback branch.
   if [[ "$WAYBAR_STYLE" == "console" ]]; then
-    local _from _to _rest
+    local _from _to _rest _from_ch _to_ch
     while IFS= read -r _line || [[ -n "$_line" ]]; do
       _line="${_line%%#*}"
       [[ -z "${_line// }" ]] && continue
       read -r _from _to _rest <<<"$_line"
       [[ -n "$_from" && -n "$_to" ]] || continue
-      sed -i "s/$_from/$_to/g" "$WAYBAR_DIR/config.jsonc"
+      if [[ "$_from" =~ ^[0-9a-fA-F]{4}$ && "$_to" =~ ^[0-9a-fA-F]{4}$ ]]; then
+        sed -i "s/\\\\u$_from/\\\\u$_to/g" "$WAYBAR_DIR/config.jsonc"
+        printf -v _from_ch "\\u$_from"
+        printf -v _to_ch   "\\u$_to"
+        sed -i "s/$_from_ch/$_to_ch/g" "$WAYBAR_DIR/config.jsonc"
+      else
+        # legacy literal-glyph pair (pre-hex decorator file)
+        sed -i "s/$_from/$_to/g" "$WAYBAR_DIR/config.jsonc"
+      fi
     done < "$decor"
   fi
 

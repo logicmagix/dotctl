@@ -29,7 +29,7 @@
   ],
   // ===== Modules =====
   "custom/power": {
-    "format": "",
+    "format": "\uf011",
     "tooltip-format": "Power",
     "on-click": "power"
   },

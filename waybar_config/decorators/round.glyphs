@@ -1,12 +1,19 @@
 # dotctl waybar decorator - round (Powerline half circles)
 # Substitutes the canonical pointed chevrons with their round equivalents.
 #
-# Format: each non-comment line is  FROM TO  (whitespace-separated). At apply
-# time dotctl reads the file for the active WAYBAR_DECOR and substitutes
-# FROM → TO in the waybar config.jsonc.
+# Format: each non-comment line is `FROM TO` as bare 4-digit hex codepoints
+# (whitespace-separated). At apply time dotctl substitutes both the JSON
+# escape form (\uFROM -> \uTO) and any literal glyph occurrences in
+# config.jsonc.
+#
+# Hex codepoints - NOT literal glyphs - on purpose: Powerline glyphs live in
+# the Private Use Area, render as nothing in most editors/terminals, and get
+# silently dropped when files round-trip through text tooling. The canonical
+# configs carry \uXXXX escapes for the same reason (see the rsep-pulse
+# history: the glyph vanished in an edit and nobody could see it happen).
 
-# U+E0B0 right chevron →  U+E0B4 right half-circle
- 
+# U+E0B0 right chevron -> U+E0B4 right half-circle
+e0b0 e0b4
 
-# U+E0B2 left chevron  →  U+E0B6 left half-circle
- 
+# U+E0B2 left chevron -> U+E0B6 left half-circle
+e0b2 e0b6

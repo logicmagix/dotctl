@@ -44,55 +44,55 @@
     /* BATTERY:END */
   ],
   // ===== Separators (pointed chevrons - swapped to half-circles when WAYBAR_DECOR=round) =====
-  "custom/rarrow1":        { "format": "", "tooltip": false },
-  "custom/rarrow2":        { "format": "", "tooltip": false },
-  "custom/rarrow3":        { "format": "", "tooltip": false },
-  "custom/rarrow4":        { "format": "", "tooltip": false },
-  "custom/rarrow5":        { "format": "", "tooltip": false },
-  "custom/rarrow6":        { "format": "", "tooltip": false },
-  "custom/rarrow7":        { "format": "", "tooltip": false },
+  "custom/rarrow1":        { "format": "\ue0b0", "tooltip": false },
+  "custom/rarrow2":        { "format": "\ue0b0", "tooltip": false },
+  "custom/rarrow3":        { "format": "\ue0b0", "tooltip": false },
+  "custom/rarrow4":        { "format": "\ue0b0", "tooltip": false },
+  "custom/rarrow5":        { "format": "\ue0b0", "tooltip": false },
+  "custom/rarrow6":        { "format": "\ue0b0", "tooltip": false },
+  "custom/rarrow7":        { "format": "\ue0b0", "tooltip": false },
   "custom/rarrow-center-l": {
-    "format": "",
+    "format": "\ue0b2",
     "tooltip": true,
     "tooltip-format": "Previous workspace",
     "on-click": "ws-cycle prev 1 10"
   },
   "custom/rarrow-center-r": {
-    "format": "",
+    "format": "\ue0b0",
     "tooltip": true,
     "tooltip-format": "Next workspace",
     "on-click": "ws-cycle next 1 10"
   },
-  "custom/rsep-terminal":  { "format": "", "tooltip": false },
-  "custom/rsep-files":     { "format": "", "tooltip": false },
-  "custom/rsep-editor":    { "format": "", "tooltip": false },
-  "custom/rsep-browser":   { "format": "", "tooltip": false },
-  "custom/rsep-tray":      { "format": "", "tooltip": false },
+  "custom/rsep-terminal":  { "format": "\ue0b2", "tooltip": false },
+  "custom/rsep-files":     { "format": "\ue0b2", "tooltip": false },
+  "custom/rsep-editor":    { "format": "\ue0b2", "tooltip": false },
+  "custom/rsep-browser":   { "format": "\ue0b2", "tooltip": false },
+  "custom/rsep-tray":      { "format": "\ue0b2", "tooltip": false },
   /* VPN:BEGIN */
   "custom/rsep-vpn": {
     "exec": "vpn-status-indicator",
     "interval": 5,
     "return-type": "json",
-    "format": "",
+    "format": "\ue0b2",
     "tooltip": false
   },
   /* VPN:END */
-  "custom/rsep-pulse":     { "format": "", "tooltip": false },
+  "custom/rsep-pulse":     { "format": "\ue0b2", "tooltip": false },
   /* VPN:BEGIN */
   "custom/rsep-pulse": {
     "exec": "vpn-status-indicator",
     "interval": 5,
     "return-type": "json",
-    "format": "",
+    "format": "\ue0b2",
     "tooltip": false
   },
   /* VPN:END */
   /* BATTERY:BEGIN */
-  "custom/rsep-battery":  { "format": "", "tooltip": false },
+  "custom/rsep-battery":  { "format": "\ue0b2", "tooltip": false },
   /* BATTERY:END */
   // ===== Modules =====
   "custom/power": {
-    "format": "",
+    "format": "\uf011",
     "tooltip-format": "Power",
     "on-click": "power"
   },
