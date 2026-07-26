@@ -6,15 +6,17 @@ MIN="${2:-1}"        # lowest workspace number
 MAX="${3:-10}"       # highest workspace number
 
 # Runtime detection for Hyprland Lua config (v0.55+).
-# Try legacy dispatch first; if it fails with lua parse error, use eval.
+# Try legacy dispatch first; if it fails with a lua parse error, use eval.
+# On lua configs `hyprctl dispatch` exits non-zero (0.56 returns 7), so the
+# capture must live in the `if` condition - a bare assignment would trip
+# set -e and kill the script before the fallback runs.
 dispatch_workspace() {
   local ws="$1"
   local out
-  out=$(hyprctl dispatch workspace "$ws" 2>&1)
-  if [[ "$out" == *"hl.dispatch"* ]]; then
-    # Lua config detected - use eval syntax
-    hyprctl eval "hl.dispatch(hl.dsp.focus({workspace=$ws}))" >/dev/null 2>&1
+  if out=$(hyprctl dispatch workspace "$ws" 2>&1) && [[ "$out" != *"hl.dispatch"* ]]; then
+    return 0
   fi
+  hyprctl eval "hl.dispatch(hl.dsp.focus({workspace=$ws}))" >/dev/null 2>&1
 }
 
 cur="$(hyprctl -j activeworkspace | jq -r '.id')"
