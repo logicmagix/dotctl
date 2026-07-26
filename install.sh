@@ -535,10 +535,10 @@ elif [[ -f "$FC_USER_CONF" ]]; then
   skip "user fontconfig already exists ($FC_USER_CONF)"
 fi
 
-# Cycle scripts (copies - user curates IMAGES=() per theme). File-level
-# backup preserves the user's curated IMAGES=() lists across reinstall:
-# scripts they edited get their prior version saved as <name>.bak-<ts>,
-# user-authored scripts not shipped by dotctl stay put, untouched.
+# Cycle scripts (copies - user curates IMAGES=() per theme). On first
+# install, pre-existing edited scripts are backed up as <name>.bak-<ts>
+# (via copy_config); on reinstall shipped scripts are overwritten in
+# place. User-authored scripts not shipped by dotctl stay put, untouched.
 info "Installing cycle scripts to $CONFIG_HOME/dotctl/cycle/…"
 copy_config "$STAGE/cycle" "$CONFIG_HOME/dotctl/cycle"
 chmod +x "$CONFIG_HOME/dotctl/cycle"/cycle-hyprpaper-*
@@ -557,8 +557,11 @@ ok "$DATA_HOME/dotctl/dotctl-colors.lua.tmpl (lua v0.55+)"
 # palette-driven values on first run.
 if [[ -d "$CONFIG_HOME/hypr" ]]; then
   info "Installing hypr snippets to $CONFIG_HOME/hypr/…"
-  # Install both keybind formats - user sources the appropriate one
-  if [[ -e "$CONFIG_HOME/hypr/dotctl-keybinds.conf" ]]; then
+  # Install both keybind formats - user sources the appropriate one. Back up
+  # an existing dotctl-keybinds.conf only on FIRST install (same rule as
+  # copy_config): on reinstall dotctl owns the file, and a fresh .bak per
+  # reinstall just piles up.
+  if (( IS_REINSTALL == 0 )) && [[ -e "$CONFIG_HOME/hypr/dotctl-keybinds.conf" ]]; then
     kb_backup="$CONFIG_HOME/hypr/dotctl-keybinds.conf.bak-${BACKUP_TS}"
     mv "$CONFIG_HOME/hypr/dotctl-keybinds.conf" "$kb_backup"
     ok "backed up existing dotctl-keybinds.conf → $kb_backup"
