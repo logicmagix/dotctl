@@ -3,7 +3,7 @@
 # Works with NVIDIA (nvidia-smi), AMD (sensors edge/junction), and any chip that
 # exposes a GPU temp via an lm-sensors "GPU" label (e.g. ThinkPad EC on hybrid
 # laptops) or a GPU-named hwmon device.
-# Output: {"text":"GPU Temp: N°C","class":"normal|warning|critical","alt":"..."}
+# Output: {"text":"GPU Temp: N°C","class":"normal|warning|critical","alt":"...","tooltip":"<gpu model>"}
 
 # True if an NVIDIA GPU is present and runtime-suspended (hybrid/Optimus
 # laptops power the dGPU down to D3 when idle). nvidia-smi wakes the card on
@@ -17,6 +17,40 @@ nvidia_suspended() {
     [[ -r "$d/power/runtime_status" && $(<"$d/power/runtime_status") == suspended ]] && return 0
   done
   return 1
+}
+
+# GPU model name for the tooltip, resolved from the PCI ID database. Reads only
+# cached sysfs attributes (vendor/device/class), never PCI config space or
+# nvidia-smi, so a runtime-suspended dGPU stays asleep. Prefers a non-Intel
+# chip on hybrid machines since that's whose temp this module reports.
+gpu_name() {
+  local ids="" f d v ven="" dev="" n
+  for f in /usr/share/hwdata/pci.ids /usr/share/misc/pci.ids; do
+    [[ -r "$f" ]] && { ids="$f"; break; }
+  done
+  [[ -n "$ids" ]] || return 1
+  for d in /sys/bus/pci/devices/*; do
+    [[ -r "$d/class" && $(<"$d/class") == 0x03* ]] || continue
+    v=$(<"$d/vendor")
+    if [[ -z "$ven" || "$ven" == "0x8086" ]]; then
+      ven="$v"; dev=$(<"$d/device")
+    fi
+  done
+  [[ -n "$ven" ]] || return 1
+  n=$(awk -v ven="${ven#0x}" -v dev="${dev#0x}" '
+    {
+      if (substr($0,1,1) == "\t") {
+        if (invend && substr($0,2,1) != "\t" && tolower(substr($0,2,4)) == dev) {
+          print substr($0,8); exit
+        }
+      } else if (substr($0,1,1) != "#") {
+        invend = (tolower(substr($0,1,4)) == ven)
+      }
+    }' "$ids")
+  [[ -n "$n" ]] || return 1
+  # pci.ids names chips like "AD107 [GeForce RTX 4060]" - keep the retail name
+  [[ "$n" == *\[*\]* ]] && { n="${n#*\[}"; n="${n%%\]*}"; }
+  printf '%s\n' "${n//&/&amp;}"
 }
 
 pick_temp() {
@@ -60,13 +94,16 @@ pick_temp() {
 
 temp="$(pick_temp || true)"
 
+name="$(gpu_name || true)"
+[[ -n "$name" ]] || name="GPU"
+
 if [[ -z "$temp" ]]; then
-  printf '{"text":"GPU Temp: --","class":"unknown","alt":"unknown"}\n'
+  printf '{"text":"GPU Temp: --","class":"unknown","alt":"unknown","tooltip":"%s"}\n' "$name"
   exit 0
 fi
 
 if [[ "$temp" == "sleeping" ]]; then
-  printf '{"text":"GPU Temp: zzz","class":"normal","alt":"sleeping"}\n'
+  printf '{"text":"GPU Temp: zzz","class":"normal","alt":"sleeping","tooltip":"%s (suspended)"}\n' "$name"
   exit 0
 fi
 
@@ -75,4 +112,4 @@ elif (( temp < 80 )); then cls="warning"
 else                       cls="critical"
 fi
 
-printf '{"text":"GPU Temp: %d°C","class":"%s","alt":"%s"}\n' "$temp" "$cls" "$cls"
+printf '{"text":"GPU Temp: %d°C","class":"%s","alt":"%s","tooltip":"%s"}\n' "$temp" "$cls" "$cls" "$name"

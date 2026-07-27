@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
 # waybar-cputemp - print CPU temp + waybar state class (JSON).
-# Output: {"text":"CPU Temp: N°C","class":"normal|warning|critical","alt":"..."}
+# Output: {"text":"CPU Temp: N°C","class":"normal|warning|critical","alt":"...","tooltip":"<cpu model>"}
 
 labels=('Tctl' 'Tdie' 'CPU Package' 'CPU Composite' 'Package id 0')
+
+# CPU model name for the tooltip; & escaped for waybar's Pango markup.
+cpu_name() {
+  local n
+  n=$(awk -F': +' '/^model name/ {print $2; exit}' /proc/cpuinfo)
+  [[ -n "$n" ]] || n="CPU"
+  printf '%s\n' "${n//&/&amp;}"
+}
 
 pick_temp() {
   for d in /sys/class/hwmon/hwmon*; do
@@ -34,8 +42,10 @@ if [[ -z "$val" ]]; then
   (( best > 0 )) && val="$best"
 fi
 
+name="$(cpu_name)"
+
 if [[ -z "$val" ]]; then
-  printf '{"text":"CPU Temp: --","class":"unknown","alt":"unknown"}\n'
+  printf '{"text":"CPU Temp: --","class":"unknown","alt":"unknown","tooltip":"%s"}\n' "$name"
   exit 0
 fi
 
@@ -46,4 +56,4 @@ elif (( t < 80 )); then cls="warning"
 else                    cls="critical"
 fi
 
-printf '{"text":"CPU Temp: %d°C","class":"%s","alt":"%s"}\n' "$t" "$cls" "$cls"
+printf '{"text":"CPU Temp: %d°C","class":"%s","alt":"%s","tooltip":"%s"}\n' "$t" "$cls" "$cls" "$name"
