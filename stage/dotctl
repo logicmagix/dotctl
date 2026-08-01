@@ -36,6 +36,7 @@ readonly CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/dotctl"
 readonly STATE_DIR="$CONFIG_ROOT/dotctl"
 readonly STATE_FILE="$STATE_DIR/config"
 readonly STATE_LOCK="$CACHE_DIR/lock"
+readonly APPLY_LOCK="$CACHE_DIR/apply.lock"
 readonly LEGACY_STATE_FILE="$CACHE_DIR/state"
 readonly PRESET_DIR="$STATE_DIR/presets"
 readonly CYCLE_DIR="$STATE_DIR/cycle"
@@ -288,6 +289,20 @@ save_state() {
   } > "$STATE_FILE"
   exec 8>&-
 }
+
+# Serialize entire mutating commands, not just the state-file write above.
+# Concurrent invocations (keybind double-fire, key mashing, watch racing a
+# cycle) interleave load_state/save_state and the awk/sed rewrite pipelines
+# on the same live files - that's how style.css ends up 0 bytes. The lock is
+# held until process exit (mutating commands are short-lived); watch releases
+# it explicitly between applies. flock drops the lock if the holder dies, so
+# no stale-lock cleanup is needed.
+acquire_apply_lock() {
+  mkdir -p "$CACHE_DIR"
+  exec 9>"$APPLY_LOCK"
+  flock -w 30 9 || die "another dotctl invocation is applying (gave up after 30s)"
+}
+release_apply_lock() { exec 9>&-; }
 
 # ──────────────────────────────────────────────────────────────────────────────
 #  Discovery - scan filesystem for available options
@@ -583,8 +598,12 @@ apply_waybar() {
   [[ -f "$font" ]]    || die "waybar font missing: $font"
   [[ -f "$decor" ]]   || die "waybar decorator missing: $decor"
 
-  cp -f "$src/config.jsonc" "$WAYBAR_DIR/config.jsonc"
-  cp -f "$src/style.css"   "$WAYBAR_DIR/style.css"
+  # Render into $$-suffixed staged copies and mv into place only when both
+  # files are complete: waybar never reads a half-rewritten config, and an
+  # aborted run leaves the live files untouched.
+  local _cfg="$WAYBAR_DIR/config.jsonc.stage.$$" _css="$WAYBAR_DIR/style.css.stage.$$"
+  cp -f "$src/config.jsonc" "$_cfg"
+  cp -f "$src/style.css"   "$_css"
 
   # Palette injection: replace the block between `/* PALETTE:BEGIN */` and
   # `/* PALETTE:END */` with the contents of the active palette file.
@@ -598,7 +617,7 @@ apply_waybar() {
     }
     /\/\* PALETTE:END/ { inside = 0 }
     !inside { print }
-  ' "$WAYBAR_DIR/style.css" > "$WAYBAR_DIR/style.css.tmp" && mv -f "$WAYBAR_DIR/style.css.tmp" "$WAYBAR_DIR/style.css"
+  ' "$_css" > "$_css.tmp" && mv -f "$_css.tmp" "$_css"
 
   # Font injection: same pattern, but inside the `#waybar { ... }` block, so
   # indent each injected line with 2 spaces.
@@ -612,11 +631,11 @@ apply_waybar() {
     }
     /\/\* FONT:END/ { inside = 0 }
     !inside { print }
-  ' "$WAYBAR_DIR/style.css" > "$WAYBAR_DIR/style.css.tmp" && mv -f "$WAYBAR_DIR/style.css.tmp" "$WAYBAR_DIR/style.css"
+  ' "$_css" > "$_css.tmp" && mv -f "$_css.tmp" "$_css"
 
   # Override the bar font-size from state - scoped to `#waybar { ... }` so
   # larger chevron/separator font sizes elsewhere in the CSS stay authored.
-  sed -i -E "/^#waybar[[:space:]]*\{/,/^\}/ s/(font-size:[[:space:]]*)[0-9]+(\.[0-9]+)?(pt|px)/\1${WAYBAR_FONT_SIZE}px/" "$WAYBAR_DIR/style.css"
+  sed -i -E "/^#waybar[[:space:]]*\{/,/^\}/ s/(font-size:[[:space:]]*)[0-9]+(\.[0-9]+)?(pt|px)/\1${WAYBAR_FONT_SIZE}px/" "$_css"
 
   # Transparent bar background toggle: the canonical `#waybar { background:
   # transparent; }` block is wrapped in `/* TRANSPARENT:BEGIN */ ... END */`.
@@ -634,7 +653,7 @@ apply_waybar() {
     }
     /\/\* TRANSPARENT:END/ { skip = 0; next }
     !skip { print }
-  ' "$WAYBAR_DIR/style.css" > "$WAYBAR_DIR/style.css.tmp" && mv -f "$WAYBAR_DIR/style.css.tmp" "$WAYBAR_DIR/style.css"
+  ' "$_css" > "$_css.tmp" && mv -f "$_css.tmp" "$_css"
 
   # VPN gate: canonical files wrap the VPN blocks in
   # `/* VPN:BEGIN */ ... /* VPN:END */`. When WAYBAR_VPN != on, drop the
@@ -642,7 +661,7 @@ apply_waybar() {
   # and re-strip later (waybar parses jsonc comments fine).
   local _f _vpn_on=0
   [[ "$WAYBAR_VPN" == "on" ]] && _vpn_on=1
-  for _f in "$WAYBAR_DIR/config.jsonc" "$WAYBAR_DIR/style.css"; do
+  for _f in "$_cfg" "$_css"; do
     awk -v keep="$_vpn_on" '
       /\/\* VPN:BEGIN/ { if (keep != 1) { skip = 1; next } }
       /\/\* VPN:END/   { if (keep != 1) { skip = 0; next } }
@@ -658,7 +677,7 @@ apply_waybar() {
   # rarrow6 as the transparent end-cap (no separate sed-repaint needed).
   local _gpu_on=0
   [[ "$WAYBAR_GPU" == "on" ]] && waybar_gpu_available && _gpu_on=1
-  for _f in "$WAYBAR_DIR/config.jsonc" "$WAYBAR_DIR/style.css"; do
+  for _f in "$_cfg" "$_css"; do
     awk -v keep="$_gpu_on" '
       /\/\* GPU:BEGIN/ { if (keep != 1) { skip = 1; next } }
       /\/\* GPU:END/   { if (keep != 1) { skip = 0; next } }
@@ -684,7 +703,7 @@ apply_waybar() {
   do
     _mk="${_pair%%:*}"; _on=0
     [[ "${_pair#*:}" == "on" ]] && _on=1
-    for _f in "$WAYBAR_DIR/config.jsonc" "$WAYBAR_DIR/style.css"; do
+    for _f in "$_cfg" "$_css"; do
       awk -v keep="$_on" -v mk="$_mk" '
         $0 ~ ("/\\* " mk ":BEGIN") { if (keep != 1) { skip = 1; next } }
         $0 ~ ("/\\* " mk ":END")   { if (keep != 1) { skip = 0; next } }
@@ -711,13 +730,13 @@ apply_waybar() {
       read -r _from _to _rest <<<"$_line"
       [[ -n "$_from" && -n "$_to" ]] || continue
       if [[ "$_from" =~ ^[0-9a-fA-F]{4}$ && "$_to" =~ ^[0-9a-fA-F]{4}$ ]]; then
-        sed -i "s/\\\\u$_from/\\\\u$_to/g" "$WAYBAR_DIR/config.jsonc"
+        sed -i "s/\\\\u$_from/\\\\u$_to/g" "$_cfg"
         printf -v _from_ch "\\u$_from"
         printf -v _to_ch   "\\u$_to"
-        sed -i "s/$_from_ch/$_to_ch/g" "$WAYBAR_DIR/config.jsonc"
+        sed -i "s/$_from_ch/$_to_ch/g" "$_cfg"
       else
         # legacy literal-glyph pair (pre-hex decorator file)
-        sed -i "s/$_from/$_to/g" "$WAYBAR_DIR/config.jsonc"
+        sed -i "s/$_from/$_to/g" "$_cfg"
       fi
     done < "$decor"
   fi
@@ -730,7 +749,7 @@ apply_waybar() {
   pretty_name="${WAYBAR_LAUNCHER_NAMES[$WAYBAR_LAUNCHER_LOGO]:-Tux}"
   sed -i -E '/"custom\/launcher":/,/^[[:space:]]*\},?[[:space:]]*$/ {
     /^[[:space:]]+"format":[[:space:]]*"\\u[0-9a-fA-F]{4}"/ s|^([[:space:]]+)"format":[[:space:]]*"\\u[0-9a-fA-F]{4}",.*|\1"format": "\\u'"$glyph_hex"'",  // '"$pretty_name"'|
-  }' "$WAYBAR_DIR/config.jsonc"
+  }' "$_cfg"
 
   # Rewrite the `on-click` line inside the `custom/editor` block. Terminal
   # editors keep the terminal wrapper (exec $T -e $E); GUI editors launch
@@ -758,7 +777,10 @@ apply_waybar() {
     }
     in_editor && /^[[:space:]]*\},?[[:space:]]*$/ { in_editor = 0 }
     { print }
-  ' "$WAYBAR_DIR/config.jsonc" > "$WAYBAR_DIR/config.jsonc.tmp" && mv -f "$WAYBAR_DIR/config.jsonc.tmp" "$WAYBAR_DIR/config.jsonc"
+  ' "$_cfg" > "$_cfg.tmp" && mv -f "$_cfg.tmp" "$_cfg"
+
+  mv -f "$_cfg" "$WAYBAR_DIR/config.jsonc"
+  mv -f "$_css" "$WAYBAR_DIR/style.css"
 
   pkill -SIGUSR2 -x waybar 2>/dev/null || warn "waybar reload signal failed (waybar running?)"
   log "apply waybar: ${WAYBAR_STYLE}_${WAYBAR_SCOPE} color=${WAYBAR_COLOR} font=${WAYBAR_FONT}/${WAYBAR_FONT_SIZE} decor=${WAYBAR_DECOR} cpu=${WAYBAR_CPU} cputemp=${WAYBAR_CPUTEMP} ram=${WAYBAR_RAM} gpu=${WAYBAR_GPU} vram=${WAYBAR_VRAM} vpn=${WAYBAR_VPN} battery=${WAYBAR_BATTERY} audio=${WAYBAR_AUDIO} power=${WAYBAR_POWER} launcher=${WAYBAR_LAUNCHER} transparent=${WAYBAR_TRANSPARENT}/opacity=${WAYBAR_OPACITY} logo=${WAYBAR_LAUNCHER_LOGO} editor=${WAYBAR_EDITOR}"
@@ -871,7 +893,7 @@ apply_hypr() {
     -e "s/__BG3__/${bg3}/g" \
     -e "s/__SHADOW_COLOR__/${shadow_color}/g" \
     -e "s/__SHADOW_ALPHA__/${shadow_alpha}/g" \
-    "$template" > "$output_file.tmp" && mv -f "$output_file.tmp" "$output_file"
+    "$template" > "$output_file.tmp.$$" && mv -f "$output_file.tmp.$$" "$output_file"
 
   # Reload hyprland in place if running. Silent on failure - the user may
   # not yet have sourced the file from their hyprland.conf/lua.
@@ -1820,6 +1842,7 @@ EOF
   info ""
 
   if confirm "  Apply now and save state?" y; then
+    acquire_apply_lock
     save_state
     apply_all
     info "  dotctl: applied."
@@ -2349,6 +2372,7 @@ EOF
   info "dotctl: watching $STATE_FILE (Ctrl-C to stop)"
 
   _watch_apply() {
+    acquire_apply_lock
     if load_state 2>/dev/null; then
       if apply_all >/dev/null 2>&1; then
         log "watch: applied from $STATE_FILE"
@@ -2359,6 +2383,7 @@ EOF
     else
       warn "watch: invalid or incomplete $STATE_FILE - edit and save again"
     fi
+    release_apply_lock
   }
 
   if command -v inotifywait >/dev/null 2>&1; then
@@ -2561,6 +2586,13 @@ EOF
 main() {
   local action="${1:-help}"
   [[ $# -gt 0 ]] && shift
+  # Mutating commands take the apply lock up front so concurrent invocations
+  # queue instead of corrupting each other. configure locks late (inside the
+  # wizard, right before save+apply) so an idle prompt doesn't starve keybinds;
+  # watch locks per-apply in its event loop.
+  case "$action" in
+    set|cycle|sync|preset|new|scan|apply) acquire_apply_lock;;
+  esac
   case "$action" in
     configure)        cmd_configure "$@";;
     show)             cmd_show "$@";;
