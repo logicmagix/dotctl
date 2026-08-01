@@ -61,9 +61,9 @@ decorator glyph set
 or
 .BR round ,
 console-only),
-GPU temp module toggle, VRAM usage module toggle, VPN module toggle,
-battery module toggle (laptop
-charge %, right of audio), power button toggle, launcher button toggle,
+per-module toggles (CPU load, CPU temp, RAM, GPU temp, VRAM, VPN,
+battery, power button, launcher button - every block except the
+workspaces can be switched off individually),
 transparent-bar toggle, explicit bar opacity
 (used when
 transparent is off), and launcher logo (the distro glyph in the
@@ -80,9 +80,8 @@ block, the palette is injected into the
 .B @define-color
 block on every apply, the launcher glyph is rewritten inside the
 .B custom/launcher
-block, and the VPN, GPU, VRAM, battery, power, and launcher modules are stripped
-from both files when
-disabled. Reloaded
+block, and every disabled module block is stripped
+from both files on apply. Reloaded
 with
 .BR "pkill -SIGUSR2 waybar" .
 .TP
@@ -316,6 +315,9 @@ List valid values for one axis. Axes:
 .BR waybar-powers ,
 .BR waybar-launchers ,
 .BR waybar-vrams ,
+.BR waybar-cpus ,
+.BR waybar-cputemps ,
+.BR waybar-rams ,
 .BR waybar-transparents ,
 .BR waybar-opacities ,
 .BR hypr-effects ,
@@ -524,6 +526,17 @@ block and deliberately shares the RAM module's palette; in the console
 style the seam between two same-colored blocks renders as a seamless
 join. Both the GPU and VRAM blocks may be toggled independently - the
 chevron seams are authored for every combination.
+.TP
+.BI "--waybar-cpu " on|off
+.TQ
+.BI "--waybar-cputemp " on|off
+.TQ
+.BI "--waybar-ram " on|off
+Toggle the CPU load, CPU temperature, and RAM usage modules
+individually. All left-side system blocks (these three plus GPU and
+VRAM) may be enabled in any combination - console chevron seams re-seam
+automatically, and with everything off the left side ends at the
+workspace block.
 .TP
 .BI "--waybar-power " on|off
 Toggle the waybar power button (wofi poweroff/reboot/logout menu, far left;
@@ -761,7 +774,7 @@ variants, env overrides).
 .SH FILES
 .TP
 .I ~/.config/dotctl/config
-30-field
+33-field
 .B KEY=value
 state file, hand-editable, flock-guarded on writes. Regenerate with
 .BR "dotctl configure" .

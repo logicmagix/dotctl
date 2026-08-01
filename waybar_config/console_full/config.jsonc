@@ -14,13 +14,19 @@
     "custom/rarrow2",
     /* LAUNCHER:END */
     "hyprland/workspaces",
-    "custom/rarrow3",
-    "cpu",
-    "custom/rarrow4",
-    "custom/cputemp",
-    "custom/rarrow5",
-    "memory",
+    "custom/rarrow3"
+    /* CPU:BEGIN */
+    , "cpu",
+    "custom/rarrow4"
+    /* CPU:END */
+    /* CPUTEMP:BEGIN */
+    , "custom/cputemp",
+    "custom/rarrow5"
+    /* CPUTEMP:END */
+    /* RAM:BEGIN */
+    , "memory",
     "custom/rarrow6"
+    /* RAM:END */
     /* GPU:BEGIN */
     , "custom/gpu",
     "custom/rarrow7"
@@ -152,10 +158,13 @@
   },
   /* VPN:END */
   // ===== System modules =====
+  /* CPU:BEGIN */
   "cpu": {
     "format": "Load: {usage}%",
     "tooltip": true
   },
+  /* CPU:END */
+  /* CPUTEMP:BEGIN */
   "custom/cputemp": {
     "exec": "dotctl cputemp",
     "return-type": "json",
@@ -163,10 +172,13 @@
     "interval": 3,
     "tooltip": true
   },
+  /* CPUTEMP:END */
+  /* RAM:BEGIN */
   "memory": {
     "format": "RAM: {used:0.1f}G/{total:0.1f}G",
     "tooltip": true
   },
+  /* RAM:END */
   /* GPU:BEGIN */
   "custom/gpu": {
     "exec": "dotctl gputemp",

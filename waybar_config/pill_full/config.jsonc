@@ -11,10 +11,16 @@
     /* LAUNCHER:BEGIN */
     "custom/launcher",
     /* LAUNCHER:END */
-    "hyprland/workspaces",
-    "cpu",
-    "custom/cputemp",
-    "memory"
+    "hyprland/workspaces"
+    /* CPU:BEGIN */
+    , "cpu"
+    /* CPU:END */
+    /* CPUTEMP:BEGIN */
+    , "custom/cputemp"
+    /* CPUTEMP:END */
+    /* RAM:BEGIN */
+    , "memory"
+    /* RAM:END */
     /* GPU:BEGIN */
     , "custom/gpu"
     /* GPU:END */
@@ -108,10 +114,13 @@
   },
   /* VPN:END */
   // ===== System modules =====
+  /* CPU:BEGIN */
   "cpu": {
     "format": "Load: {usage}%",
     "tooltip": true
   },
+  /* CPU:END */
+  /* CPUTEMP:BEGIN */
   "custom/cputemp": {
     "exec": "dotctl cputemp",
     "return-type": "json",
@@ -119,10 +128,13 @@
     "interval": 3,
     "tooltip": true
   },
+  /* CPUTEMP:END */
+  /* RAM:BEGIN */
   "memory": {
     "format": "RAM: {used:0.1f}G/{total:0.1f}G",
     "tooltip": true
   },
+  /* RAM:END */
   /* GPU:BEGIN */
   "custom/gpu": {
     "exec": "dotctl gputemp",

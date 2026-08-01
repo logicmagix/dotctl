@@ -101,8 +101,12 @@ tooltip {
 /* -- Shared Module Padding ---------------------------------------- */
 #battery,
 #clock,
+/* CPU:BEGIN */
 #cpu,
+/* CPU:END */
+/* RAM:BEGIN */
 #memory,
+/* RAM:END */
 #mode,
 #network,
 /*#custom-audio,*/
@@ -120,9 +124,15 @@ tooltip {
 /* -- Warning States ----------------------------------------------- */
 /* Text-only so flanking chevrons keep their authored bg colors. */
 #network.disconnected,
+/* RAM:BEGIN */
 #memory.warning,
+/* RAM:END */
+/* CPU:BEGIN */
 #cpu.warning,
+/* CPU:END */
+/* CPUTEMP:BEGIN */
 #custom-cputemp.warning,
+/* CPUTEMP:END */
 /* GPU:BEGIN */
 #custom-gpu.warning,
 /* GPU:END */
@@ -136,9 +146,15 @@ tooltip {
 
 /* -- Critical States (blinking) ----------------------------------- */
 #mode,
+/* RAM:BEGIN */
 #memory.critical,
+/* RAM:END */
+/* CPU:BEGIN */
 #cpu.critical,
+/* CPU:END */
+/* CPUTEMP:BEGIN */
 #custom-cputemp.critical,
+/* CPUTEMP:END */
 /* GPU:BEGIN */
 #custom-gpu.critical,
 /* GPU:END */
@@ -226,12 +242,15 @@ tooltip {
   color: @hover_fg;
 }
 
+/* CPU:BEGIN */
 /* CPU load */
 #cpu {
   background: @lime;
   color: @black;
 }
+/* CPU:END */
 
+/* CPUTEMP:BEGIN */
 /* CPU temperature */
 #custom-cputemp {
   background: @olive;
@@ -239,12 +258,15 @@ tooltip {
   padding-left: 13px;
   padding-right: 11px;
 }
+/* CPUTEMP:END */
 
+/* RAM:BEGIN */
 /* RAM usage */
 #memory {
   background: @mint;
   color: @black;
 }
+/* RAM:END */
 
 /* GPU:BEGIN */
 /* GPU info */
@@ -270,9 +292,45 @@ tooltip {
 #custom-rarrow1  { color: @red;   background: @teal;       } /* power -> launcher (override when launcher present) */
 #custom-rarrow2  { color: @teal;  background: @plum;       } /* launcher  workspace area  */
 /* LAUNCHER:END */
-#custom-rarrow3  { color: @plum;  background: @lime;       } /* workspace area  cpu       */
-#custom-rarrow4  { color: @lime;  background: @olive;      } /* cpu  cputemp              */
-#custom-rarrow5  { color: @olive; background: @mint;       } /* cputemp  memory           */
+#custom-rarrow3  { color: @plum;  background: transparent; } /* ws -> bar (end-cap when later blocks off) */
+/* VRAM:BEGIN */
+#custom-rarrow3  { color: @plum;  background: @mint;       } /* ws -> vram */
+/* VRAM:END */
+/* GPU:BEGIN */
+#custom-rarrow3  { color: @plum;  background: @olive;       } /* ws -> gpu */
+/* GPU:END */
+/* RAM:BEGIN */
+#custom-rarrow3  { color: @plum;  background: @mint;       } /* ws -> ram */
+/* RAM:END */
+/* CPUTEMP:BEGIN */
+#custom-rarrow3  { color: @plum;  background: @olive;       } /* ws -> cputemp */
+/* CPUTEMP:END */
+/* CPU:BEGIN */
+#custom-rarrow3  { color: @plum;  background: @lime;       } /* ws -> cpu (nearest wins) */
+/* CPU:END */
+#custom-rarrow4  { color: @lime;  background: transparent; } /* cpu -> bar (end-cap when later blocks off) */
+/* VRAM:BEGIN */
+#custom-rarrow4  { color: @lime;  background: @mint;       } /* cpu -> vram */
+/* VRAM:END */
+/* GPU:BEGIN */
+#custom-rarrow4  { color: @lime;  background: @olive;       } /* cpu -> gpu */
+/* GPU:END */
+/* RAM:BEGIN */
+#custom-rarrow4  { color: @lime;  background: @mint;       } /* cpu -> ram */
+/* RAM:END */
+/* CPUTEMP:BEGIN */
+#custom-rarrow4  { color: @lime;  background: @olive;       } /* cpu -> cputemp (nearest wins) */
+/* CPUTEMP:END */
+#custom-rarrow5  { color: @olive;  background: transparent; } /* cputemp -> bar (end-cap when later blocks off) */
+/* VRAM:BEGIN */
+#custom-rarrow5  { color: @olive;  background: @mint;       } /* cputemp -> vram */
+/* VRAM:END */
+/* GPU:BEGIN */
+#custom-rarrow5  { color: @olive;  background: @olive;       } /* cputemp -> gpu */
+/* GPU:END */
+/* RAM:BEGIN */
+#custom-rarrow5  { color: @olive;  background: @mint;       } /* cputemp -> ram (nearest wins) */
+/* RAM:END */
 #custom-rarrow6  { color: @mint;  background: transparent; } /* memory  bar (end-cap when gpu absent) */
 /* VRAM:BEGIN */
 #custom-rarrow6  { color: @mint;  background: @mint;       } /* memory -> vram (seamless join when gpu absent) */
@@ -387,9 +445,15 @@ tooltip {
 #custom-rarrow2,
 /* LAUNCHER:END */
 #custom-rarrow3,
+/* CPU:BEGIN */
 #custom-rarrow4,
+/* CPU:END */
+/* CPUTEMP:BEGIN */
 #custom-rarrow5,
+/* CPUTEMP:END */
+/* RAM:BEGIN */
 #custom-rarrow6,
+/* RAM:END */
 /* GPU:BEGIN */
 #custom-rarrow7,
 /* GPU:END */

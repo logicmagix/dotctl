@@ -91,9 +91,15 @@ tooltip {
 #custom-launcher,
 /* LAUNCHER:END */
 #workspaces,
+/* CPU:BEGIN */
 #cpu,
+/* CPU:END */
+/* CPUTEMP:BEGIN */
 #custom-cputemp,
+/* CPUTEMP:END */
+/* RAM:BEGIN */
 #memory,
+/* RAM:END */
 /* GPU:BEGIN */
 #custom-gpu,
 /* GPU:END */
@@ -125,21 +131,65 @@ tooltip {
 }
 
 /* -- Warning / Critical ------------------------------------------- */
-#memory.warning,
+/* RAM:BEGIN */
+#memory.warning {
+  border-color: @warning;
+  color: @warning;
+}
+/* RAM:END */
 /* VRAM:BEGIN */
-#custom-vram.warning,
+#custom-vram.warning {
+  border-color: @warning;
+  color: @warning;
+}
 /* VRAM:END */
-#cpu.warning,
+/* CPU:BEGIN */
+#cpu.warning {
+  border-color: @warning;
+  color: @warning;
+}
+/* CPU:END */
+/* CPUTEMP:BEGIN */
 #custom-cputemp.warning {
   border-color: @warning;
   color: @warning;
 }
+/* CPUTEMP:END */
 
-#memory.critical,
+/* RAM:BEGIN */
+#memory.critical {
+  border-color: @critical;
+  color: @critical;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+  animation-name: blink-critical;
+  animation-duration: 1s;
+}
+/* RAM:END */
 /* VRAM:BEGIN */
-#custom-vram.critical,
+#custom-vram.critical {
+  border-color: @critical;
+  color: @critical;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+  animation-name: blink-critical;
+  animation-duration: 1s;
+}
 /* VRAM:END */
-#cpu.critical,
+/* CPU:BEGIN */
+#cpu.critical {
+  border-color: @critical;
+  color: @critical;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+  animation-name: blink-critical;
+  animation-duration: 1s;
+}
+/* CPU:END */
+/* CPUTEMP:BEGIN */
 #custom-cputemp.critical {
   border-color: @critical;
   color: @critical;
@@ -149,6 +199,7 @@ tooltip {
   animation-name: blink-critical;
   animation-duration: 1s;
 }
+/* CPUTEMP:END */
 
 /* GPU:BEGIN */
 #custom-gpu.warning {
@@ -231,20 +282,26 @@ tooltip {
 }
 
 /* System monitors - accent border, matching text */
+/* CPU:BEGIN */
 #cpu {
   color: @lime;
   border-color: @lime;
 }
+/* CPU:END */
 
+/* CPUTEMP:BEGIN */
 #custom-cputemp {
   color: @olive;
   border-color: @olive;
 }
+/* CPUTEMP:END */
 
+/* RAM:BEGIN */
 #memory {
   color: @mint;
   border-color: @mint;
 }
+/* RAM:END */
 
 /* GPU:BEGIN */
 #custom-gpu {
