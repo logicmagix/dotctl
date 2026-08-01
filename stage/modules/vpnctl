@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # Check logs with sudo tail -n 40 /var/log/openvpn/nordvpn.log
 
-VPNCTL_BIN="/usr/local/bin/vpnctl"
 CONFIG_DIR="/etc/openvpn"
 DEFAULT_CONF="${CONFIG_DIR}/nordvpn.conf"
 AUTH_FILE="${CONFIG_DIR}/nordvpn.auth"

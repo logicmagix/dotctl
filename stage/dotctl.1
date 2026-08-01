@@ -221,6 +221,16 @@ Step hyprland workspaces relative to the focused one, wrapping at the
 bounds (default 1\(en10). The waybar workspace arrows' on-click target.
 Handles both legacy and Lua hyprland configs.
 .TP
+.BI "vpn [" cmd ...]
+Pass through to
+.BR vpnctl ,
+the opt-in VPN module's CLI. Unlike the module commands above, vpnctl
+remains a standalone command on PATH (system setup such as the shipped
+systemd unit references
+.I /usr/local/bin/vpnctl
+directly); this is just a dotctl front door. Errors with a pointer to the
+setup docs when the VPN module isn't installed.
+.TP
 .BI "cycle " "target direction"
 Step a cycle. The two entry points intended for keybinds.
 .RS

@@ -2289,6 +2289,16 @@ run_module() {
   exec "$self_dir/modules/$name" "$@"
 }
 
+# Thin passthrough to the standalone vpnctl CLI. Unlike the dispatched
+# modules above, vpnctl stays a real command on PATH: the VPN module is
+# opt-in with system-level setup, and the shipped systemd unit hardcodes
+# ExecStart=/usr/local/bin/vpnctl. This just gives it a dotctl front door.
+cmd_vpn() {
+  command -v vpnctl >/dev/null 2>&1 ||
+    die "vpnctl is not installed - rerun install.sh and opt in to the VPN module (setup: stage/snippets/vpn/README.md)"
+  exec vpnctl "$@"
+}
+
 cmd_launcher() {
   case "${1:-}" in
     -h|--help|help)
@@ -2343,6 +2353,8 @@ ACTIONS
                                    runtime-suspended dGPU (reports zzz)
   ws-cycle <next|prev> [min max]   Step hyprland workspaces with wraparound
                                    (waybar workspace-arrow on-click)
+  vpn [cmd...]                     Pass through to vpnctl (opt-in VPN module;
+                                   stays on PATH - see \`vpnctl help\`)
   cycle <wallpaper|waybar> <next|prev>
                                    Keybind entry points
   sync <target> <source>           Copy color/font from one element to another
@@ -2448,6 +2460,7 @@ main() {
     launcher)         cmd_launcher "$@";;
     audio-output|audio-output-menu|audio-output-status|audio-hotplug-watch|cputemp|gputemp|ws-cycle|power)
                       run_module "$action" "$@";;
+    vpn)              cmd_vpn "$@";;
     help|-h|--help|'') cmd_help;;
     *) die "unknown action \`$action\` - try \`dotctl help\`";;
   esac
