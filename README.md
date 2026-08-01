@@ -108,10 +108,9 @@ The installer is interactive and walks you through:
 1. Verify `hyprland` + `hyprpaper` are present (hard fail otherwise).
 2. Optionally `pacman -S` / `emerge` / etc. the runtime elements.
 3. Symlink the CLI + module scripts (`dotctl`, `power`,
-   `cputemp`, `gputemp`, `ws-cycle`, `audio-output`, `audio-output-menu`,
-   `audio-output-status`, `audio-hotplug-watch`, `keybinds`) into
-   `/usr/local/bin/`. The app launcher is not symlinked - it runs as
-   `dotctl launcher`.
+   `cputemp`, `gputemp`, `ws-cycle`, `keybinds`) into `/usr/local/bin/`.
+   The launcher and audio modules are not symlinked - they run through
+   dotctl (`dotctl launcher`, `dotctl audio-output`, …).
 4. Optionally symlink the VPN module (`vpnctl`, `vpn-status-indicator`),
    the GPU temp module (`gputemp`), and enable the battery module (native
    waybar `battery` readout for laptops, shown right of audio).

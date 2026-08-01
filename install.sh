@@ -337,20 +337,20 @@ sys_link() {
 
 sys_link "$STAGE/dotctl" "$SYS_BIN/dotctl"
 
-# Module scripts - everything in stage/modules/ except launcher (dispatched
-# via `dotctl launcher`, never on PATH) and the VPN pair and gputemp, which
-# each gate on their own opt-in prompts.
+# Module scripts - everything in stage/modules/ except the dotctl-dispatched
+# set (run as `dotctl <name>`, never on PATH) and the VPN pair and gputemp,
+# which each gate on their own opt-in prompts.
 for m in "$STAGE"/modules/*; do
   name="$(basename "$m")"
   case "$name" in
-    launcher)
-      # Older installs symlinked it onto PATH; remove ours so the standalone
-      # name stops resolving. A foreign /usr/local/bin/launcher is left alone.
-      if [[ -L "$SYS_BIN/launcher" && "$(readlink -f "$SYS_BIN/launcher")" == "$STAGE"/* ]]; then
-        $SUDO rm -f "$SYS_BIN/launcher"
-        skip "launcher (removed stale symlink - now runs as \`dotctl launcher\`)"
+    launcher|audio-output|audio-output-menu|audio-output-status|audio-hotplug-watch)
+      # Older installs symlinked these onto PATH; remove ours so the
+      # standalone names stop resolving. Foreign files are left alone.
+      if [[ -L "$SYS_BIN/$name" && "$(readlink -f "$SYS_BIN/$name")" == "$STAGE"/* ]]; then
+        $SUDO rm -f "$SYS_BIN/$name"
+        skip "$name (removed stale symlink - now runs as \`dotctl $name\`)"
       else
-        skip "launcher (runs as \`dotctl launcher\`)"
+        skip "$name (runs as \`dotctl $name\`)"
       fi
       continue
       ;;

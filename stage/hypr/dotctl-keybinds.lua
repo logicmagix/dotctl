@@ -23,9 +23,9 @@ hl.bind("SUPER + ALT + Left",  hl.dsp.exec_cmd("dotctl cycle wallpaper prev")) -
 -- --- Audio output switching --------------------------------------------------
 -- One-touch route the default sink to a specific output class. audio-output
 -- resolves the sink at runtime via pactl port-type + description detection.
-hl.bind("ALT + SHIFT + A", hl.dsp.exec_cmd("audio-output aux"))       -- analog / line-out
-hl.bind("ALT + SHIFT + S", hl.dsp.exec_cmd("audio-output speaker"))   -- hdmi / monitor speakers
-hl.bind("ALT + SHIFT + H", hl.dsp.exec_cmd("audio-output headset"))   -- wired or wireless headset
-hl.bind("ALT + SHIFT + B", hl.dsp.exec_cmd("audio-output usb"))       -- usb audio adapter
-hl.bind("ALT + SHIFT + L", hl.dsp.exec_cmd("audio-output bluetooth")) -- any paired bluez sink
-hl.bind("ALT + SHIFT + M", hl.dsp.exec_cmd("audio-output toggle-mute"))        -- toggle mute
+hl.bind("ALT + SHIFT + A", hl.dsp.exec_cmd("dotctl audio-output aux"))       -- analog / line-out
+hl.bind("ALT + SHIFT + S", hl.dsp.exec_cmd("dotctl audio-output speaker"))   -- hdmi / monitor speakers
+hl.bind("ALT + SHIFT + H", hl.dsp.exec_cmd("dotctl audio-output headset"))   -- wired or wireless headset
+hl.bind("ALT + SHIFT + B", hl.dsp.exec_cmd("dotctl audio-output usb"))       -- usb audio adapter
+hl.bind("ALT + SHIFT + L", hl.dsp.exec_cmd("dotctl audio-output bluetooth")) -- any paired bluez sink
+hl.bind("ALT + SHIFT + M", hl.dsp.exec_cmd("dotctl audio-output toggle-mute"))        -- toggle mute

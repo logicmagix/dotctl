@@ -137,8 +137,8 @@
   "custom/audio": {
     "format": "{}",
     "return-type": "json",
-    "exec": "audio-output-status",
-    "on-click": "audio-output-menu",
+    "exec": "dotctl audio-output-status",
+    "on-click": "dotctl audio-output-menu",
     "on-click-right": "pavucontrol",
     "on-scroll-up":   "pactl set-sink-volume @DEFAULT_SINK@ +2%",
     "on-scroll-down": "pactl set-sink-volume @DEFAULT_SINK@ -2%"

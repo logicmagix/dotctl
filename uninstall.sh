@@ -141,8 +141,9 @@ link_points_to_repo() {
 
 # Split the module set so we can prompt per opt-in group instead of ripping
 # every symlink out in one sweep. Anything not named here is treated as core.
-# launcher stays listed even though current installs no longer symlink it
-# (it runs as `dotctl launcher`) so pre-integration installs still get cleaned.
+# launcher and the audio-* set stay listed even though current installs no
+# longer symlink them (they run as `dotctl <name>`) so pre-integration
+# installs still get cleaned.
 CORE_MODULES=( power launcher cputemp ws-cycle audio-output audio-output-menu audio-output-status audio-hotplug-watch keybinds )
 VPN_MODULES=( vpnctl vpn-status-indicator )
 GPU_MODULES=( gputemp )

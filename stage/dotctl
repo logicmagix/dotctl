@@ -2272,8 +2272,20 @@ EOF
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
-#  Launcher
+#  Module dispatch
 # ──────────────────────────────────────────────────────────────────────────────
+
+# Scripts in modules/ next to the real dotctl run as `dotctl <name>` instead
+# of living on /usr/local/bin - dotctl is their only entry point (waybar
+# exec/on-click, hypr keybinds). Resolve through the /usr/local/bin symlink
+# back to the repo; args pass through verbatim.
+run_module() {
+  local name="$1"; shift
+  local self_dir
+  self_dir=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
+  [[ -x "$self_dir/modules/$name" ]] || die "module \`$name\` not found at $self_dir/modules/$name"
+  exec "$self_dir/modules/$name" "$@"
+}
 
 cmd_launcher() {
   case "${1:-}" in
@@ -2292,13 +2304,7 @@ EOF
       return 0;;
   esac
 
-  # The wofi app launcher lives in modules/ next to this script but is not
-  # installed onto PATH - dotctl is its only entry point (waybar on-click,
-  # keybinds). Resolve through the /usr/local/bin symlink back to the repo.
-  local self_dir
-  self_dir=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
-  [[ -x "$self_dir/modules/launcher" ]] || die "launcher module not found at $self_dir/modules/launcher"
-  exec "$self_dir/modules/launcher" "$@"
+  run_module launcher "$@"
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -2323,6 +2329,11 @@ ACTIONS
   launcher [--rebuild] [--include-terminal]
                                    Wofi app launcher (toggles if already open);
                                    --rebuild forces the app/icon cache to refresh
+  audio-output <profile>           Route the default sink; profile ∈ {headset,
+                                   hdmi, speaker, aux, usb, bluetooth, toggle-mute}
+  audio-output-menu                Wofi output picker (waybar on-click; toggles)
+  audio-output-status              Waybar JSON status stream for the default sink
+  audio-hotplug-watch              Poll for new sinks, open the picker on hotplug
   cycle <wallpaper|waybar> <next|prev>
                                    Keybind entry points
   sync <target> <source>           Copy color/font from one element to another
@@ -2426,6 +2437,8 @@ main() {
     apply)            cmd_apply "$@";;
     watch)            cmd_watch "$@";;
     launcher)         cmd_launcher "$@";;
+    audio-output|audio-output-menu|audio-output-status|audio-hotplug-watch)
+                      run_module "$action" "$@";;
     help|-h|--help|'') cmd_help;;
     *) die "unknown action \`$action\` - try \`dotctl help\`";;
   esac

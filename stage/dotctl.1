@@ -165,6 +165,34 @@ also forces the icon index to be rescanned.
 .B --include-terminal
 lists Terminal=true apps, which are hidden by default.
 .TP
+.BI "audio\-output " profile
+Route the default sink to an output class and move active streams over.
+.I profile
+is one of
+.BR headset ", " hdmi ", " speaker ", " aux ", " usb ", " bluetooth
+(resolved at runtime from pactl port/sink data - no hardcoded sink names), or
+.B toggle\-mute
+to mute/unmute the current default sink.
+.TP
+.B audio\-output\-menu
+Wofi picker offering the common output classes; selecting one delegates to
+.BR "audio\-output" .
+The waybar audio block's on-click target; a second invocation while wofi is
+up closes it.
+.TP
+.B audio\-output\-status
+Long-running waybar JSON emitter for the default sink: one line on startup
+plus one per pactl event (sink/default/volume/mute/hotplug). Wired as the
+waybar audio block's
+.BR exec .
+.TP
+.B audio\-hotplug\-watch
+Poll pactl every 2 seconds and open
+.B audio\-output\-menu
+when a new sink appears. Not started by anything by default; add it to an
+.B exec\-once
+if you want the behavior.
+.TP
 .BI "cycle " "target direction"
 Step a cycle. The two entry points intended for keybinds.
 .RS
@@ -588,11 +616,11 @@ bind = SUPER ALT, Right, exec, dotctl cycle wallpaper next
 bind = SUPER ALT, Left,  exec, dotctl cycle wallpaper prev
 bind = SUPER ALT, Up,    exec, dotctl cycle waybar    next
 bind = SUPER ALT, Down,  exec, dotctl cycle waybar    prev
-bind = ALT SHIFT, A,     exec, audio-output aux
-bind = ALT SHIFT, S,     exec, audio-output speaker
-bind = ALT SHIFT, H,     exec, audio-output headset
-bind = ALT SHIFT, L,     exec, audio-output bluetooth
-bind = ALT SHIFT, M,     exec, audio-output toggle-mute
+bind = ALT SHIFT, A,     exec, dotctl audio-output aux
+bind = ALT SHIFT, S,     exec, dotctl audio-output speaker
+bind = ALT SHIFT, H,     exec, dotctl audio-output headset
+bind = ALT SHIFT, L,     exec, dotctl audio-output bluetooth
+bind = ALT SHIFT, M,     exec, dotctl audio-output toggle-mute
 .EE
 .PP
 All other theme changes go through the CLI.

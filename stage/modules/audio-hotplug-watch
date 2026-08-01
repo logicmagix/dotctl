@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# audio-output-menu lives next to this script, not on PATH (both are
+# dispatched through `dotctl <name>`), so call it sibling-relative.
+here="$(dirname "$(readlink -f "$0")")"
+
 get_sinks() {
   pactl list short sinks | awk '{print $2}'
 }
@@ -24,7 +28,7 @@ while :; do
   if [ -n "$ADDED" ]; then
     # optional: small delay so the device fully comes up
     sleep 0.5
-    audio-output-menu &
+    "$here/audio-output-menu" &
   fi
 
   OLD_SINKS="$NEW_SINKS"
