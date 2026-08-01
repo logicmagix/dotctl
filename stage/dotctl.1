@@ -61,7 +61,8 @@ decorator glyph set
 or
 .BR round ,
 console-only),
-GPU temp module toggle, VPN module toggle, battery module toggle (laptop
+GPU temp module toggle, VRAM usage module toggle, VPN module toggle,
+battery module toggle (laptop
 charge %, right of audio), power button toggle, launcher button toggle,
 transparent-bar toggle, explicit bar opacity
 (used when
@@ -79,7 +80,7 @@ block, the palette is injected into the
 .B @define-color
 block on every apply, the launcher glyph is rewritten inside the
 .B custom/launcher
-block, and the VPN, GPU, battery, power, and launcher modules are stripped
+block, and the VPN, GPU, VRAM, battery, power, and launcher modules are stripped
 from both files when
 disabled. Reloaded
 with
@@ -120,7 +121,7 @@ or
 .B \-\-help
 for detailed usage. The module commands
 .RB ( launcher ", " power ", " audio\-* ", " cputemp ", " gputemp ", "
-.BR ws\-cycle ", " vpn )
+.BR vram ", " ws\-cycle ", " vpn )
 forward their arguments to the underlying script verbatim.
 .TP
 .BI "configure [--preset " name ]
@@ -221,6 +222,18 @@ until a real client holds the device. Wired as the waybar
 module's
 .BR exec .
 .TP
+.B vram
+Waybar JSON line for GPU VRAM: used/total in G plus a
+normal/warning/critical class by percentage. NVIDIA via nvidia-smi (with
+gputemp's never-wake-a-suspended-dGPU rules - reports
+.B zzz
+while the card sleeps), AMD via the amdgpu sysfs
+.I mem_info_vram_*
+attributes. Wired as the waybar
+.B custom/vram
+module's
+.BR exec .
+.TP
 .BI "ws\-cycle " "next|prev" " [" "min max" ]
 Step hyprland workspaces relative to the focused one, wrapping at the
 bounds (default 1\(en10). The waybar workspace arrows' on-click target.
@@ -302,6 +315,7 @@ List valid values for one axis. Axes:
 .BR waybar-batteries ,
 .BR waybar-powers ,
 .BR waybar-launchers ,
+.BR waybar-vrams ,
 .BR waybar-transparents ,
 .BR waybar-opacities ,
 .BR hypr-effects ,
@@ -503,6 +517,13 @@ the battery block is stripped from both
 and
 .IR style.css
 on apply.
+.TP
+.BI "--waybar-vram " on|off
+Toggle the waybar VRAM usage module. Sits directly after the GPU temp
+block and deliberately shares the RAM module's palette; in the console
+style the seam between two same-colored blocks renders as a seamless
+join. Both the GPU and VRAM blocks may be toggled independently - the
+chevron seams are authored for every combination.
 .TP
 .BI "--waybar-power " on|off
 Toggle the waybar power button (wofi poweroff/reboot/logout menu, far left;
@@ -740,7 +761,7 @@ variants, env overrides).
 .SH FILES
 .TP
 .I ~/.config/dotctl/config
-29-field
+30-field
 .B KEY=value
 state file, hand-editable, flock-guarded on writes. Regenerate with
 .BR "dotctl configure" .

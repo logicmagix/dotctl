@@ -53,7 +53,7 @@ readonly STATE_KEYS=(
   KITTY_COLOR   KITTY_FONT   KITTY_FONT_SIZE
   MAKO_COLOR    MAKO_FONT    MAKO_FONT_SIZE
   WOFI_COLOR    WOFI_FONT    WOFI_FONT_SIZE  WOFI_VARIANT
-  WAYBAR_COLOR  WAYBAR_FONT  WAYBAR_FONT_SIZE WAYBAR_STYLE WAYBAR_SCOPE WAYBAR_DECOR WAYBAR_GPU WAYBAR_VPN WAYBAR_BATTERY WAYBAR_POWER WAYBAR_LAUNCHER WAYBAR_TRANSPARENT WAYBAR_OPACITY WAYBAR_LAUNCHER_LOGO WAYBAR_EDITOR
+  WAYBAR_COLOR  WAYBAR_FONT  WAYBAR_FONT_SIZE WAYBAR_STYLE WAYBAR_SCOPE WAYBAR_DECOR WAYBAR_GPU WAYBAR_VRAM WAYBAR_VPN WAYBAR_BATTERY WAYBAR_POWER WAYBAR_LAUNCHER WAYBAR_TRANSPARENT WAYBAR_OPACITY WAYBAR_LAUNCHER_LOGO WAYBAR_EDITOR
   HYPR_EFFECT
   WALLPAPER
 )
@@ -71,6 +71,9 @@ readonly DEFAULT_WAYBAR_VPN=off
 # WAYBAR_GPU key and gated purely on `command -v gputemp`. Soft-migrating to
 # `on` keeps the effective gate (state AND binary) identical for them.
 readonly DEFAULT_WAYBAR_GPU=on
+# VRAM rides the same default as GPU - both are stripped at install time on
+# machines that opt out of the GPU module.
+readonly DEFAULT_WAYBAR_VRAM=on
 readonly DEFAULT_WAYBAR_BATTERY=off
 # power/launcher default on: they've always been in every bar, so pre-axis
 # state files soft-migrate to the same look they had.
@@ -243,6 +246,7 @@ load_state() {
   : "${WAYBAR_DECOR:=$DEFAULT_WAYBAR_DECOR}"
   : "${WAYBAR_VPN:=$DEFAULT_WAYBAR_VPN}"
   : "${WAYBAR_GPU:=$DEFAULT_WAYBAR_GPU}"
+  : "${WAYBAR_VRAM:=$DEFAULT_WAYBAR_VRAM}"
   : "${WAYBAR_BATTERY:=$DEFAULT_WAYBAR_BATTERY}"
   : "${WAYBAR_POWER:=$DEFAULT_WAYBAR_POWER}"
   : "${WAYBAR_LAUNCHER:=$DEFAULT_WAYBAR_LAUNCHER}"
@@ -368,6 +372,7 @@ detect_waybar_vpns()           { printf '%s\n' off on; }
 detect_waybar_gpus()           { printf '%s\n' off on; }
 detect_waybar_batteries()      { printf '%s\n' off on; }
 detect_waybar_powers()         { printf '%s\n' off on; }
+detect_waybar_vrams()          { printf '%s\n' off on; }
 detect_waybar_launchers()      { printf '%s\n' off on; }
 detect_waybar_transparents()   { printf '%s\n' on off; }
 detect_waybar_opacities()      { printf '%s\n' "${OPACITY_LADDER[@]}"; }
@@ -470,6 +475,7 @@ waybar_gpu_available() {
 }
 validate_waybar_battery()       { _in_list "$1" on off; }
 validate_waybar_power()         { _in_list "$1" on off; }
+validate_waybar_vram()          { _in_list "$1" on off; }
 validate_waybar_launcher()      { _in_list "$1" on off; }
 # Is the battery module actually meaningful? Only on machines that expose a
 # battery power supply (laptops). Uses the native waybar `battery` module, so
@@ -642,6 +648,19 @@ apply_waybar() {
     ' "$_f" > "$_f.tmp" && mv -f "$_f.tmp" "$_f"
   done
 
+  # VRAM gate: state-driven; independent of the GPU toggle (chevron seams
+  # for every gpu/vram combination are authored in the CSS as base rules
+  # plus marker-wrapped overrides, nearest-present-module last).
+  local _vram_on=0
+  [[ "$WAYBAR_VRAM" == "on" ]] && _vram_on=1
+  for _f in "$WAYBAR_DIR/config.jsonc" "$WAYBAR_DIR/style.css"; do
+    awk -v keep="$_vram_on" '
+      /\/\* VRAM:BEGIN/ { if (keep != 1) { skip = 1; next } }
+      /\/\* VRAM:END/   { if (keep != 1) { skip = 0; next } }
+      !skip { print }
+    ' "$_f" > "$_f.tmp" && mv -f "$_f.tmp" "$_f"
+  done
+
   # Battery gate: state-driven like VPN (the native `battery` module has no
   # binary to detect). When WAYBAR_BATTERY != on, drop the /* BATTERY:BEGIN */
   # ... /* BATTERY:END */ block + markers; when on, keep both so install /
@@ -747,7 +766,7 @@ apply_waybar() {
   ' "$WAYBAR_DIR/config.jsonc" > "$WAYBAR_DIR/config.jsonc.tmp" && mv -f "$WAYBAR_DIR/config.jsonc.tmp" "$WAYBAR_DIR/config.jsonc"
 
   pkill -SIGUSR2 -x waybar 2>/dev/null || warn "waybar reload signal failed (waybar running?)"
-  log "apply waybar: ${WAYBAR_STYLE}_${WAYBAR_SCOPE} color=${WAYBAR_COLOR} font=${WAYBAR_FONT}/${WAYBAR_FONT_SIZE} decor=${WAYBAR_DECOR} gpu=${WAYBAR_GPU} vpn=${WAYBAR_VPN} battery=${WAYBAR_BATTERY} power=${WAYBAR_POWER} launcher=${WAYBAR_LAUNCHER} transparent=${WAYBAR_TRANSPARENT}/opacity=${WAYBAR_OPACITY} logo=${WAYBAR_LAUNCHER_LOGO} editor=${WAYBAR_EDITOR}"
+  log "apply waybar: ${WAYBAR_STYLE}_${WAYBAR_SCOPE} color=${WAYBAR_COLOR} font=${WAYBAR_FONT}/${WAYBAR_FONT_SIZE} decor=${WAYBAR_DECOR} gpu=${WAYBAR_GPU} vram=${WAYBAR_VRAM} vpn=${WAYBAR_VPN} battery=${WAYBAR_BATTERY} power=${WAYBAR_POWER} launcher=${WAYBAR_LAUNCHER} transparent=${WAYBAR_TRANSPARENT}/opacity=${WAYBAR_OPACITY} logo=${WAYBAR_LAUNCHER_LOGO} editor=${WAYBAR_EDITOR}"
 }
 
 apply_wallpaper() {
@@ -924,8 +943,8 @@ EOF
   printf '  %-10s color=%s  font=%s  size=%s\n' "mako"  "$MAKO_COLOR" "$MAKO_FONT" "$MAKO_FONT_SIZE"
   printf '  %-10s color=%s  font=%s  size=%s  variant=%s\n' \
     "wofi" "$WOFI_COLOR" "$WOFI_FONT" "$WOFI_FONT_SIZE" "$WOFI_VARIANT"
-  printf '  %-10s color=%s  font=%s  size=%s  style=%s  scope=%s  decor=%s  gpu=%s  vpn=%s  battery=%s  power=%s  launcher=%s  transparent=%s  opacity=%s  logo=%s  editor=%s\n' \
-    "waybar" "$WAYBAR_COLOR" "$WAYBAR_FONT" "$WAYBAR_FONT_SIZE" "$WAYBAR_STYLE" "$WAYBAR_SCOPE" "$WAYBAR_DECOR" "$WAYBAR_GPU" "$WAYBAR_VPN" "$WAYBAR_BATTERY" "$WAYBAR_POWER" "$WAYBAR_LAUNCHER" "$WAYBAR_TRANSPARENT" "$WAYBAR_OPACITY" "$WAYBAR_LAUNCHER_LOGO" "$WAYBAR_EDITOR"
+  printf '  %-10s color=%s  font=%s  size=%s  style=%s  scope=%s  decor=%s  gpu=%s  vram=%s  vpn=%s  battery=%s  power=%s  launcher=%s  transparent=%s  opacity=%s  logo=%s  editor=%s\n' \
+    "waybar" "$WAYBAR_COLOR" "$WAYBAR_FONT" "$WAYBAR_FONT_SIZE" "$WAYBAR_STYLE" "$WAYBAR_SCOPE" "$WAYBAR_DECOR" "$WAYBAR_GPU" "$WAYBAR_VRAM" "$WAYBAR_VPN" "$WAYBAR_BATTERY" "$WAYBAR_POWER" "$WAYBAR_LAUNCHER" "$WAYBAR_TRANSPARENT" "$WAYBAR_OPACITY" "$WAYBAR_LAUNCHER_LOGO" "$WAYBAR_EDITOR"
   printf '  %-10s effect=%s\n' "hypr" "$HYPR_EFFECT"
   printf '  %-10s %s\n' "wallpaper" "$WALLPAPER"
 
@@ -988,6 +1007,7 @@ cmd_list() {
     waybar-vpns|vpns) detect_waybar_vpns;;
     waybar-batteries|batteries) detect_waybar_batteries;;
     waybar-powers|powers) detect_waybar_powers;;
+    waybar-vrams|vrams) detect_waybar_vrams;;
     waybar-launchers|launchers) detect_waybar_launchers;;
     waybar-transparents|transparents) detect_waybar_transparents;;
     waybar-opacities|opacities) detect_waybar_opacities;;
@@ -1026,6 +1046,7 @@ axes:
   waybar-vpns      waybar vpn module toggle (off | on)
   waybar-batteries waybar battery module toggle (off | on)
   waybar-powers    waybar power button toggle (off | on)
+  waybar-vrams     waybar VRAM usage module toggle (off | on)
   waybar-launchers waybar launcher button toggle (off | on)
   waybar-transparents  waybar transparent bar bg toggle (on | off)
   waybar-opacities     waybar bar opacity ladder [0.0-1.0]
@@ -1068,7 +1089,7 @@ cmd_set() {
   local new_kitty_color='' new_kitty_font='' new_kitty_font_size=''
   local new_mako_color='' new_mako_font='' new_mako_font_size=''
   local new_wofi_color='' new_wofi_font='' new_wofi_font_size='' new_wofi_variant=''
-  local new_waybar_color='' new_waybar_font='' new_waybar_font_size='' new_waybar_style='' new_waybar_scope='' new_waybar_decor='' new_waybar_gpu='' new_waybar_vpn='' new_waybar_battery='' new_waybar_power='' new_waybar_launcher='' new_waybar_transparent='' new_waybar_opacity='' new_waybar_launcher_logo='' new_waybar_editor='' new_hypr_effect=''
+  local new_waybar_color='' new_waybar_font='' new_waybar_font_size='' new_waybar_style='' new_waybar_scope='' new_waybar_decor='' new_waybar_gpu='' new_waybar_vram='' new_waybar_vpn='' new_waybar_battery='' new_waybar_power='' new_waybar_launcher='' new_waybar_transparent='' new_waybar_opacity='' new_waybar_launcher_logo='' new_waybar_editor='' new_hypr_effect=''
   local new_wallpaper=''
   local preset_name=''
 
@@ -1098,6 +1119,7 @@ cmd_set() {
       --waybar-vpn)          new_waybar_vpn="$2"; shift 2;;
       --waybar-battery)      new_waybar_battery="$2"; shift 2;;
       --waybar-power)        new_waybar_power="$2"; shift 2;;
+      --waybar-vram)         new_waybar_vram="$2"; shift 2;;
       --waybar-launcher)     new_waybar_launcher="$2"; shift 2;;
       --waybar-transparent)  new_waybar_transparent="$2"; shift 2;;
       --waybar-opacity)      new_waybar_opacity="$2"; shift 2;;
@@ -1190,6 +1212,7 @@ cmd_set() {
     fi
     WAYBAR_BATTERY="$new_waybar_battery"
   fi
+  [[ -n "$new_waybar_vram" ]]       && { validate_waybar_vram "$new_waybar_vram" || die "invalid waybar vram: $new_waybar_vram (must be on|off)"; WAYBAR_VRAM="$new_waybar_vram"; }
   [[ -n "$new_waybar_power" ]]      && { validate_waybar_power "$new_waybar_power" || die "invalid waybar power: $new_waybar_power (must be on|off)"; WAYBAR_POWER="$new_waybar_power"; }
   [[ -n "$new_waybar_launcher" ]]   && { validate_waybar_launcher "$new_waybar_launcher" || die "invalid waybar launcher: $new_waybar_launcher (must be on|off)"; WAYBAR_LAUNCHER="$new_waybar_launcher"; }
   [[ -n "$new_waybar_transparent" ]]&& { validate_waybar_transparent "$new_waybar_transparent" || die "invalid waybar transparent: $new_waybar_transparent (must be on|off)"; WAYBAR_TRANSPARENT="$new_waybar_transparent"; }
@@ -1233,6 +1256,8 @@ dotctl set [FLAGS]
   --waybar-gpu <S>         waybar gpu temp module (on | off) - requires gputemp on PATH
   --waybar-vpn <S>         waybar vpn module (on | off) - requires vpnctl + vpn-status-indicator on PATH
   --waybar-battery <S>     waybar battery module (on | off) - for laptops; needs a /sys/class/power_supply/BAT* battery
+  --waybar-vram <S>        waybar VRAM usage module (on | off) - sits after the
+                           GPU temp block, styled like the RAM module
   --waybar-power <S>       waybar power button (on | off) - chevrons re-seam automatically
   --waybar-launcher <S>    waybar launcher button (on | off) - chevrons re-seam automatically
   --waybar-transparent <S> waybar bar background (on = transparent, off = opaque palette fill)
@@ -1610,6 +1635,7 @@ EOF
     WAYBAR_DECOR="$DEFAULT_WAYBAR_DECOR"
     WAYBAR_VPN="$DEFAULT_WAYBAR_VPN"
     WAYBAR_GPU="$DEFAULT_WAYBAR_GPU"
+    WAYBAR_VRAM="$DEFAULT_WAYBAR_VRAM"
     WAYBAR_BATTERY="$DEFAULT_WAYBAR_BATTERY"
     WAYBAR_POWER="$DEFAULT_WAYBAR_POWER"
     WAYBAR_LAUNCHER="$DEFAULT_WAYBAR_LAUNCHER"
@@ -1628,7 +1654,7 @@ EOF
   # Discover options per element
   local cava_colors kitty_colors kitty_fonts mako_colors mako_fonts
   local wofi_colors wofi_fonts wofi_variants
-  local waybar_colors waybar_fonts waybar_styles waybar_scopes waybar_decors waybar_gpus waybar_vpns waybar_batteries waybar_powers waybar_launchers waybar_transparents waybar_opacities hypr_effects
+  local waybar_colors waybar_fonts waybar_styles waybar_scopes waybar_decors waybar_gpus waybar_vrams waybar_vpns waybar_batteries waybar_powers waybar_launchers waybar_transparents waybar_opacities hypr_effects
   local wallpapers
 
   mapfile -t cava_colors    < <(detect_cava_colors)
@@ -1648,6 +1674,7 @@ EOF
   mapfile -t waybar_vpns    < <(detect_waybar_vpns)
   mapfile -t waybar_batteries < <(detect_waybar_batteries)
   mapfile -t waybar_powers    < <(detect_waybar_powers)
+  mapfile -t waybar_vrams     < <(detect_waybar_vrams)
   mapfile -t waybar_launchers < <(detect_waybar_launchers)
   mapfile -t waybar_transparents < <(detect_waybar_transparents)
   mapfile -t waybar_opacities    < <(detect_waybar_opacities)
@@ -1713,6 +1740,7 @@ EOF
     WAYBAR_GPU=off
     info "      waybar gpu temp module: skipped - gputemp module missing next to dotctl"
   fi
+  WAYBAR_VRAM=$(prompt_select       "      waybar vram module"       "$WAYBAR_VRAM"  "${waybar_vrams[@]}")
   if waybar_vpn_available; then
     WAYBAR_VPN=$(prompt_select      "      waybar vpn module"        "$WAYBAR_VPN"   "${waybar_vpns[@]}")
   else
@@ -1757,7 +1785,7 @@ EOF
   printf '  %-10s %s / %s / size %s\n' "kitty" "$KITTY_COLOR" "$KITTY_FONT" "$KITTY_FONT_SIZE"
   printf '  %-10s %s / %s / size %s\n' "mako"  "$MAKO_COLOR" "$MAKO_FONT" "$MAKO_FONT_SIZE"
   printf '  %-10s %s / %s / size %s / variant %s\n' "wofi" "$WOFI_COLOR" "$WOFI_FONT" "$WOFI_FONT_SIZE" "$WOFI_VARIANT"
-  printf '  %-10s %s / %s / size %s / %s_%s / decor %s / gpu %s / vpn %s / battery %s / power %s / launcher %s / transparent %s (%s) / logo %s / editor %s\n' "waybar" "$WAYBAR_COLOR" "$WAYBAR_FONT" "$WAYBAR_FONT_SIZE" "$WAYBAR_STYLE" "$WAYBAR_SCOPE" "$WAYBAR_DECOR" "$WAYBAR_GPU" "$WAYBAR_VPN" "$WAYBAR_BATTERY" "$WAYBAR_POWER" "$WAYBAR_LAUNCHER" "$WAYBAR_TRANSPARENT" "$WAYBAR_OPACITY" "$WAYBAR_LAUNCHER_LOGO" "$WAYBAR_EDITOR"
+  printf '  %-10s %s / %s / size %s / %s_%s / decor %s / gpu %s / vram %s / vpn %s / battery %s / power %s / launcher %s / transparent %s (%s) / logo %s / editor %s\n' "waybar" "$WAYBAR_COLOR" "$WAYBAR_FONT" "$WAYBAR_FONT_SIZE" "$WAYBAR_STYLE" "$WAYBAR_SCOPE" "$WAYBAR_DECOR" "$WAYBAR_GPU" "$WAYBAR_VRAM" "$WAYBAR_VPN" "$WAYBAR_BATTERY" "$WAYBAR_POWER" "$WAYBAR_LAUNCHER" "$WAYBAR_TRANSPARENT" "$WAYBAR_OPACITY" "$WAYBAR_LAUNCHER_LOGO" "$WAYBAR_EDITOR"
   printf '  %-10s effect %s\n' "hypr" "$HYPR_EFFECT"
   printf '  %-10s %s\n' "wallpaper" "$WALLPAPER"
   info ""
@@ -1816,6 +1844,7 @@ _load_preset_into_state() {
   : "${WAYBAR_DECOR:=$DEFAULT_WAYBAR_DECOR}"
   : "${WAYBAR_VPN:=$DEFAULT_WAYBAR_VPN}"
   : "${WAYBAR_GPU:=$DEFAULT_WAYBAR_GPU}"
+  : "${WAYBAR_VRAM:=$DEFAULT_WAYBAR_VRAM}"
   : "${WAYBAR_BATTERY:=$DEFAULT_WAYBAR_BATTERY}"
   : "${WAYBAR_POWER:=$DEFAULT_WAYBAR_POWER}"
   : "${WAYBAR_LAUNCHER:=$DEFAULT_WAYBAR_LAUNCHER}"
@@ -2403,6 +2432,8 @@ ACTIONS
   cputemp                          Waybar JSON: CPU temp + normal/warning/critical
   gputemp                          Waybar JSON: GPU temp; never wakes a
                                    runtime-suspended dGPU (reports zzz)
+  vram                             Waybar JSON: GPU VRAM used/total (same
+                                   never-wake rules as gputemp)
   ws-cycle <next|prev> [min max]   Step hyprland workspaces with wraparound
                                    (waybar workspace-arrow on-click)
   vpn [cmd...]                     Pass through to vpnctl (opt-in VPN module;
@@ -2446,7 +2477,7 @@ QUICK REFERENCE
   dotctl new wallpaper forest      Scaffold one new wallpaper theme by hand
 
 STATE
-  ~/.config/dotctl/config       29-field KEY=value, hand-editable, flock-guarded
+  ~/.config/dotctl/config       30-field KEY=value, hand-editable, flock-guarded
   ~/.config/dotctl/presets/     Saved presets (one .conf per preset)
   ~/.config/dotctl/cycle/       cycle-hyprpaper-<theme> scripts + _cycle-hyprpaper.template
   ~/.cache/dotctl/lock          Runtime lockfile
@@ -2510,7 +2541,7 @@ main() {
     apply)            cmd_apply "$@";;
     watch)            cmd_watch "$@";;
     launcher)         cmd_launcher "$@";;
-    audio-output|audio-output-menu|audio-output-status|audio-hotplug-watch|cputemp|gputemp|ws-cycle|power)
+    audio-output|audio-output-menu|audio-output-status|audio-hotplug-watch|cputemp|gputemp|vram|ws-cycle|power)
                       run_module "$action" "$@";;
     vpn)              cmd_vpn "$@";;
     help|-h|--help|'') cmd_help;;

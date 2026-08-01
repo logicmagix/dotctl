@@ -25,6 +25,10 @@
     , "custom/gpu",
     "custom/rarrow7"
     /* GPU:END */
+    /* VRAM:BEGIN */
+    , "custom/vram",
+    "custom/rarrow8"
+    /* VRAM:END */
   ],
   // CENTER
   "modules-center": [
@@ -55,6 +59,7 @@
   "custom/rarrow5":        { "format": "\ue0b0", "tooltip": false },
   "custom/rarrow6":        { "format": "\ue0b0", "tooltip": false },
   "custom/rarrow7":        { "format": "\ue0b0", "tooltip": false },
+  "custom/rarrow8":        { "format": "\ue0b0", "tooltip": false },
   "custom/rarrow-center-l": {
     "format": "\ue0b2",
     "tooltip": true,
@@ -171,6 +176,15 @@
     "tooltip": true
   },
   /* GPU:END */
+  /* VRAM:BEGIN */
+  "custom/vram": {
+    "exec": "dotctl vram",
+    "return-type": "json",
+    "format": "{}",
+    "interval": 5,
+    "tooltip": true
+  },
+  /* VRAM:END */
   "clock": {
     "format": "[{:%a %I:%M:%S}]",
     "format-alt": "[{:%A, %B %d, %Y}]",

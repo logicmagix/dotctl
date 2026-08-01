@@ -126,6 +126,9 @@ tooltip {
 /* GPU:BEGIN */
 #custom-gpu.warning,
 /* GPU:END */
+/* VRAM:BEGIN */
+#custom-vram.warning,
+/* VRAM:END */
 #temperature.warning,
 #battery.warning.discharging {
   color: @warning;
@@ -139,6 +142,9 @@ tooltip {
 /* GPU:BEGIN */
 #custom-gpu.critical,
 /* GPU:END */
+/* VRAM:BEGIN */
+#custom-vram.critical,
+/* VRAM:END */
 #temperature.critical,
 #battery.critical.discharging {
   color: @critical;
@@ -250,6 +256,14 @@ tooltip {
 }
 /* GPU:END */
 
+/* VRAM:BEGIN */
+/* VRAM usage - deliberately shares the RAM block's palette */
+#custom-vram {
+  background: @mint;
+  color: @black;
+}
+/* VRAM:END */
+
 /* Left-side chevrons () - each bridges two adjacent blocks */
 #custom-rarrow1  { color: @red;   background: @plum;       } /* power -> workspaces (end-cap when launcher absent) */
 /* LAUNCHER:BEGIN */
@@ -260,10 +274,17 @@ tooltip {
 #custom-rarrow4  { color: @lime;  background: @olive;      } /* cpu  cputemp              */
 #custom-rarrow5  { color: @olive; background: @mint;       } /* cputemp  memory           */
 #custom-rarrow6  { color: @mint;  background: transparent; } /* memory  bar (end-cap when gpu absent) */
+/* VRAM:BEGIN */
+#custom-rarrow6  { color: @mint;  background: @mint;       } /* memory -> vram (seamless join when gpu absent) */
+/* VRAM:END */
 /* GPU:BEGIN */
 #custom-rarrow6  { color: @mint;  background: @olive;      } /* memory  gpu (override when gpu enabled) */
 #custom-rarrow7  { color: @olive; background: transparent; } /* gpu  bar background       */
 /* GPU:END */
+/* VRAM:BEGIN */
+#custom-rarrow7  { color: @olive; background: @mint;       } /* gpu -> vram (override when vram enabled) */
+#custom-rarrow8  { color: @mint;  background: transparent; } /* vram -> bar background */
+/* VRAM:END */
 
 /* ===================================================================
    CENTER - clock with decorative bookend arrows
@@ -372,6 +393,9 @@ tooltip {
 /* GPU:BEGIN */
 #custom-rarrow7,
 /* GPU:END */
+/* VRAM:BEGIN */
+#custom-rarrow8,
+/* VRAM:END */
 #custom-rarrow-center-l,
 #custom-rarrow-center-r,
 #custom-rsep-terminal,

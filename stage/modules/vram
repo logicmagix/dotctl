@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# waybar-vram - print GPU VRAM usage + waybar state class (JSON).
+# Works with NVIDIA (nvidia-smi) and AMD (amdgpu sysfs mem_info_vram_*).
+# Output: {"text":"VRAM: U.UG/T.TG","class":"normal|warning|critical","alt":"...","tooltip":"<used/total MiB (pct)>"}
+# Same never-wake rules as gputemp: nvidia-smi is skipped while the dGPU is
+# runtime-suspended or no client holds /dev/nvidiactl, so polling this from
+# waybar can't hold the card out of D3.
+
+# True if an NVIDIA GPU is present and runtime-suspended (see gputemp).
+nvidia_suspended() {
+  local d
+  for d in /sys/bus/pci/devices/*; do
+    [[ -r "$d/vendor" && $(<"$d/vendor") == 0x10de ]] || continue
+    [[ -r "$d/class"  && $(<"$d/class")  == 0x03*  ]] || continue
+    [[ -r "$d/power/runtime_status" && $(<"$d/power/runtime_status") == suspended ]] && return 0
+  done
+  return 1
+}
+
+# Prints "used_mib total_mib", "sleeping", or nothing.
+pick_vram() {
+  local used="" total=""
+
+  if command -v nvidia-smi >/dev/null 2>&1; then
+    if nvidia_suspended; then
+      printf 'sleeping\n'; return 0
+    fi
+    # Card awake but unclaimed: querying would reset the autosuspend timer
+    # every poll and pin the card awake - report sleeping-bound instead.
+    if ! fuser -s /dev/nvidiactl 2>/dev/null; then
+      printf 'sleeping\n'; return 0
+    fi
+    read -r used total < <(nvidia-smi --query-gpu=memory.used,memory.total \
+      --format=csv,noheader,nounits 2>/dev/null | head -n1 | tr -d ',')
+    [[ "$used" =~ ^[0-9]+$ && "$total" =~ ^[0-9]+$ ]] && { printf '%s %s\n' "$used" "$total"; return 0; }
+  fi
+
+  # AMD (and any driver exposing the amdgpu-style attributes): bytes -> MiB.
+  local d u t
+  for d in /sys/class/drm/card*/device; do
+    [[ -r "$d/mem_info_vram_used" && -r "$d/mem_info_vram_total" ]] || continue
+    u=$(<"$d/mem_info_vram_used"); t=$(<"$d/mem_info_vram_total")
+    [[ "$u" =~ ^[0-9]+$ && "$t" =~ ^[0-9]+$ && "$t" -gt 0 ]] || continue
+    printf '%s %s\n' $((u / 1048576)) $((t / 1048576))
+    return 0
+  done
+
+  return 1
+}
+
+out="$(pick_vram || true)"
+
+if [[ -z "$out" ]]; then
+  printf '{"text":"VRAM: --","class":"unknown","alt":"unknown","tooltip":"no VRAM source"}\n'
+  exit 0
+fi
+
+if [[ "$out" == "sleeping" ]]; then
+  printf '{"text":"VRAM: zzz","class":"normal","alt":"sleeping","tooltip":"GPU suspended"}\n'
+  exit 0
+fi
+
+read -r used total <<< "$out"
+pct=$(( used * 100 / total ))
+
+if   (( pct < 75 )); then cls="normal"
+elif (( pct < 90 )); then cls="warning"
+else                      cls="critical"
+fi
+
+# MiB -> G with one decimal, matching the RAM module's used/total shape.
+text=$(awk -v u="$used" -v t="$total" 'BEGIN{printf "VRAM: %.1fG/%.1fG", u/1024, t/1024}')
+printf '{"text":"%s","class":"%s","alt":"%s","tooltip":"%s MiB / %s MiB (%s%%)"}\n' \
+  "$text" "$cls" "$cls" "$used" "$total" "$pct"

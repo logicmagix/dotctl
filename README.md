@@ -22,11 +22,11 @@ dotctl cycle wallpaper next        # keybind entry point
 | **kitty**     |   ✓   |  ✓   |  ✓   |                                                               |
 | **mako**      |   ✓   |  ✓   |  ✓   |                                                               |
 | **wofi**      |   ✓   |  ✓   |  ✓   | subvariant (1/2)                                              |
-| **waybar**    |   ✓   |  ✓   |  ✓   | style, scope, decor, gpu, vpn, battery, power, launcher, transparent, opacity, launcher logo, editor |
+| **waybar**    |   ✓   |  ✓   |  ✓   | style, scope, decor, gpu, vram, vpn, battery, power, launcher, transparent, opacity, launcher logo, editor |
 | **hypr**      |   ✓   |      |      | window effect (shadow/glow)                                   |
 | **wallpaper** |   ✓   |      |      | cycle script per theme                                        |
 
-Everything lives in one 29-field, hand-editable state file at
+Everything lives in one 30-field, hand-editable state file at
 `~/.config/dotctl/config`. `dotctl configure` walks a wizard through
 every axis; `dotctl set` takes targeted flags; `dotctl apply` re-reads
 the file after a hand edit; `dotctl watch` auto-applies on save.
@@ -112,10 +112,11 @@ The installer is interactive and walks you through:
    (`dotctl launcher`, `dotctl power`, `dotctl audio-output`, …) and is
    not symlinked.
 4. Optionally symlink the VPN module (`vpnctl`, `vpn-status-indicator`),
-   enable the GPU temp block (`dotctl gputemp`), enable the battery
-   module (native waybar `battery` readout for laptops, shown right of
-   audio), and choose whether the power and launcher buttons stay in the
-   bar (console chevrons re-seam automatically either way).
+   enable the GPU temp + VRAM blocks (`dotctl gputemp` / `dotctl vram`),
+   and enable the battery module (native waybar `battery` readout for
+   laptops, shown right of audio). Per-module fine-tuning (the power and
+   launcher buttons, etc.) lives in the `dotctl configure` wizard, not
+   the installer.
 5. Copy themed configs into `~/.config/{cava,kitty,mako,wofi,waybar}`.
 6. Copy wallpaper cycle scripts + template into `~/.config/dotctl/cycle/`.
 7. Drop the hyprland snippets into `~/.config/hypr/`.

@@ -57,12 +57,12 @@ This script will:
      launcher, power, audio-*, cputemp, gputemp, ws-cycle - runs through
      dotctl and is not symlinked)
   4. Optionally symlink ${BOLD}$SYS_BIN/${RST}{vpnctl, vpn-status-indicator} → repo
-  4a. Optionally enable the ${BOLD}GPU temp module${RST} (skip on machines without
-      a discrete GPU - runs as \`dotctl gputemp\`, nothing to symlink)
+  4a. Optionally enable the ${BOLD}GPU temp + VRAM modules${RST} (skip on machines
+      without a discrete GPU - run as \`dotctl gputemp\` / \`dotctl vram\`)
   4b. Optionally enable the ${BOLD}battery module${RST} (laptop charge % in waybar,
       to the right of audio - native waybar module, no binary to symlink)
-  4c. Choose whether the ${BOLD}power${RST} and ${BOLD}launcher${RST} buttons stay in the bar
-      (console chevrons re-seam automatically either way)
+      (per-module fine-tuning - power/launcher buttons etc. - lives in the
+      \`dotctl configure\` wizard, not here)
   5. Copy ${BOLD}~/.config/${RST}{cava, kitty, mako, wofi, waybar} from repo config dirs
      (conflicting files are renamed to ${BOLD}<file>.bak-<timestamp>${RST} in place;
      user-added files and untouched files are left alone - no whole-directory
@@ -308,21 +308,9 @@ if confirm "Install the optional battery module (laptop charge % in waybar)?" "$
   WANT_BATTERY=1
 fi
 
-# ── Gate: power / launcher buttons (opt-out) ────────────────────────────────
-# Both scripts always ship with dotctl (`dotctl power` / `dotctl launcher`);
-# these gates only decide whether the waybar buttons stay in the copied
-# configs. Chevron seams are authored in the CSS with per-block overrides,
-# so any on/off combination keeps matching colors.
-
-WANT_POWER=0
-if confirm "Enable the waybar power button (wofi poweroff/reboot/logout menu)?" y; then
-  WANT_POWER=1
-fi
-
-WANT_LAUNCHER=0
-if confirm "Enable the waybar launcher button (distro logo, opens the app launcher)?" y; then
-  WANT_LAUNCHER=1
-fi
+# Note: the power / launcher buttons (and other per-module fine-tuning) are
+# NOT gated here - their markers stay in the copied configs and the
+# `dotctl configure` wizard / `dotctl set` flags own those toggles.
 
 # ── Sudo tick ───────────────────────────────────────────────────────────────
 
@@ -485,9 +473,10 @@ strip_waybar_marker() {
 # the blocks entirely.
 strip_waybar_marker VPN "$WANT_VPN"
 strip_waybar_marker GPU "$WANT_GPU"
+# VRAM rides the GPU opt-in: a machine with no discrete GPU wants neither.
+# With GPU opted in, the wizard/set axis still turns VRAM off independently.
+strip_waybar_marker VRAM "$WANT_GPU"
 strip_waybar_marker BATTERY "$WANT_BATTERY"
-strip_waybar_marker POWER "$WANT_POWER"
-strip_waybar_marker LAUNCHER "$WANT_LAUNCHER"
 
 # The dotctl state file is the final authority on module blocks: every
 # `dotctl apply` (including the one just below) regenerates the active bar
@@ -505,9 +494,8 @@ if [[ -f "$CONFIG_HOME/dotctl/config" ]]; then
   }
   sync_state_axis WAYBAR_VPN      "$WANT_VPN"
   sync_state_axis WAYBAR_GPU      "$WANT_GPU"
+  sync_state_axis WAYBAR_VRAM     "$WANT_GPU"
   sync_state_axis WAYBAR_BATTERY  "$WANT_BATTERY"
-  sync_state_axis WAYBAR_POWER    "$WANT_POWER"
-  sync_state_axis WAYBAR_LAUNCHER "$WANT_LAUNCHER"
 fi
 
 # Regenerate the active ~/.config/waybar/{config.jsonc,style.css} from the

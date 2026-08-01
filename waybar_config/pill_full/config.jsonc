@@ -18,6 +18,9 @@
     /* GPU:BEGIN */
     , "custom/gpu"
     /* GPU:END */
+    /* VRAM:BEGIN */
+    , "custom/vram"
+    /* VRAM:END */
   ],
   // CENTER
   "modules-center": [
@@ -129,6 +132,15 @@
     "tooltip": true
   },
   /* GPU:END */
+  /* VRAM:BEGIN */
+  "custom/vram": {
+    "exec": "dotctl vram",
+    "return-type": "json",
+    "format": "{}",
+    "interval": 5,
+    "tooltip": true
+  },
+  /* VRAM:END */
   "clock": {
     "format": "[{:%a %I:%M:%S}]",
     "format-alt": "[{:%A, %B %d, %Y}]",

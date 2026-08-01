@@ -97,6 +97,9 @@ tooltip {
 /* GPU:BEGIN */
 #custom-gpu,
 /* GPU:END */
+/* VRAM:BEGIN */
+#custom-vram,
+/* VRAM:END */
 #custom-workspace-prev,
 #clock,
 #custom-workspace-next,
@@ -123,6 +126,9 @@ tooltip {
 
 /* -- Warning / Critical ------------------------------------------- */
 #memory.warning,
+/* VRAM:BEGIN */
+#custom-vram.warning,
+/* VRAM:END */
 #cpu.warning,
 #custom-cputemp.warning {
   border-color: @warning;
@@ -130,6 +136,9 @@ tooltip {
 }
 
 #memory.critical,
+/* VRAM:BEGIN */
+#custom-vram.critical,
+/* VRAM:END */
 #cpu.critical,
 #custom-cputemp.critical {
   border-color: @critical;
@@ -243,6 +252,13 @@ tooltip {
   border-color: @cyan;
 }
 /* GPU:END */
+
+/* VRAM:BEGIN */
+#custom-vram {
+  color: @mint;
+  border-color: @mint;
+}
+/* VRAM:END */
 
 /* ===================================================================
    CENTER
