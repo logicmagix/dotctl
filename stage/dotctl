@@ -2334,6 +2334,9 @@ ACTIONS
   audio-output-menu                Wofi output picker (waybar on-click; toggles)
   audio-output-status              Waybar JSON status stream for the default sink
   audio-hotplug-watch              Poll for new sinks, open the picker on hotplug
+  cputemp                          Waybar JSON: CPU temp + normal/warning/critical
+  gputemp                          Waybar JSON: GPU temp; never wakes a
+                                   runtime-suspended dGPU (reports zzz)
   cycle <wallpaper|waybar> <next|prev>
                                    Keybind entry points
   sync <target> <source>           Copy color/font from one element to another
@@ -2437,7 +2440,7 @@ main() {
     apply)            cmd_apply "$@";;
     watch)            cmd_watch "$@";;
     launcher)         cmd_launcher "$@";;
-    audio-output|audio-output-menu|audio-output-status|audio-hotplug-watch)
+    audio-output|audio-output-menu|audio-output-status|audio-hotplug-watch|cputemp|gputemp)
                       run_module "$action" "$@";;
     help|-h|--help|'') cmd_help;;
     *) die "unknown action \`$action\` - try \`dotctl help\`";;

@@ -108,9 +108,10 @@ The installer is interactive and walks you through:
 1. Verify `hyprland` + `hyprpaper` are present (hard fail otherwise).
 2. Optionally `pacman -S` / `emerge` / etc. the runtime elements.
 3. Symlink the CLI + module scripts (`dotctl`, `power`,
-   `cputemp`, `gputemp`, `ws-cycle`, `keybinds`) into `/usr/local/bin/`.
-   The launcher and audio modules are not symlinked - they run through
-   dotctl (`dotctl launcher`, `dotctl audio-output`, …).
+   `ws-cycle`, `keybinds`) into `/usr/local/bin/`.
+   The launcher, audio, and temp modules are not symlinked - they run
+   through dotctl (`dotctl launcher`, `dotctl audio-output`,
+   `dotctl cputemp`, …).
 4. Optionally symlink the VPN module (`vpnctl`, `vpn-status-indicator`),
    the GPU temp module (`gputemp`), and enable the battery module (native
    waybar `battery` readout for laptops, shown right of audio).
@@ -239,7 +240,7 @@ dotctl set --waybar-color gruvbox          # drift waybar off the shared theme
 dotctl sync all kitty                      # re-unify: all take kitty's color+font
 dotctl set --waybar-style console --waybar-decor round
 dotctl set --waybar-transparent off --waybar-opacity 0.60
-dotctl set --waybar-gpu off                # hide gpu temp without unlinking gputemp
+dotctl set --waybar-gpu off                # hide the gpu temp module
 dotctl set --waybar-vpn on                 # needs vpnctl + vpn-status-indicator
 dotctl set --waybar-battery on             # laptop charge %, right of audio
 dotctl set --hypr-effect glow              # colored glow instead of drop shadow

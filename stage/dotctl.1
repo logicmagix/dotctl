@@ -193,6 +193,23 @@ when a new sink appears. Not started by anything by default; add it to an
 .B exec\-once
 if you want the behavior.
 .TP
+.B cputemp
+One-shot waybar JSON line: CPU package temperature plus a
+normal/warning/critical state class. Wired as the waybar
+.B custom/cputemp
+module's
+.BR exec .
+.TP
+.B gputemp
+Same for the GPU: NVIDIA via nvidia-smi, AMD via sensors edge/junction
+labels, generic hwmon fallback. Never wakes a runtime-suspended dGPU -
+reports
+.B zzz
+until a real client holds the device. Wired as the waybar
+.B custom/gpu
+module's
+.BR exec .
+.TP
 .BI "cycle " "target direction"
 Step a cycle. The two entry points intended for keybinds.
 .RS

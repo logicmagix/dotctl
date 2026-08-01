@@ -343,9 +343,11 @@ sys_link "$STAGE/dotctl" "$SYS_BIN/dotctl"
 for m in "$STAGE"/modules/*; do
   name="$(basename "$m")"
   case "$name" in
-    launcher|audio-output|audio-output-menu|audio-output-status|audio-hotplug-watch)
+    launcher|audio-output|audio-output-menu|audio-output-status|audio-hotplug-watch|cputemp|gputemp)
       # Older installs symlinked these onto PATH; remove ours so the
       # standalone names stop resolving. Foreign files are left alone.
+      # (WANT_GPU no longer gates a gputemp symlink - it only controls
+      # whether the waybar GPU block is stripped below.)
       if [[ -L "$SYS_BIN/$name" && "$(readlink -f "$SYS_BIN/$name")" == "$STAGE"/* ]]; then
         $SUDO rm -f "$SYS_BIN/$name"
         skip "$name (removed stale symlink - now runs as \`dotctl $name\`)"
@@ -356,9 +358,6 @@ for m in "$STAGE"/modules/*; do
       ;;
     vpnctl|vpn-status-indicator)
       (( WANT_VPN == 1 )) || { skip "$name (vpn module opted out)"; continue; }
-      ;;
-    gputemp)
-      (( WANT_GPU == 1 )) || { skip "$name (gpu temp module opted out)"; continue; }
       ;;
   esac
   [[ -f "$m" ]] || continue

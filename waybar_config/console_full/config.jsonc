@@ -144,7 +144,7 @@
     "tooltip": true
   },
   "custom/cputemp": {
-    "exec": "cputemp",
+    "exec": "dotctl cputemp",
     "return-type": "json",
     "format": "{}",
     "interval": 3,
@@ -156,7 +156,7 @@
   },
   /* GPU:BEGIN */
   "custom/gpu": {
-    "exec": "gputemp",
+    "exec": "dotctl gputemp",
     "return-type": "json",
     "format": "{}",
     "interval": 2,
