@@ -270,7 +270,9 @@ tooltip {
 
 /* System modules (right side) */
 #tray        { background: @black; }
+/* AUDIO:BEGIN */
 #custom-audio  { background: @rose;  color: @black; }
+/* AUDIO:END */
 /* BATTERY:BEGIN - stripped when WAYBAR_BATTERY=off */
 #battery     { background: @yellow; color: @black; }
 /* BATTERY:END */
@@ -278,7 +280,9 @@ tooltip {
 /* Right-side chevrons () - each bridges two adjacent blocks */
 #custom-rsep-browser  { color: @gold;  background: transparent; } /* bar bg  browser          */
 #custom-rsep-tray     { color: @black; background: @gold;       } /* browser  tray            */
+/* AUDIO:BEGIN */
 #custom-rsep-pulse    { color: @rose;  background: @black;      } /* tray  pulseaudio     */
+/* AUDIO:END */
 
 /* VPN:BEGIN - stripped when WAYBAR_VPN=off */
 #custom-vpn {
@@ -314,7 +318,10 @@ tooltip {
 
 /* BATTERY:BEGIN - stripped when WAYBAR_BATTERY=off */
 /* Left chevron leading into the battery block: audio (@rose) → battery (@yellow). */
-#custom-rsep-battery { color: @yellow; background: @rose; }
+#custom-rsep-battery { color: @yellow; background: @black; } /* follows the tray area when audio is off */
+/* AUDIO:BEGIN */
+#custom-rsep-battery { color: @yellow; background: @rose; } /* audio -> battery (override when audio present) */
+/* AUDIO:END */
 /* BATTERY:END */
 
 /* ===================================================================
@@ -333,14 +340,16 @@ tooltip {
 #custom-rarrow-center-l,
 #custom-rarrow-center-r,
 #custom-rsep-browser,
-#custom-rsep-tray,
+/* AUDIO:BEGIN */
+#custom-rsep-pulse,
+/* AUDIO:END */
 /* VPN:BEGIN */
 #custom-rsep-vpn,
 /* VPN:END */
 /* BATTERY:BEGIN */
 #custom-rsep-battery,
 /* BATTERY:END */
-#custom-rsep-pulse {
+#custom-rsep-tray {
   font-size: 1.8em;
   padding-top: 0px;
   padding-bottom: 0px;
@@ -365,11 +374,13 @@ tooltip {
 #custom-launcher,
 /* LAUNCHER:END */
 /* NOTE: gpu / cputemp intentionally NOT here */
-#custom-browser,
+/* AUDIO:BEGIN */
+#custom-audio,
+/* AUDIO:END */
 /* BATTERY:BEGIN */
 #battery,
 /* BATTERY:END */
-#custom-audio {
+#custom-browser {
   transition: background-color 0.18s ease-out, color 0.18s ease-out;
 }
 
@@ -388,7 +399,9 @@ tooltip {
 }
 
 /* System module hover */
+/* AUDIO:BEGIN */
 #custom-audio:hover { background: shade(@rose, 1.22); }
+/* AUDIO:END */
 /* BATTERY:BEGIN */
 #battery:hover      { background: shade(@yellow, 1.22); }
 /* BATTERY:END */

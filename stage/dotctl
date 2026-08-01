@@ -53,7 +53,7 @@ readonly STATE_KEYS=(
   KITTY_COLOR   KITTY_FONT   KITTY_FONT_SIZE
   MAKO_COLOR    MAKO_FONT    MAKO_FONT_SIZE
   WOFI_COLOR    WOFI_FONT    WOFI_FONT_SIZE  WOFI_VARIANT
-  WAYBAR_COLOR  WAYBAR_FONT  WAYBAR_FONT_SIZE WAYBAR_STYLE WAYBAR_SCOPE WAYBAR_DECOR WAYBAR_CPU WAYBAR_CPUTEMP WAYBAR_RAM WAYBAR_GPU WAYBAR_VRAM WAYBAR_VPN WAYBAR_BATTERY WAYBAR_POWER WAYBAR_LAUNCHER WAYBAR_TRANSPARENT WAYBAR_OPACITY WAYBAR_LAUNCHER_LOGO WAYBAR_EDITOR
+  WAYBAR_COLOR  WAYBAR_FONT  WAYBAR_FONT_SIZE WAYBAR_STYLE WAYBAR_SCOPE WAYBAR_DECOR WAYBAR_CPU WAYBAR_CPUTEMP WAYBAR_RAM WAYBAR_GPU WAYBAR_VRAM WAYBAR_VPN WAYBAR_BATTERY WAYBAR_AUDIO WAYBAR_POWER WAYBAR_LAUNCHER WAYBAR_TRANSPARENT WAYBAR_OPACITY WAYBAR_LAUNCHER_LOGO WAYBAR_EDITOR
   HYPR_EFFECT
   WALLPAPER
 )
@@ -79,6 +79,7 @@ readonly DEFAULT_WAYBAR_VRAM=on
 readonly DEFAULT_WAYBAR_CPU=on
 readonly DEFAULT_WAYBAR_CPUTEMP=on
 readonly DEFAULT_WAYBAR_RAM=on
+readonly DEFAULT_WAYBAR_AUDIO=on
 readonly DEFAULT_WAYBAR_BATTERY=off
 # power/launcher default on: they've always been in every bar, so pre-axis
 # state files soft-migrate to the same look they had.
@@ -255,6 +256,7 @@ load_state() {
   : "${WAYBAR_CPU:=$DEFAULT_WAYBAR_CPU}"
   : "${WAYBAR_CPUTEMP:=$DEFAULT_WAYBAR_CPUTEMP}"
   : "${WAYBAR_RAM:=$DEFAULT_WAYBAR_RAM}"
+  : "${WAYBAR_AUDIO:=$DEFAULT_WAYBAR_AUDIO}"
   : "${WAYBAR_BATTERY:=$DEFAULT_WAYBAR_BATTERY}"
   : "${WAYBAR_POWER:=$DEFAULT_WAYBAR_POWER}"
   : "${WAYBAR_LAUNCHER:=$DEFAULT_WAYBAR_LAUNCHER}"
@@ -384,6 +386,7 @@ detect_waybar_vrams()          { printf '%s\n' off on; }
 detect_waybar_cpus()           { printf '%s\n' off on; }
 detect_waybar_cputemps()       { printf '%s\n' off on; }
 detect_waybar_rams()           { printf '%s\n' off on; }
+detect_waybar_audios()         { printf '%s\n' off on; }
 detect_waybar_launchers()      { printf '%s\n' off on; }
 detect_waybar_transparents()   { printf '%s\n' on off; }
 detect_waybar_opacities()      { printf '%s\n' "${OPACITY_LADDER[@]}"; }
@@ -490,6 +493,7 @@ validate_waybar_vram()          { _in_list "$1" on off; }
 validate_waybar_cpu()           { _in_list "$1" on off; }
 validate_waybar_cputemp()       { _in_list "$1" on off; }
 validate_waybar_ram()           { _in_list "$1" on off; }
+validate_waybar_audio()         { _in_list "$1" on off; }
 validate_waybar_launcher()      { _in_list "$1" on off; }
 # Is the battery module actually meaningful? Only on machines that expose a
 # battery power supply (laptops). Uses the native waybar `battery` module, so
@@ -676,7 +680,7 @@ apply_waybar() {
   for _pair in \
     "VRAM:$WAYBAR_VRAM" "BATTERY:$WAYBAR_BATTERY" "POWER:$WAYBAR_POWER" \
     "LAUNCHER:$WAYBAR_LAUNCHER" "CPU:$WAYBAR_CPU" "CPUTEMP:$WAYBAR_CPUTEMP" \
-    "RAM:$WAYBAR_RAM"
+    "RAM:$WAYBAR_RAM" "AUDIO:$WAYBAR_AUDIO"
   do
     _mk="${_pair%%:*}"; _on=0
     [[ "${_pair#*:}" == "on" ]] && _on=1
@@ -757,7 +761,7 @@ apply_waybar() {
   ' "$WAYBAR_DIR/config.jsonc" > "$WAYBAR_DIR/config.jsonc.tmp" && mv -f "$WAYBAR_DIR/config.jsonc.tmp" "$WAYBAR_DIR/config.jsonc"
 
   pkill -SIGUSR2 -x waybar 2>/dev/null || warn "waybar reload signal failed (waybar running?)"
-  log "apply waybar: ${WAYBAR_STYLE}_${WAYBAR_SCOPE} color=${WAYBAR_COLOR} font=${WAYBAR_FONT}/${WAYBAR_FONT_SIZE} decor=${WAYBAR_DECOR} cpu=${WAYBAR_CPU} cputemp=${WAYBAR_CPUTEMP} ram=${WAYBAR_RAM} gpu=${WAYBAR_GPU} vram=${WAYBAR_VRAM} vpn=${WAYBAR_VPN} battery=${WAYBAR_BATTERY} power=${WAYBAR_POWER} launcher=${WAYBAR_LAUNCHER} transparent=${WAYBAR_TRANSPARENT}/opacity=${WAYBAR_OPACITY} logo=${WAYBAR_LAUNCHER_LOGO} editor=${WAYBAR_EDITOR}"
+  log "apply waybar: ${WAYBAR_STYLE}_${WAYBAR_SCOPE} color=${WAYBAR_COLOR} font=${WAYBAR_FONT}/${WAYBAR_FONT_SIZE} decor=${WAYBAR_DECOR} cpu=${WAYBAR_CPU} cputemp=${WAYBAR_CPUTEMP} ram=${WAYBAR_RAM} gpu=${WAYBAR_GPU} vram=${WAYBAR_VRAM} vpn=${WAYBAR_VPN} battery=${WAYBAR_BATTERY} audio=${WAYBAR_AUDIO} power=${WAYBAR_POWER} launcher=${WAYBAR_LAUNCHER} transparent=${WAYBAR_TRANSPARENT}/opacity=${WAYBAR_OPACITY} logo=${WAYBAR_LAUNCHER_LOGO} editor=${WAYBAR_EDITOR}"
 }
 
 apply_wallpaper() {
@@ -934,8 +938,8 @@ EOF
   printf '  %-10s color=%s  font=%s  size=%s\n' "mako"  "$MAKO_COLOR" "$MAKO_FONT" "$MAKO_FONT_SIZE"
   printf '  %-10s color=%s  font=%s  size=%s  variant=%s\n' \
     "wofi" "$WOFI_COLOR" "$WOFI_FONT" "$WOFI_FONT_SIZE" "$WOFI_VARIANT"
-  printf '  %-10s color=%s  font=%s  size=%s  style=%s  scope=%s  decor=%s  cpu=%s  cputemp=%s  ram=%s  gpu=%s  vram=%s  vpn=%s  battery=%s  power=%s  launcher=%s  transparent=%s  opacity=%s  logo=%s  editor=%s\n' \
-    "waybar" "$WAYBAR_COLOR" "$WAYBAR_FONT" "$WAYBAR_FONT_SIZE" "$WAYBAR_STYLE" "$WAYBAR_SCOPE" "$WAYBAR_DECOR" "$WAYBAR_CPU" "$WAYBAR_CPUTEMP" "$WAYBAR_RAM" "$WAYBAR_GPU" "$WAYBAR_VRAM" "$WAYBAR_VPN" "$WAYBAR_BATTERY" "$WAYBAR_POWER" "$WAYBAR_LAUNCHER" "$WAYBAR_TRANSPARENT" "$WAYBAR_OPACITY" "$WAYBAR_LAUNCHER_LOGO" "$WAYBAR_EDITOR"
+  printf '  %-10s color=%s  font=%s  size=%s  style=%s  scope=%s  decor=%s  cpu=%s  cputemp=%s  ram=%s  gpu=%s  vram=%s  vpn=%s  battery=%s  audio=%s  power=%s  launcher=%s  transparent=%s  opacity=%s  logo=%s  editor=%s\n' \
+    "waybar" "$WAYBAR_COLOR" "$WAYBAR_FONT" "$WAYBAR_FONT_SIZE" "$WAYBAR_STYLE" "$WAYBAR_SCOPE" "$WAYBAR_DECOR" "$WAYBAR_CPU" "$WAYBAR_CPUTEMP" "$WAYBAR_RAM" "$WAYBAR_GPU" "$WAYBAR_VRAM" "$WAYBAR_VPN" "$WAYBAR_BATTERY" "$WAYBAR_AUDIO" "$WAYBAR_POWER" "$WAYBAR_LAUNCHER" "$WAYBAR_TRANSPARENT" "$WAYBAR_OPACITY" "$WAYBAR_LAUNCHER_LOGO" "$WAYBAR_EDITOR"
   printf '  %-10s effect=%s\n' "hypr" "$HYPR_EFFECT"
   printf '  %-10s %s\n' "wallpaper" "$WALLPAPER"
 
@@ -1002,6 +1006,7 @@ cmd_list() {
     waybar-cpus|cpus) detect_waybar_cpus;;
     waybar-cputemps|cputemps) detect_waybar_cputemps;;
     waybar-rams|rams) detect_waybar_rams;;
+    waybar-audios|audios) detect_waybar_audios;;
     waybar-launchers|launchers) detect_waybar_launchers;;
     waybar-transparents|transparents) detect_waybar_transparents;;
     waybar-opacities|opacities) detect_waybar_opacities;;
@@ -1044,6 +1049,7 @@ axes:
   waybar-cpus      waybar CPU load module toggle (off | on)
   waybar-cputemps  waybar CPU temp module toggle (off | on)
   waybar-rams      waybar RAM usage module toggle (off | on)
+  waybar-audios    waybar audio module toggle (off | on)
   waybar-launchers waybar launcher button toggle (off | on)
   waybar-transparents  waybar transparent bar bg toggle (on | off)
   waybar-opacities     waybar bar opacity ladder [0.0-1.0]
@@ -1086,7 +1092,7 @@ cmd_set() {
   local new_kitty_color='' new_kitty_font='' new_kitty_font_size=''
   local new_mako_color='' new_mako_font='' new_mako_font_size=''
   local new_wofi_color='' new_wofi_font='' new_wofi_font_size='' new_wofi_variant=''
-  local new_waybar_color='' new_waybar_font='' new_waybar_font_size='' new_waybar_style='' new_waybar_scope='' new_waybar_decor='' new_waybar_cpu='' new_waybar_cputemp='' new_waybar_ram='' new_waybar_gpu='' new_waybar_vram='' new_waybar_vpn='' new_waybar_battery='' new_waybar_power='' new_waybar_launcher='' new_waybar_transparent='' new_waybar_opacity='' new_waybar_launcher_logo='' new_waybar_editor='' new_hypr_effect=''
+  local new_waybar_color='' new_waybar_font='' new_waybar_font_size='' new_waybar_style='' new_waybar_scope='' new_waybar_decor='' new_waybar_cpu='' new_waybar_cputemp='' new_waybar_ram='' new_waybar_gpu='' new_waybar_vram='' new_waybar_vpn='' new_waybar_battery='' new_waybar_audio='' new_waybar_power='' new_waybar_launcher='' new_waybar_transparent='' new_waybar_opacity='' new_waybar_launcher_logo='' new_waybar_editor='' new_hypr_effect=''
   local new_wallpaper=''
   local preset_name=''
 
@@ -1120,6 +1126,7 @@ cmd_set() {
       --waybar-cpu)          new_waybar_cpu="$2"; shift 2;;
       --waybar-cputemp)      new_waybar_cputemp="$2"; shift 2;;
       --waybar-ram)          new_waybar_ram="$2"; shift 2;;
+      --waybar-audio)        new_waybar_audio="$2"; shift 2;;
       --waybar-launcher)     new_waybar_launcher="$2"; shift 2;;
       --waybar-transparent)  new_waybar_transparent="$2"; shift 2;;
       --waybar-opacity)      new_waybar_opacity="$2"; shift 2;;
@@ -1216,6 +1223,7 @@ cmd_set() {
   [[ -n "$new_waybar_cpu" ]]        && { validate_waybar_cpu "$new_waybar_cpu" || die "invalid waybar cpu: $new_waybar_cpu (must be on|off)"; WAYBAR_CPU="$new_waybar_cpu"; }
   [[ -n "$new_waybar_cputemp" ]]    && { validate_waybar_cputemp "$new_waybar_cputemp" || die "invalid waybar cputemp: $new_waybar_cputemp (must be on|off)"; WAYBAR_CPUTEMP="$new_waybar_cputemp"; }
   [[ -n "$new_waybar_ram" ]]        && { validate_waybar_ram "$new_waybar_ram" || die "invalid waybar ram: $new_waybar_ram (must be on|off)"; WAYBAR_RAM="$new_waybar_ram"; }
+  [[ -n "$new_waybar_audio" ]]      && { validate_waybar_audio "$new_waybar_audio" || die "invalid waybar audio: $new_waybar_audio (must be on|off)"; WAYBAR_AUDIO="$new_waybar_audio"; }
   [[ -n "$new_waybar_power" ]]      && { validate_waybar_power "$new_waybar_power" || die "invalid waybar power: $new_waybar_power (must be on|off)"; WAYBAR_POWER="$new_waybar_power"; }
   [[ -n "$new_waybar_launcher" ]]   && { validate_waybar_launcher "$new_waybar_launcher" || die "invalid waybar launcher: $new_waybar_launcher (must be on|off)"; WAYBAR_LAUNCHER="$new_waybar_launcher"; }
   [[ -n "$new_waybar_transparent" ]]&& { validate_waybar_transparent "$new_waybar_transparent" || die "invalid waybar transparent: $new_waybar_transparent (must be on|off)"; WAYBAR_TRANSPARENT="$new_waybar_transparent"; }
@@ -1265,6 +1273,8 @@ dotctl set [FLAGS]
   --waybar-cputemp <S>     waybar CPU temp module (on | off)
   --waybar-ram <S>         waybar RAM usage module (on | off)
                            (chevrons re-seam automatically for any combination)
+  --waybar-audio <S>       waybar audio module (on | off) - output status,
+                           click menu, scroll volume
   --waybar-power <S>       waybar power button (on | off) - chevrons re-seam automatically
   --waybar-launcher <S>    waybar launcher button (on | off) - chevrons re-seam automatically
   --waybar-transparent <S> waybar bar background (on = transparent, off = opaque palette fill)
@@ -1646,6 +1656,7 @@ EOF
     WAYBAR_CPU="$DEFAULT_WAYBAR_CPU"
     WAYBAR_CPUTEMP="$DEFAULT_WAYBAR_CPUTEMP"
     WAYBAR_RAM="$DEFAULT_WAYBAR_RAM"
+    WAYBAR_AUDIO="$DEFAULT_WAYBAR_AUDIO"
     WAYBAR_BATTERY="$DEFAULT_WAYBAR_BATTERY"
     WAYBAR_POWER="$DEFAULT_WAYBAR_POWER"
     WAYBAR_LAUNCHER="$DEFAULT_WAYBAR_LAUNCHER"
@@ -1664,7 +1675,7 @@ EOF
   # Discover options per element
   local cava_colors kitty_colors kitty_fonts mako_colors mako_fonts
   local wofi_colors wofi_fonts wofi_variants
-  local waybar_colors waybar_fonts waybar_styles waybar_scopes waybar_decors waybar_cpus waybar_cputemps waybar_rams waybar_gpus waybar_vrams waybar_vpns waybar_batteries waybar_powers waybar_launchers waybar_transparents waybar_opacities hypr_effects
+  local waybar_colors waybar_fonts waybar_styles waybar_scopes waybar_decors waybar_cpus waybar_cputemps waybar_rams waybar_gpus waybar_vrams waybar_vpns waybar_batteries waybar_audios waybar_powers waybar_launchers waybar_transparents waybar_opacities hypr_effects
   local wallpapers
 
   mapfile -t cava_colors    < <(detect_cava_colors)
@@ -1688,6 +1699,7 @@ EOF
   mapfile -t waybar_cpus      < <(detect_waybar_cpus)
   mapfile -t waybar_cputemps  < <(detect_waybar_cputemps)
   mapfile -t waybar_rams      < <(detect_waybar_rams)
+  mapfile -t waybar_audios    < <(detect_waybar_audios)
   mapfile -t waybar_launchers < <(detect_waybar_launchers)
   mapfile -t waybar_transparents < <(detect_waybar_transparents)
   mapfile -t waybar_opacities    < <(detect_waybar_opacities)
@@ -1771,6 +1783,7 @@ EOF
   WAYBAR_CPU=$(prompt_select        "      waybar cpu load module"   "$WAYBAR_CPU"      "${waybar_cpus[@]}")
   WAYBAR_CPUTEMP=$(prompt_select    "      waybar cpu temp module"   "$WAYBAR_CPUTEMP"  "${waybar_cputemps[@]}")
   WAYBAR_RAM=$(prompt_select        "      waybar ram module"        "$WAYBAR_RAM"      "${waybar_rams[@]}")
+  WAYBAR_AUDIO=$(prompt_select      "      waybar audio module"      "$WAYBAR_AUDIO"    "${waybar_audios[@]}")
   WAYBAR_TRANSPARENT=$(prompt_select "      waybar transparent bg"    "$WAYBAR_TRANSPARENT" "${waybar_transparents[@]}")
   WAYBAR_OPACITY=$(prompt_opacity   "      waybar bg opacity (when active)" "$WAYBAR_OPACITY")
   HYPR_EFFECT=$(prompt_select       "      hypr window effect"        "$HYPR_EFFECT"  "${hypr_effects[@]}")
@@ -1801,7 +1814,7 @@ EOF
   printf '  %-10s %s / %s / size %s\n' "kitty" "$KITTY_COLOR" "$KITTY_FONT" "$KITTY_FONT_SIZE"
   printf '  %-10s %s / %s / size %s\n' "mako"  "$MAKO_COLOR" "$MAKO_FONT" "$MAKO_FONT_SIZE"
   printf '  %-10s %s / %s / size %s / variant %s\n' "wofi" "$WOFI_COLOR" "$WOFI_FONT" "$WOFI_FONT_SIZE" "$WOFI_VARIANT"
-  printf '  %-10s %s / %s / size %s / %s_%s / decor %s / cpu %s / cputemp %s / ram %s / gpu %s / vram %s / vpn %s / battery %s / power %s / launcher %s / transparent %s (%s) / logo %s / editor %s\n' "waybar" "$WAYBAR_COLOR" "$WAYBAR_FONT" "$WAYBAR_FONT_SIZE" "$WAYBAR_STYLE" "$WAYBAR_SCOPE" "$WAYBAR_DECOR" "$WAYBAR_CPU" "$WAYBAR_CPUTEMP" "$WAYBAR_RAM" "$WAYBAR_GPU" "$WAYBAR_VRAM" "$WAYBAR_VPN" "$WAYBAR_BATTERY" "$WAYBAR_POWER" "$WAYBAR_LAUNCHER" "$WAYBAR_TRANSPARENT" "$WAYBAR_OPACITY" "$WAYBAR_LAUNCHER_LOGO" "$WAYBAR_EDITOR"
+  printf '  %-10s %s / %s / size %s / %s_%s / decor %s / cpu %s / cputemp %s / ram %s / gpu %s / vram %s / vpn %s / battery %s / audio %s / power %s / launcher %s / transparent %s (%s) / logo %s / editor %s\n' "waybar" "$WAYBAR_COLOR" "$WAYBAR_FONT" "$WAYBAR_FONT_SIZE" "$WAYBAR_STYLE" "$WAYBAR_SCOPE" "$WAYBAR_DECOR" "$WAYBAR_CPU" "$WAYBAR_CPUTEMP" "$WAYBAR_RAM" "$WAYBAR_GPU" "$WAYBAR_VRAM" "$WAYBAR_VPN" "$WAYBAR_BATTERY" "$WAYBAR_AUDIO" "$WAYBAR_POWER" "$WAYBAR_LAUNCHER" "$WAYBAR_TRANSPARENT" "$WAYBAR_OPACITY" "$WAYBAR_LAUNCHER_LOGO" "$WAYBAR_EDITOR"
   printf '  %-10s effect %s\n' "hypr" "$HYPR_EFFECT"
   printf '  %-10s %s\n' "wallpaper" "$WALLPAPER"
   info ""
@@ -1864,6 +1877,7 @@ _load_preset_into_state() {
   : "${WAYBAR_CPU:=$DEFAULT_WAYBAR_CPU}"
   : "${WAYBAR_CPUTEMP:=$DEFAULT_WAYBAR_CPUTEMP}"
   : "${WAYBAR_RAM:=$DEFAULT_WAYBAR_RAM}"
+  : "${WAYBAR_AUDIO:=$DEFAULT_WAYBAR_AUDIO}"
   : "${WAYBAR_BATTERY:=$DEFAULT_WAYBAR_BATTERY}"
   : "${WAYBAR_POWER:=$DEFAULT_WAYBAR_POWER}"
   : "${WAYBAR_LAUNCHER:=$DEFAULT_WAYBAR_LAUNCHER}"
@@ -2496,7 +2510,7 @@ QUICK REFERENCE
   dotctl new wallpaper forest      Scaffold one new wallpaper theme by hand
 
 STATE
-  ~/.config/dotctl/config       33-field KEY=value, hand-editable, flock-guarded
+  ~/.config/dotctl/config       34-field KEY=value, hand-editable, flock-guarded
   ~/.config/dotctl/presets/     Saved presets (one .conf per preset)
   ~/.config/dotctl/cycle/       cycle-hyprpaper-<theme> scripts + _cycle-hyprpaper.template
   ~/.cache/dotctl/lock          Runtime lockfile

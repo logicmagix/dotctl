@@ -62,7 +62,7 @@ or
 .BR round ,
 console-only),
 per-module toggles (CPU load, CPU temp, RAM, GPU temp, VRAM, VPN,
-battery, power button, launcher button - every block except the
+battery, audio, power button, launcher button - every block except the
 workspaces can be switched off individually),
 transparent-bar toggle, explicit bar opacity
 (used when
@@ -318,6 +318,7 @@ List valid values for one axis. Axes:
 .BR waybar-cpus ,
 .BR waybar-cputemps ,
 .BR waybar-rams ,
+.BR waybar-audios ,
 .BR waybar-transparents ,
 .BR waybar-opacities ,
 .BR hypr-effects ,
@@ -537,6 +538,14 @@ individually. All left-side system blocks (these three plus GPU and
 VRAM) may be enabled in any combination - console chevron seams re-seam
 automatically, and with everything off the left side ends at the
 workspace block.
+.TP
+.BI "--waybar-audio " on|off
+Toggle the waybar audio module (output status stream, click-to-switch
+menu, scroll volume). With VPN, audio, and battery all individually
+toggleable, everything right of the tray is optional. Note: in the
+console style the VPN state also colors the audio block's separator;
+with audio off that state accent is only visible on the VPN block
+itself.
 .TP
 .BI "--waybar-power " on|off
 Toggle the waybar power button (wofi poweroff/reboot/logout menu, far left;
@@ -774,7 +783,7 @@ variants, env overrides).
 .SH FILES
 .TP
 .I ~/.config/dotctl/config
-33-field
+34-field
 .B KEY=value
 state file, hand-editable, flock-guarded on writes. Regenerate with
 .BR "dotctl configure" .

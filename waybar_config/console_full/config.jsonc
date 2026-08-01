@@ -48,11 +48,13 @@
     "custom/rsep-files",    "custom/files",
     "custom/rsep-editor",   "custom/editor",
     "custom/rsep-browser",  "custom/browser",
-    "custom/rsep-tray",     "tray",
+    "custom/rsep-tray",     "tray"
     /* VPN:BEGIN */
-    "custom/rsep-vpn",      "custom/vpn",
+    , "custom/rsep-vpn",    "custom/vpn"
     /* VPN:END */
-    "custom/rsep-pulse",    "custom/audio"
+    /* AUDIO:BEGIN */
+    , "custom/rsep-pulse",  "custom/audio"
+    /* AUDIO:END */
     /* BATTERY:BEGIN */
     , "custom/rsep-battery", "battery"
     /* BATTERY:END */
@@ -92,6 +94,7 @@
     "tooltip": false
   },
   /* VPN:END */
+  /* AUDIO:BEGIN */
   "custom/rsep-pulse":     { "format": "\ue0b2", "tooltip": false },
   /* VPN:BEGIN */
   "custom/rsep-pulse": {
@@ -102,6 +105,7 @@
     "tooltip": false
   },
   /* VPN:END */
+  /* AUDIO:END */
   /* BATTERY:BEGIN */
   "custom/rsep-battery":  { "format": "\ue0b2", "tooltip": false },
   /* BATTERY:END */
@@ -210,6 +214,7 @@
     "spacing": 6,
     "reverse-direction": false
   },
+  /* AUDIO:BEGIN */
   "custom/audio": {
     "format": "{}",
     "return-type": "json",
@@ -219,6 +224,7 @@
     "on-scroll-up":   "pactl set-sink-volume @DEFAULT_SINK@ +2%",
     "on-scroll-down": "pactl set-sink-volume @DEFAULT_SINK@ -2%"
   },
+  /* AUDIO:END */
   /* BATTERY:BEGIN */
   "battery": {
     "interval": 30,

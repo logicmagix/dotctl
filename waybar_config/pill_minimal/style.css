@@ -102,14 +102,16 @@ tooltip {
 #custom-files,
 #custom-editor,
 #custom-browser,
-#tray,
+/* AUDIO:BEGIN */
+#custom-audio,
+/* AUDIO:END */
 /* VPN:BEGIN */
 #custom-vpn,
 /* VPN:END */
 /* BATTERY:BEGIN */
 #battery,
 /* BATTERY:END */
-#custom-audio {
+#tray {
   border-radius: 14px;
   margin: 5px 3px;
   padding: 0 12px;
@@ -258,10 +260,12 @@ tooltip {
   padding: 0 8px;
 }
 
+/* AUDIO:BEGIN */
 #custom-audio {
   color: @rose;
   border-color: @rose;
 }
+/* AUDIO:END */
 
 /* BATTERY:BEGIN - stripped when WAYBAR_BATTERY=off */
 #battery {
@@ -311,7 +315,9 @@ tooltip {
 #custom-files:hover       { background: @blue;  color: @hover_fg; }
 #custom-editor:hover       { background: @olive; color: @hover_fg; }
 #custom-browser:hover     { background: @gold;  color: @hover_fg; }
+/* AUDIO:BEGIN */
 #custom-audio:hover         { background: @rose;  color: @hover_fg; }
+/* AUDIO:END */
 /* BATTERY:BEGIN */
 #battery:hover              { background: @yellow; color: @hover_fg; }
 /* BATTERY:END */

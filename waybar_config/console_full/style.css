@@ -108,7 +108,9 @@ tooltip {
 #memory,
 /* RAM:END */
 #mode,
-#network,
+/* AUDIO:BEGIN */
+#custom-audio,
+/* AUDIO:END */
 /*#custom-audio,*/
 #temperature,
 /*#tray,*/
@@ -381,7 +383,9 @@ tooltip {
 /* System modules (right side) */
 #tray        { background: @black; }
 #network     { background: @plum;  color: @white; }
+/* AUDIO:BEGIN */
 #custom-audio  { background: @rose;  color: @black; }
+/* AUDIO:END */
 /* BATTERY:BEGIN - stripped when WAYBAR_BATTERY=off */
 #battery     { background: @yellow; color: @black; }
 /* BATTERY:END */
@@ -393,7 +397,9 @@ tooltip {
 #custom-rsep-editor         { color: @olive; background: @plum;       } /* files  editor           */
 #custom-rsep-browser         { color: @gold;  background: @olive;      } /* editor  browser */
 #custom-rsep-tray          { color: @black; background: @gold;       } /* browser  tray           */
+/* AUDIO:BEGIN */
 #custom-rsep-pulse         { color: @rose;  background: @black;      } /* tray  pulseaudio         */
+/* AUDIO:END */
 
 /* VPN:BEGIN - stripped when WAYBAR_VPN=off */
 #custom-vpn {
@@ -429,7 +435,10 @@ tooltip {
 
 /* BATTERY:BEGIN - stripped when WAYBAR_BATTERY=off */
 /* Left chevron leading into the battery block: audio (@rose) → battery (@yellow). */
-#custom-rsep-battery { color: @yellow; background: @rose; }
+#custom-rsep-battery { color: @yellow; background: @black; } /* follows the tray area when audio is off */
+/* AUDIO:BEGIN */
+#custom-rsep-battery { color: @yellow; background: @rose; } /* audio -> battery (override when audio present) */
+/* AUDIO:END */
 /* BATTERY:END */
 
 /* ===================================================================
@@ -466,14 +475,16 @@ tooltip {
 #custom-rsep-files,
 #custom-rsep-editor,
 #custom-rsep-browser,
-#custom-rsep-tray,
+/* AUDIO:BEGIN */
+#custom-rsep-pulse,
+/* AUDIO:END */
 /* VPN:BEGIN */
 #custom-rsep-vpn,
 /* VPN:END */
 /* BATTERY:BEGIN */
 #custom-rsep-battery,
 /* BATTERY:END */
-#custom-rsep-pulse {
+#custom-rsep-tray {
   font-size: 1.8em;
   padding-top: 0px;
   padding-bottom: 0px;
@@ -504,7 +515,7 @@ tooltip {
 #custom-browser,
 #battery,
 #network,
-#custom-audio {
+#network {
   transition: background-color 0.18s ease-out, color 0.18s ease-out;
 }
 
@@ -543,7 +554,9 @@ tooltip {
 #battery:hover    { background: shade(@yellow, 1.22); }
 /* BATTERY:END */
 #network:hover    { background: shade(@plum, 1.22); color: @hover_fg; }
+/* AUDIO:BEGIN */
 #custom-audio:hover { background: shade(@rose, 1.22); }
+/* AUDIO:END */
 
 /* Center clock - keep its own opaque bg so it stays readable even when
    the bar is transparent (otherwise GTK's default hover leaks through). */

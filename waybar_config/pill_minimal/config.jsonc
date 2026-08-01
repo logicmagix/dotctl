@@ -22,11 +22,13 @@
   // RIGHT
   "modules-right": [
     "custom/browser",
-    "tray",
+    "tray"
     /* VPN:BEGIN */
-    "custom/vpn",
+    , "custom/vpn"
     /* VPN:END */
-    "custom/audio"
+    /* AUDIO:BEGIN */
+    , "custom/audio"
+    /* AUDIO:END */
     /* BATTERY:BEGIN */
     , "battery"
     /* BATTERY:END */
@@ -90,6 +92,7 @@
     "spacing": 6,
     "reverse-direction": false
   },
+  /* AUDIO:BEGIN */
   "custom/audio": {
     "format": "{}",
     "return-type": "json",
@@ -99,6 +102,7 @@
     "on-scroll-up":   "pactl set-sink-volume @DEFAULT_SINK@ +2%",
     "on-scroll-down": "pactl set-sink-volume @DEFAULT_SINK@ -2%"
   },
+  /* AUDIO:END */
   /* BATTERY:BEGIN */
   "battery": {
     "interval": 30,
