@@ -49,7 +49,7 @@
     // "format": "\uf32e",  // Void Linux
     "format": "\uf17c",    // Tux (replaced at apply time by dotctl)
     "tooltip-format": "Launcher",
-    "on-click": "launcher"
+    "on-click": "dotctl launcher"
   },
   "custom/workspace-prev": {
     "format": "\uf053",

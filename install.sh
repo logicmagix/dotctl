@@ -337,11 +337,23 @@ sys_link() {
 
 sys_link "$STAGE/dotctl" "$SYS_BIN/dotctl"
 
-# Module scripts - everything in stage/modules/ except the VPN pair and
-# gputemp, which each gate on their own opt-in prompts.
+# Module scripts - everything in stage/modules/ except launcher (dispatched
+# via `dotctl launcher`, never on PATH) and the VPN pair and gputemp, which
+# each gate on their own opt-in prompts.
 for m in "$STAGE"/modules/*; do
   name="$(basename "$m")"
   case "$name" in
+    launcher)
+      # Older installs symlinked it onto PATH; remove ours so the standalone
+      # name stops resolving. A foreign /usr/local/bin/launcher is left alone.
+      if [[ -L "$SYS_BIN/launcher" && "$(readlink -f "$SYS_BIN/launcher")" == "$STAGE"/* ]]; then
+        $SUDO rm -f "$SYS_BIN/launcher"
+        skip "launcher (removed stale symlink - now runs as \`dotctl launcher\`)"
+      else
+        skip "launcher (runs as \`dotctl launcher\`)"
+      fi
+      continue
+      ;;
     vpnctl|vpn-status-indicator)
       (( WANT_VPN == 1 )) || { skip "$name (vpn module opted out)"; continue; }
       ;;

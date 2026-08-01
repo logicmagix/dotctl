@@ -154,6 +154,17 @@ and auto-apply on save. Uses
 when available; falls back to 1-second mtime polling otherwise. Ctrl-C to
 stop.
 .TP
+.BI "launcher [--rebuild] [--include-terminal]"
+Open the wofi app launcher (the waybar
+.B custom/launcher
+on-click target); a second invocation while wofi is up closes it. Apps are
+read from the standard XDG application dirs (plus flatpak exports) and cached;
+the cache refreshes automatically when .desktop files change.
+.B --rebuild
+also forces the icon index to be rescanned.
+.B --include-terminal
+lists Terminal=true apps, which are hidden by default.
+.TP
 .BI "cycle " "target direction"
 Step a cycle. The two entry points intended for keybinds.
 .RS

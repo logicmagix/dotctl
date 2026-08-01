@@ -107,10 +107,11 @@ The installer is interactive and walks you through:
 
 1. Verify `hyprland` + `hyprpaper` are present (hard fail otherwise).
 2. Optionally `pacman -S` / `emerge` / etc. the runtime elements.
-3. Symlink the CLI + module scripts (`dotctl`, `power`, `launcher`,
+3. Symlink the CLI + module scripts (`dotctl`, `power`,
    `cputemp`, `gputemp`, `ws-cycle`, `audio-output`, `audio-output-menu`,
    `audio-output-status`, `audio-hotplug-watch`, `keybinds`) into
-   `/usr/local/bin/`.
+   `/usr/local/bin/`. The app launcher is not symlinked - it runs as
+   `dotctl launcher`.
 4. Optionally symlink the VPN module (`vpnctl`, `vpn-status-indicator`),
    the GPU temp module (`gputemp`), and enable the battery module (native
    waybar `battery` readout for laptops, shown right of audio).
@@ -395,9 +396,9 @@ The VPN module is opt-in at install time. Re-run `install.sh` and pick
 `vpn-status-indicator` from `stage/modules/` onto `PATH`.
 
 **Waybar launcher / power click does nothing.**
-Make sure `power` and `launcher` are on `PATH`:
-`command -v power launcher`. They're symlinked into `/usr/local/bin/`
-by `install.sh`.
+Make sure `power` and `dotctl` are on `PATH`: `command -v power dotctl`.
+They're symlinked into `/usr/local/bin/` by `install.sh`. The launcher
+runs as `dotctl launcher` (try it from a terminal to see any errors).
 
 **Man page is stale after updating dotctl.**
 Some older installers dropped an uncompressed `/usr/local/share/man/man1/dotctl.1`

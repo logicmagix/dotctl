@@ -2272,6 +2272,36 @@ EOF
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
+#  Launcher
+# ──────────────────────────────────────────────────────────────────────────────
+
+cmd_launcher() {
+  case "${1:-}" in
+    -h|--help|help)
+      cat <<'EOF'
+dotctl launcher [--rebuild] [--include-terminal]
+
+Open the wofi app launcher (the waybar custom/launcher on-click target).
+Running it again while wofi is up closes it instead.
+
+  --rebuild            Force the app cache AND icon index to rebuild now.
+                       Normally the app cache refreshes itself when .desktop
+                       files change; the icon index only rescans on --rebuild.
+  --include-terminal   Also list Terminal=true apps (hidden by default).
+EOF
+      return 0;;
+  esac
+
+  # The wofi app launcher lives in modules/ next to this script but is not
+  # installed onto PATH - dotctl is its only entry point (waybar on-click,
+  # keybinds). Resolve through the /usr/local/bin symlink back to the repo.
+  local self_dir
+  self_dir=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
+  [[ -x "$self_dir/modules/launcher" ]] || die "launcher module not found at $self_dir/modules/launcher"
+  exec "$self_dir/modules/launcher" "$@"
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
 #  Help
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -2290,6 +2320,9 @@ ACTIONS
   apply                            Re-apply ~/.config/dotctl/config (run after hand-edits)
   watch                            Watch the config file and auto-apply on save
                                    (uses inotifywait if installed; mtime poll otherwise)
+  launcher [--rebuild] [--include-terminal]
+                                   Wofi app launcher (toggles if already open);
+                                   --rebuild forces the app/icon cache to refresh
   cycle <wallpaper|waybar> <next|prev>
                                    Keybind entry points
   sync <target> <source>           Copy color/font from one element to another
@@ -2392,6 +2425,7 @@ main() {
     scan)             cmd_scan "$@";;
     apply)            cmd_apply "$@";;
     watch)            cmd_watch "$@";;
+    launcher)         cmd_launcher "$@";;
     help|-h|--help|'') cmd_help;;
     *) die "unknown action \`$action\` - try \`dotctl help\`";;
   esac
