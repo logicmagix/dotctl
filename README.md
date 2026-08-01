@@ -107,14 +107,14 @@ The installer is interactive and walks you through:
 
 1. Verify `hyprland` + `hyprpaper` are present (hard fail otherwise).
 2. Optionally `pacman -S` / `emerge` / etc. the runtime elements.
-3. Symlink the CLI + module scripts (`dotctl`, `power`,
-   `ws-cycle`, `keybinds`) into `/usr/local/bin/`.
-   The launcher, audio, and temp modules are not symlinked - they run
-   through dotctl (`dotctl launcher`, `dotctl audio-output`,
-   `dotctl cputemp`, …).
+3. Symlink the CLI + module scripts (`dotctl`, `power`, `keybinds`) into
+   `/usr/local/bin/`. The launcher, audio, temp, and workspace modules
+   are not symlinked - they run through dotctl (`dotctl launcher`,
+   `dotctl audio-output`, `dotctl cputemp`, `dotctl ws-cycle`, …).
 4. Optionally symlink the VPN module (`vpnctl`, `vpn-status-indicator`),
-   the GPU temp module (`gputemp`), and enable the battery module (native
-   waybar `battery` readout for laptops, shown right of audio).
+   enable the GPU temp block (`dotctl gputemp`), and enable the battery
+   module (native waybar `battery` readout for laptops, shown right of
+   audio).
 5. Copy themed configs into `~/.config/{cava,kitty,mako,wofi,waybar}`.
 6. Copy wallpaper cycle scripts + template into `~/.config/dotctl/cycle/`.
 7. Drop the hyprland snippets into `~/.config/hypr/`.

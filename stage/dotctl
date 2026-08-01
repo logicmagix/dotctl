@@ -2337,6 +2337,8 @@ ACTIONS
   cputemp                          Waybar JSON: CPU temp + normal/warning/critical
   gputemp                          Waybar JSON: GPU temp; never wakes a
                                    runtime-suspended dGPU (reports zzz)
+  ws-cycle <next|prev> [min max]   Step hyprland workspaces with wraparound
+                                   (waybar workspace-arrow on-click)
   cycle <wallpaper|waybar> <next|prev>
                                    Keybind entry points
   sync <target> <source>           Copy color/font from one element to another
@@ -2440,7 +2442,7 @@ main() {
     apply)            cmd_apply "$@";;
     watch)            cmd_watch "$@";;
     launcher)         cmd_launcher "$@";;
-    audio-output|audio-output-menu|audio-output-status|audio-hotplug-watch|cputemp|gputemp)
+    audio-output|audio-output-menu|audio-output-status|audio-hotplug-watch|cputemp|gputemp|ws-cycle)
                       run_module "$action" "$@";;
     help|-h|--help|'') cmd_help;;
     *) die "unknown action \`$action\` - try \`dotctl help\`";;

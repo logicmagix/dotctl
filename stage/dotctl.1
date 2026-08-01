@@ -210,6 +210,11 @@ until a real client holds the device. Wired as the waybar
 module's
 .BR exec .
 .TP
+.BI "ws\-cycle " "next|prev" " [" "min max" ]
+Step hyprland workspaces relative to the focused one, wrapping at the
+bounds (default 1\(en10). The waybar workspace arrows' on-click target.
+Handles both legacy and Lua hyprland configs.
+.TP
 .BI "cycle " "target direction"
 Step a cycle. The two entry points intended for keybinds.
 .RS
