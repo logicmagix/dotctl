@@ -622,6 +622,64 @@ for name in forest coyote tokyo_night gruvbox ocean decay_green; do
   install_wallpaper_dir "$name"
 done
 
+# ── waybar Lua-dispatch compatibility check ─────────────────────────────────
+# Hyprland 0.54+ dropped the text dispatch IPC that waybar's
+# hyprland/workspaces "on-click": "activate" relies on, so workspace-number
+# clicks silently fail under a Lua hyprland config. Fixed in waybar PR #5013
+# (merged 2026-05-04) but not yet in a tagged release - bump
+# WAYBAR_LUA_FIX_VER once it lands so the warning stops firing.
+# Refs: Alexays/Waybar#5008, hyprwm/Hyprland#14255.
+readonly WAYBAR_LUA_FIX_VER="0.16.0"
+
+check_waybar_lua_dispatch() {
+  command -v waybar >/dev/null 2>&1 || return 0
+
+  local ver_raw ver
+  ver_raw="$(waybar --version 2>/dev/null | head -1)"   # "Waybar v0.15.0" or "...-254-g9e357f248"
+  # git builds (…-N-g<hash>) already carry the patch - nothing to warn about.
+  [[ "$ver_raw" == *-g[0-9a-f]* ]] && return 0
+  ver="$(printf '%s\n' "$ver_raw" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+  [[ -n "$ver" ]] || return 0
+  # If the installed release already contains the fix (>= WAYBAR_LUA_FIX_VER),
+  # the bar is fine - skip the warning.
+  if [[ "$(printf '%s\n%s\n' "$WAYBAR_LUA_FIX_VER" "$ver" | sort -V | head -1)" == "$WAYBAR_LUA_FIX_VER" ]]; then
+    return 0
+  fi
+
+  # Determine the hyprland config flavor from dotctl state (if configured yet).
+  # Parse key=val directly rather than sourcing - same as stage/modules/keybinds.
+  local hypr_config="" key val
+  if [[ -f "$CONFIG_HOME/dotctl/config" ]]; then
+    while IFS='=' read -r key val; do
+      [[ "$key" == "HYPR_CONFIG" ]] && { hypr_config="${val//\'/}"; break; }
+    done < "$CONFIG_HOME/dotctl/config"
+  fi
+  # Legacy config is unaffected - the legacy dispatch path still works there.
+  [[ "$hypr_config" == "legacy" ]] && return 0
+
+  local lead
+  if [[ "$hypr_config" == "lua" ]]; then
+    lead="Your dotctl state uses the Lua (v0.55+) hyprland config, and the installed"
+  else
+    lead="If you use dotctl's Lua (v0.55+) hyprland config, the installed"
+  fi
+
+  printf '\n%s%s waybar workspace-number clicks won'\''t work%s\n' "$BOLD" "$YLW" "$RST" >&2
+  cat >&2 <<NOTE
+${lead} waybar (v${ver}) predates the Lua-dispatch fix
+(waybar PR #5013), so clicking the workspace numbers in the bar does nothing.
+Hyprland 0.54+ dropped the legacy text dispatch IPC that waybar's
+"on-click": "activate" relies on, and the fix isn't in a tagged release yet.
+
+  ${BOLD}Fix:${RST} install ${CYN}waybar-git${RST} (AUR) - it already carries the patch, and
+       dotctl's config keeps "on-click": "activate" which is correct once
+       waybar is patched. Until then, the ${CYN}‹ ›${RST} chevrons and ${CYN}Super+N${RST}
+       still switch workspaces (those don't use waybar's IPC).
+
+  Legacy ${CYN}hyprland.conf${RST} users are not affected.
+NOTE
+}
+
 # ── Post-install summary ────────────────────────────────────────────────────
 
 cat <<DONE
@@ -694,3 +752,5 @@ ${BOLD}Next steps:${RST}
 ${DIM}VPN module setup (if enabled): $STAGE/snippets/vpn/README.md${RST}
 
 DONE
+
+check_waybar_lua_dispatch
