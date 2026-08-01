@@ -107,10 +107,10 @@ The installer is interactive and walks you through:
 
 1. Verify `hyprland` + `hyprpaper` are present (hard fail otherwise).
 2. Optionally `pacman -S` / `emerge` / etc. the runtime elements.
-3. Symlink the CLI + module scripts (`dotctl`, `power`, `keybinds`) into
-   `/usr/local/bin/`. The launcher, audio, temp, and workspace modules
-   are not symlinked - they run through dotctl (`dotctl launcher`,
-   `dotctl audio-output`, `dotctl cputemp`, `dotctl ws-cycle`, …).
+3. Symlink `dotctl` and `keybinds` into `/usr/local/bin/`. Every other
+   module (launcher, power, audio, temps, ws-cycle) runs through dotctl
+   (`dotctl launcher`, `dotctl power`, `dotctl audio-output`, …) and is
+   not symlinked.
 4. Optionally symlink the VPN module (`vpnctl`, `vpn-status-indicator`),
    enable the GPU temp block (`dotctl gputemp`), and enable the battery
    module (native waybar `battery` readout for laptops, shown right of
@@ -396,9 +396,10 @@ The VPN module is opt-in at install time. Re-run `install.sh` and pick
 `vpn-status-indicator` from `stage/modules/` onto `PATH`.
 
 **Waybar launcher / power click does nothing.**
-Make sure `power` and `dotctl` are on `PATH`: `command -v power dotctl`.
-They're symlinked into `/usr/local/bin/` by `install.sh`. The launcher
-runs as `dotctl launcher` (try it from a terminal to see any errors).
+Make sure `dotctl` is on `PATH`: `command -v dotctl`. It's symlinked
+into `/usr/local/bin/` by `install.sh`. The menus run as
+`dotctl launcher` / `dotctl power` - try them from a terminal to see
+any errors.
 
 **Man page is stale after updating dotctl.**
 Some older installers dropped an uncompressed `/usr/local/share/man/man1/dotctl.1`

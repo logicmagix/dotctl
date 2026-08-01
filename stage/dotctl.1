@@ -165,6 +165,12 @@ also forces the icon index to be rescanned.
 .B --include-terminal
 lists Terminal=true apps, which are hidden by default.
 .TP
+.B power
+Wofi power menu (poweroff / reboot / logout); the waybar power button's
+on-click target. A second invocation while wofi is up closes it. Detects
+the init system at runtime (systemd, elogind, OpenRC, sysv) and handles
+both legacy and Lua hyprland configs for logout.
+.TP
 .BI "audio\-output " profile
 Route the default sink to an output class and move active streams over.
 .I profile

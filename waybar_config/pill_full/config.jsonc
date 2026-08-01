@@ -40,7 +40,7 @@
   "custom/power": {
     "format": "\uf011",
     "tooltip-format": "Power",
-    "on-click": "power"
+    "on-click": "dotctl power"
   },
   "custom/launcher": {
     // "format": "\ue7e6",  // Gentoo

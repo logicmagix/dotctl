@@ -2329,6 +2329,8 @@ ACTIONS
   launcher [--rebuild] [--include-terminal]
                                    Wofi app launcher (toggles if already open);
                                    --rebuild forces the app/icon cache to refresh
+  power                            Wofi power menu: poweroff/reboot/logout
+                                   (waybar power-button on-click; toggles)
   audio-output <profile>           Route the default sink; profile ∈ {headset,
                                    hdmi, speaker, aux, usb, bluetooth, toggle-mute}
   audio-output-menu                Wofi output picker (waybar on-click; toggles)
@@ -2442,7 +2444,7 @@ main() {
     apply)            cmd_apply "$@";;
     watch)            cmd_watch "$@";;
     launcher)         cmd_launcher "$@";;
-    audio-output|audio-output-menu|audio-output-status|audio-hotplug-watch|cputemp|gputemp|ws-cycle)
+    audio-output|audio-output-menu|audio-output-status|audio-hotplug-watch|cputemp|gputemp|ws-cycle|power)
                       run_module "$action" "$@";;
     help|-h|--help|'') cmd_help;;
     *) die "unknown action \`$action\` - try \`dotctl help\`";;
