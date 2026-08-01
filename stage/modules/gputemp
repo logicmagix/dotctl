@@ -3,7 +3,7 @@
 # Works with NVIDIA (nvidia-smi), AMD (sensors edge/junction), and any chip that
 # exposes a GPU temp via an lm-sensors "GPU" label (e.g. ThinkPad EC on hybrid
 # laptops) or a GPU-named hwmon device.
-# Output: {"text":"GPU Temp: N°C","class":"normal|warning|critical","alt":"...","tooltip":"<gpu model>"}
+# Output: {"text":"GPU: N°C","class":"normal|warning|critical","alt":"...","tooltip":"<gpu model>"}
 
 # True if an NVIDIA GPU is present and runtime-suspended (hybrid/Optimus
 # laptops power the dGPU down to D3 when idle). nvidia-smi wakes the card on
@@ -107,12 +107,12 @@ name="$(gpu_name || true)"
 [[ -n "$name" ]] || name="GPU"
 
 if [[ -z "$temp" ]]; then
-  printf '{"text":"GPU Temp: --","class":"unknown","alt":"unknown","tooltip":"%s"}\n' "$name"
+  printf '{"text":"GPU: --","class":"unknown","alt":"unknown","tooltip":"%s"}\n' "$name"
   exit 0
 fi
 
 if [[ "$temp" == "sleeping" ]]; then
-  printf '{"text":"GPU Temp: zzz","class":"normal","alt":"sleeping","tooltip":"%s (suspended)"}\n' "$name"
+  printf '{"text":"GPU: zzz","class":"normal","alt":"sleeping","tooltip":"%s (suspended)"}\n' "$name"
   exit 0
 fi
 
@@ -121,4 +121,4 @@ elif (( temp < 80 )); then cls="warning"
 else                       cls="critical"
 fi
 
-printf '{"text":"GPU Temp: %d°C","class":"%s","alt":"%s","tooltip":"%s"}\n' "$temp" "$cls" "$cls" "$name"
+printf '{"text":"GPU: %d°C","class":"%s","alt":"%s","tooltip":"%s"}\n' "$temp" "$cls" "$cls" "$name"

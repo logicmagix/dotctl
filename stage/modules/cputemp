@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # waybar-cputemp - print CPU temp + waybar state class (JSON).
-# Output: {"text":"CPU Temp: N°C","class":"normal|warning|critical","alt":"...","tooltip":"<cpu model>"}
+# Output: {"text":"CPU: N°C","class":"normal|warning|critical","alt":"...","tooltip":"<cpu model>"}
 
 labels=('Tctl' 'Tdie' 'CPU Package' 'CPU Composite' 'Package id 0')
 
@@ -45,7 +45,7 @@ fi
 name="$(cpu_name)"
 
 if [[ -z "$val" ]]; then
-  printf '{"text":"CPU Temp: --","class":"unknown","alt":"unknown","tooltip":"%s"}\n' "$name"
+  printf '{"text":"CPU: --","class":"unknown","alt":"unknown","tooltip":"%s"}\n' "$name"
   exit 0
 fi
 
@@ -56,4 +56,4 @@ elif (( t < 80 )); then cls="warning"
 else                    cls="critical"
 fi
 
-printf '{"text":"CPU Temp: %d°C","class":"%s","alt":"%s","tooltip":"%s"}\n' "$t" "$cls" "$cls" "$name"
+printf '{"text":"CPU: %d°C","class":"%s","alt":"%s","tooltip":"%s"}\n' "$t" "$cls" "$cls" "$name"
