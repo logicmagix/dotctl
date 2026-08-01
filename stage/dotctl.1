@@ -1,4 +1,4 @@
-.TH DOTCTL 1 "April 2026" "dotctl 1.0" "User Commands"
+.TH DOTCTL 1 "August 2026" "dotctl 1.1" "User Commands"
 .SH NAME
 dotctl \- unified theme controller for cava, kitty, mako, wofi, waybar, hyprland, hyprpaper
 .SH SYNOPSIS
@@ -112,11 +112,14 @@ drop in new wallpaper collections without code changes.
 .B "dotctl scan"
 can auto-generate those scripts from existing directories.
 .SH COMMANDS
-Every command below accepts
+Every theme command below accepts
 .B \-h
 or
 .B \-\-help
-for detailed usage.
+for detailed usage. The module commands
+.RB ( launcher ", " power ", " audio\-* ", " cputemp ", " gputemp ", "
+.BR ws\-cycle ", " vpn )
+forward their arguments to the underlying script verbatim.
 .TP
 .BI "configure [--preset " name ]
 Interactive wizard that walks every element in turn, offering numbered choices
@@ -457,15 +460,12 @@ variants; has no effect on
 variants.
 .TP
 .BI "--waybar-gpu " on|off
-Toggle the waybar GPU temp module. When
-.BR on ,
-.B gputemp
-must be available on
-.B PATH
-(the install-time opt-in symlink). The block is only rendered when both the
-state key is
+Toggle the waybar GPU temp module. The gputemp script ships with dotctl
+and runs as
+.B dotctl gputemp
+(nothing on PATH); the block is rendered when the state key is
 .B on
-and the binary resolves, so removing the symlink also hides the module.
+and the module script exists next to the real dotctl.
 .TP
 .BI "--waybar-vpn " on|off
 Toggle the waybar VPN module. When
@@ -718,7 +718,7 @@ variants, env overrides).
 .SH FILES
 .TP
 .I ~/.config/dotctl/config
-24-field
+27-field
 .B KEY=value
 state file, hand-editable, flock-guarded on writes. Regenerate with
 .BR "dotctl configure" .

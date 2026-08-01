@@ -26,7 +26,7 @@ dotctl cycle wallpaper next        # keybind entry point
 | **hypr**      |   ✓   |      |      | window effect (shadow/glow)                                   |
 | **wallpaper** |   ✓   |      |      | cycle script per theme                                        |
 
-Everything lives in one 24-field, hand-editable state file at
+Everything lives in one 27-field, hand-editable state file at
 `~/.config/dotctl/config`. `dotctl configure` walks a wizard through
 every axis; `dotctl set` takes targeted flags; `dotctl apply` re-reads
 the file after a hand edit; `dotctl watch` auto-applies on save.

@@ -2330,6 +2330,8 @@ dotctl - unified theme controller for cava, kitty, mako, wofi, waybar, hyprland,
 USAGE
   dotctl <action> [args...]
   dotctl <action> -h|--help    Detailed help for a single action
+                               (module actions like power/cputemp/ws-cycle
+                               forward all args to their script verbatim)
 
 ACTIONS
   configure [--preset NAME]        Interactive wizard (required first run)
@@ -2394,7 +2396,7 @@ QUICK REFERENCE
   dotctl new wallpaper forest      Scaffold one new wallpaper theme by hand
 
 STATE
-  ~/.config/dotctl/config       23-field KEY=value, hand-editable, flock-guarded
+  ~/.config/dotctl/config       27-field KEY=value, hand-editable, flock-guarded
   ~/.config/dotctl/presets/     Saved presets (one .conf per preset)
   ~/.config/dotctl/cycle/       cycle-hyprpaper-<theme> scripts + _cycle-hyprpaper.template
   ~/.cache/dotctl/lock          Runtime lockfile
