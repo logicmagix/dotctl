@@ -469,6 +469,25 @@ strip_waybar_marker VPN "$WANT_VPN"
 strip_waybar_marker GPU "$WANT_GPU"
 strip_waybar_marker BATTERY "$WANT_BATTERY"
 
+# The dotctl state file is the final authority on module blocks: every
+# `dotctl apply` (including the one just below) regenerates the active bar
+# from it. An install-time opt-in that disagrees with stale state would be
+# silently undone seconds later - the classic symptom is answering yes to
+# the GPU prompt and watching the module vanish anyway because an old
+# WAYBAR_GPU=off is still in the state file. Sync the three axes to the
+# answers just given.
+if [[ -f "$CONFIG_HOME/dotctl/config" ]]; then
+  sync_state_axis() {
+    local key="$1" want="$2" val=off
+    (( want == 1 )) && val=on
+    grep -q "^${key}=" "$CONFIG_HOME/dotctl/config" &&
+      sed -i "s/^${key}=.*/${key}=${val}/" "$CONFIG_HOME/dotctl/config"
+  }
+  sync_state_axis WAYBAR_VPN     "$WANT_VPN"
+  sync_state_axis WAYBAR_GPU     "$WANT_GPU"
+  sync_state_axis WAYBAR_BATTERY "$WANT_BATTERY"
+fi
+
 # Regenerate the active ~/.config/waybar/{config.jsonc,style.css} from the
 # user's chosen variant. apply_waybar reads from the variant subdir we just
 # stripped, re-injects the active palette + font, and lands a clean active

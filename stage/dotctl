@@ -453,10 +453,12 @@ waybar_vpn_available() {
   command -v vpnctl >/dev/null 2>&1 && command -v vpn-status-indicator >/dev/null 2>&1
 }
 validate_waybar_gpu()           { _in_list "$1" on off; }
-# Is the GPU temp module actually usable? gputemp must be resolvable (opt-in
-# symlink at install time).
+# Is the GPU temp module actually usable? gputemp ships in modules/ next to
+# the real dotctl and runs as `dotctl gputemp` - check the file, not PATH.
 waybar_gpu_available() {
-  command -v gputemp >/dev/null 2>&1
+  local self_dir
+  self_dir=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
+  [[ -x "$self_dir/modules/gputemp" ]]
 }
 validate_waybar_battery()       { _in_list "$1" on off; }
 # Is the battery module actually meaningful? Only on machines that expose a
@@ -615,13 +617,13 @@ apply_waybar() {
   done
 
   # GPU gate: same pattern, but doubly gated - WAYBAR_GPU must be `on` AND
-  # `gputemp` must be on PATH (opt-in symlink; uninstall relies on the binary
-  # check to strip the block after unlink). The style.css canonical form has
+  # the gputemp module must exist next to the real dotctl (it runs as
+  # `dotctl gputemp`, not from PATH). The style.css canonical form has
   # rarrow6's bg=transparent as the default with an /* GPU:BEGIN */-wrapped
   # override to @olive, so stripping the GPU block automatically leaves
   # rarrow6 as the transparent end-cap (no separate sed-repaint needed).
   local _gpu_on=0
-  [[ "$WAYBAR_GPU" == "on" ]] && command -v gputemp >/dev/null 2>&1 && _gpu_on=1
+  [[ "$WAYBAR_GPU" == "on" ]] && waybar_gpu_available && _gpu_on=1
   for _f in "$WAYBAR_DIR/config.jsonc" "$WAYBAR_DIR/style.css"; do
     awk -v keep="$_gpu_on" '
       /\/\* GPU:BEGIN/ { if (keep != 1) { skip = 1; next } }
