@@ -53,14 +53,16 @@ This script will:
   1. Verify hyprland + hyprpaper are installed (hard requirement)
   2. Optionally install runtime packages (waybar, cava, kitty, mako, wofi,
      lm-sensors, libnotify, pavucontrol, …)
-  3. Symlink ${BOLD}$SYS_BIN/${RST}{dotctl, power, launcher, cputemp,
-     ws-cycle, audio-output, audio-output-menu, audio-output-status,
-     audio-hotplug-watch, keybinds} → repo
+  3. Symlink ${BOLD}$SYS_BIN/${RST}{dotctl, keybinds} → repo (every other module -
+     launcher, power, audio-*, cputemp, gputemp, ws-cycle - runs through
+     dotctl and is not symlinked)
   4. Optionally symlink ${BOLD}$SYS_BIN/${RST}{vpnctl, vpn-status-indicator} → repo
-  4a. Optionally symlink ${BOLD}$SYS_BIN/gputemp${RST} → repo (skip on machines
-      without a discrete GPU - the waybar module stays authored either way)
+  4a. Optionally enable the ${BOLD}GPU temp module${RST} (skip on machines without
+      a discrete GPU - runs as \`dotctl gputemp\`, nothing to symlink)
   4b. Optionally enable the ${BOLD}battery module${RST} (laptop charge % in waybar,
       to the right of audio - native waybar module, no binary to symlink)
+  4c. Choose whether the ${BOLD}power${RST} and ${BOLD}launcher${RST} buttons stay in the bar
+      (console chevrons re-seam automatically either way)
   5. Copy ${BOLD}~/.config/${RST}{cava, kitty, mako, wofi, waybar} from repo config dirs
      (conflicting files are renamed to ${BOLD}<file>.bak-<timestamp>${RST} in place;
      user-added files and untouched files are left alone - no whole-directory
@@ -306,6 +308,22 @@ if confirm "Install the optional battery module (laptop charge % in waybar)?" "$
   WANT_BATTERY=1
 fi
 
+# ── Gate: power / launcher buttons (opt-out) ────────────────────────────────
+# Both scripts always ship with dotctl (`dotctl power` / `dotctl launcher`);
+# these gates only decide whether the waybar buttons stay in the copied
+# configs. Chevron seams are authored in the CSS with per-block overrides,
+# so any on/off combination keeps matching colors.
+
+WANT_POWER=0
+if confirm "Enable the waybar power button (wofi poweroff/reboot/logout menu)?" y; then
+  WANT_POWER=1
+fi
+
+WANT_LAUNCHER=0
+if confirm "Enable the waybar launcher button (distro logo, opens the app launcher)?" y; then
+  WANT_LAUNCHER=1
+fi
+
 # ── Sudo tick ───────────────────────────────────────────────────────────────
 
 if [[ $EUID -ne 0 ]]; then
@@ -468,6 +486,8 @@ strip_waybar_marker() {
 strip_waybar_marker VPN "$WANT_VPN"
 strip_waybar_marker GPU "$WANT_GPU"
 strip_waybar_marker BATTERY "$WANT_BATTERY"
+strip_waybar_marker POWER "$WANT_POWER"
+strip_waybar_marker LAUNCHER "$WANT_LAUNCHER"
 
 # The dotctl state file is the final authority on module blocks: every
 # `dotctl apply` (including the one just below) regenerates the active bar
@@ -483,9 +503,11 @@ if [[ -f "$CONFIG_HOME/dotctl/config" ]]; then
     grep -q "^${key}=" "$CONFIG_HOME/dotctl/config" &&
       sed -i "s/^${key}=.*/${key}=${val}/" "$CONFIG_HOME/dotctl/config"
   }
-  sync_state_axis WAYBAR_VPN     "$WANT_VPN"
-  sync_state_axis WAYBAR_GPU     "$WANT_GPU"
-  sync_state_axis WAYBAR_BATTERY "$WANT_BATTERY"
+  sync_state_axis WAYBAR_VPN      "$WANT_VPN"
+  sync_state_axis WAYBAR_GPU      "$WANT_GPU"
+  sync_state_axis WAYBAR_BATTERY  "$WANT_BATTERY"
+  sync_state_axis WAYBAR_POWER    "$WANT_POWER"
+  sync_state_axis WAYBAR_LAUNCHER "$WANT_LAUNCHER"
 fi
 
 # Regenerate the active ~/.config/waybar/{config.jsonc,style.css} from the

@@ -160,6 +160,7 @@ tooltip {
    power  launcher  workspaces  cpu  cputemp  memory  gpu  (end)
    =================================================================== */
 
+/* POWER:BEGIN */
 /* Power button (far left) */
 #custom-power {
   background: @red;
@@ -169,7 +170,9 @@ tooltip {
   padding-left: 11px;
   padding-right: 11px;
 }
+/* POWER:END */
 
+/* LAUNCHER:BEGIN */
 /* App launcher */
 #custom-launcher {
   background: @teal;
@@ -179,6 +182,7 @@ tooltip {
   padding-left: 11px;
   padding-right: 11px;
 }
+/* LAUNCHER:END */
 
 /* Workspaces */
 #workspaces {
@@ -247,8 +251,11 @@ tooltip {
 /* GPU:END */
 
 /* Left-side chevrons () - each bridges two adjacent blocks */
-#custom-rarrow1  { color: @red;   background: @teal;       } /* power  launcher       */
+#custom-rarrow1  { color: @red;   background: @plum;       } /* power -> workspaces (end-cap when launcher absent) */
+/* LAUNCHER:BEGIN */
+#custom-rarrow1  { color: @red;   background: @teal;       } /* power -> launcher (override when launcher present) */
 #custom-rarrow2  { color: @teal;  background: @plum;       } /* launcher  workspace area  */
+/* LAUNCHER:END */
 #custom-rarrow3  { color: @plum;  background: @lime;       } /* workspace area  cpu       */
 #custom-rarrow4  { color: @lime;  background: @olive;      } /* cpu  cputemp              */
 #custom-rarrow5  { color: @olive; background: @mint;       } /* cputemp  memory           */
@@ -352,8 +359,12 @@ tooltip {
    and smooth color fading.
    =================================================================== */
 
+/* POWER:BEGIN */
 #custom-rarrow1,
+/* POWER:END */
+/* LAUNCHER:BEGIN */
 #custom-rarrow2,
+/* LAUNCHER:END */
 #custom-rarrow3,
 #custom-rarrow4,
 #custom-rarrow5,
@@ -392,8 +403,12 @@ tooltip {
    =================================================================== */
 
 /* Transition setup for interactive modules */
+/* POWER:BEGIN */
 #custom-power,
+/* POWER:END */
+/* LAUNCHER:BEGIN */
 #custom-launcher,
+/* LAUNCHER:END */
 /* NOTE: gpu / cputemp intentionally NOT here */
 #custom-terminal,
 #custom-files,
@@ -406,8 +421,12 @@ tooltip {
 }
 
 /* Left-side hover */
+/* POWER:BEGIN */
 #custom-power:hover { background: shade(@red,  1.22); }
+/* POWER:END */
+/* LAUNCHER:BEGIN */
 #custom-launcher:hover   { background: shade(@teal, 1.22); }
+/* LAUNCHER:END */
 
 /* Right-side app launcher hover (block + its chevron brighten together) */
 #custom-terminal:hover,

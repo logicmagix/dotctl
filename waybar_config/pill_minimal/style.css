@@ -84,8 +84,12 @@ tooltip {
    BUBBLE BASE - outlined pill, dark interior, accent border
    =================================================================== */
 
+/* POWER:BEGIN */
 #custom-power,
+/* POWER:END */
+/* LAUNCHER:BEGIN */
 #custom-launcher,
+/* LAUNCHER:END */
 #workspaces,
 #cpu,
 #custom-cputemp,
@@ -135,6 +139,7 @@ tooltip {
    LEFT SIDE
    =================================================================== */
 
+/* POWER:BEGIN */
 #custom-power {
   background: @bg1;
   color: @red;
@@ -142,7 +147,9 @@ tooltip {
   font-size: 1.07em;   /* power - scales with base font */
   padding: 0 11px;
 }
+/* POWER:END */
 
+/* LAUNCHER:BEGIN */
 #custom-launcher {
   background: @bg1;
   color: @teal;
@@ -150,6 +157,7 @@ tooltip {
   font-size: 1.2em;   /* system logo - scales with base font */
   padding: 0 11px;
 }
+/* LAUNCHER:END */
 
 /* Workspaces */
 #workspaces {
@@ -293,8 +301,12 @@ tooltip {
    HOVER - fill the bubble with its accent color
    =================================================================== */
 
+/* POWER:BEGIN */
 #custom-power:hover   { background: @red;   color: @hover_fg; }
+/* POWER:END */
+/* LAUNCHER:BEGIN */
 #custom-launcher:hover    { background: @teal;  color: @hover_fg; }
+/* LAUNCHER:END */
 #custom-terminal:hover       { background: @cyan;  color: @hover_fg; }
 #custom-files:hover       { background: @blue;  color: @hover_fg; }
 #custom-editor:hover       { background: @olive; color: @hover_fg; }

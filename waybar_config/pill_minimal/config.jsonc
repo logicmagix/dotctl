@@ -5,8 +5,12 @@
   "exclusive": true,
   // LEFT
   "modules-left": [
+    /* POWER:BEGIN */
     "custom/power",
+    /* POWER:END */
+    /* LAUNCHER:BEGIN */
     "custom/launcher",
+    /* LAUNCHER:END */
     "hyprland/workspaces"
   ],
   // CENTER
@@ -28,11 +32,14 @@
     /* BATTERY:END */
   ],
   // ===== Modules =====
+  /* POWER:BEGIN */
   "custom/power": {
     "format": "\uf011",
     "tooltip-format": "Power",
     "on-click": "dotctl power"
   },
+  /* POWER:END */
+  /* LAUNCHER:BEGIN */
   "custom/launcher": {
     // "format": "\ue7e6",  // Gentoo
     // "format": "\uf303",  // Arch Linux
@@ -42,6 +49,7 @@
     "tooltip-format": "Launcher",
     "on-click": "dotctl launcher"
   },
+  /* LAUNCHER:END */
   "custom/browser": {
     "format": "Browser",
     "tooltip-format": "Web Browser",

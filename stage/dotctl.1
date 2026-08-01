@@ -62,7 +62,8 @@ or
 .BR round ,
 console-only),
 GPU temp module toggle, VPN module toggle, battery module toggle (laptop
-charge %, right of audio), transparent-bar toggle, explicit bar opacity
+charge %, right of audio), power button toggle, launcher button toggle,
+transparent-bar toggle, explicit bar opacity
 (used when
 transparent is off), and launcher logo (the distro glyph in the
 .B custom/launcher
@@ -78,7 +79,8 @@ block, the palette is injected into the
 .B @define-color
 block on every apply, the launcher glyph is rewritten inside the
 .B custom/launcher
-block, and the VPN and battery modules are stripped from both files when
+block, and the VPN, GPU, battery, power, and launcher modules are stripped
+from both files when
 disabled. Reloaded
 with
 .BR "pkill -SIGUSR2 waybar" .
@@ -298,6 +300,8 @@ List valid values for one axis. Axes:
 .BR waybar-gpus ,
 .BR waybar-vpns ,
 .BR waybar-batteries ,
+.BR waybar-powers ,
+.BR waybar-launchers ,
 .BR waybar-transparents ,
 .BR waybar-opacities ,
 .BR hypr-effects ,
@@ -499,6 +503,24 @@ the battery block is stripped from both
 and
 .IR style.css
 on apply.
+.TP
+.BI "--waybar-power " on|off
+Toggle the waybar power button (wofi poweroff/reboot/logout menu, far left;
+clicks run
+.BR "dotctl power" ).
+The script always ships with dotctl - this only controls the bar block.
+Console-style chevrons re-seam automatically: the seam colors are authored
+as a base rule plus marker-wrapped overrides, so any power/launcher
+combination keeps matching colors.
+.TP
+.BI "--waybar-launcher " on|off
+Toggle the waybar launcher button (the distro-glyph block that opens
+.BR "dotctl launcher" ).
+Same chevron re-seaming as
+.BR --waybar-power ;
+when off, the
+.B --launcher-logo
+axis is retained but has no visible effect.
 .TP
 .BI "--waybar-transparent " on|off
 Waybar bar background.
@@ -718,7 +740,7 @@ variants, env overrides).
 .SH FILES
 .TP
 .I ~/.config/dotctl/config
-27-field
+29-field
 .B KEY=value
 state file, hand-editable, flock-guarded on writes. Regenerate with
 .BR "dotctl configure" .
