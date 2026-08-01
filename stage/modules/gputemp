@@ -61,6 +61,15 @@ pick_temp() {
     if nvidia_suspended; then
       printf 'sleeping\n'; return 0
     fi
+    # Card awake but no client of ours has it open (boot init, driver probe,
+    # leftover wake): calling nvidia-smi here would reset the autosuspend
+    # timer every poll and the card could NEVER doze off — the exact
+    # keep-awake trap the suspended-check above tries to prevent. Report it
+    # as sleeping-bound and let it reach D3; temps resume when a real
+    # client (game) holds the device.
+    if ! fuser -s /dev/nvidiactl 2>/dev/null; then
+      printf 'sleeping\n'; return 0
+    fi
     t=$(nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader,nounits 2>/dev/null | head -n1 | tr -d '[:space:]')
     [[ -n "$t" && "$t" =~ ^[0-9]+$ ]] && { printf '%s\n' "$t"; return 0; }
   fi
