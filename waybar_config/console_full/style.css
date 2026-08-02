@@ -303,6 +303,8 @@ tooltip {
 #custom-vram {
   background: @mint;
   color: @black;
+  padding-left: 13px;   /* same breathing room as cputemp/gpu after a chevron tip */
+  padding-right: 11px;
 }
 /* VRAM:END */
 
