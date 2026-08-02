@@ -80,6 +80,14 @@
   -gtk-icon-shadow: none;
 }
 
+/* Waybar copies module state classes (warning/critical/...) onto the inner
+   label node too, and the GTK system theme paints label.warning with its
+   own colors - visible as an off-palette box behind the text. All state
+   colors here are authored on the module nodes, so keep labels clear. */
+label {
+  background: none;
+}
+
 /* -- Tooltips ----------------------------------------------------- */
 tooltip {
   font-size: 14px;
@@ -124,7 +132,9 @@ tooltip {
 }
 
 /* -- Warning States ----------------------------------------------- */
-/* Text-only so flanking chevrons keep their authored bg colors. */
+/* Text-only so flanking chevrons keep their authored bg colors.
+   The temp blocks (cputemp / gpu) are the exception: they repaint the
+   whole block and their chevrons follow - see the thermal rules below. */
 #network.disconnected,
 /* RAM:BEGIN */
 #memory.warning,
@@ -132,12 +142,6 @@ tooltip {
 /* CPU:BEGIN */
 #cpu.warning,
 /* CPU:END */
-/* CPUTEMP:BEGIN */
-#custom-cputemp.warning,
-/* CPUTEMP:END */
-/* GPU:BEGIN */
-#custom-gpu.warning,
-/* GPU:END */
 /* VRAM:BEGIN */
 #custom-vram.warning,
 /* VRAM:END */
@@ -154,12 +158,6 @@ tooltip {
 /* CPU:BEGIN */
 #cpu.critical,
 /* CPU:END */
-/* CPUTEMP:BEGIN */
-#custom-cputemp.critical,
-/* CPUTEMP:END */
-/* GPU:BEGIN */
-#custom-gpu.critical,
-/* GPU:END */
 /* VRAM:BEGIN */
 #custom-vram.critical,
 /* VRAM:END */
@@ -259,6 +257,18 @@ tooltip {
   color: @white;
   padding-left: 13px;
   padding-right: 11px;
+  transition: background-color 0.18s ease-out, color 0.18s ease-out;
+}
+/* Warm states repaint the whole block so the reading stays legible.
+   No blink: the flanking chevrons poll on their own schedule, so a bg
+   animation could never stay in phase with them. */
+#custom-cputemp.warning {
+  background: @warning;
+  color: @black;
+}
+#custom-cputemp.critical {
+  background: @critical;
+  color: @hover_fg;
 }
 /* CPUTEMP:END */
 
@@ -277,6 +287,15 @@ tooltip {
   color: @white;
   padding-left: 13px;
   padding-right: 11px;
+  transition: background-color 0.18s ease-out, color 0.18s ease-out;
+}
+#custom-gpu.warning {
+  background: @warning;
+  color: @black;
+}
+#custom-gpu.critical {
+  background: @critical;
+  color: @hover_fg;
 }
 /* GPU:END */
 
@@ -345,6 +364,25 @@ tooltip {
 #custom-rarrow7  { color: @olive; background: @mint;       } /* gpu -> vram (override when vram enabled) */
 #custom-rarrow8  { color: @mint;  background: transparent; } /* vram -> bar background */
 /* VRAM:END */
+
+/* Thermal-state chevrons. A chevron flanking a temp block execs
+   `dotctl thermal-sep` (config-side override), which republishes the
+   neighbor states as prefixed classes: in-* is the block the chevron leads
+   into (its bg), out-* the block it leads out of (its glyph). Done with
+   exec rather than selectors because GTK CSS has no previous-sibling
+   selector and waybar/GTK ignores `~`. */
+#custom-rarrow3.in-warning,
+#custom-rarrow4.in-warning,
+#custom-rarrow5.in-warning,
+#custom-rarrow6.in-warning  { background: @warning; }
+#custom-rarrow3.in-critical,
+#custom-rarrow4.in-critical,
+#custom-rarrow5.in-critical,
+#custom-rarrow6.in-critical { background: @critical; }
+#custom-rarrow5.out-warning,
+#custom-rarrow7.out-warning  { color: @warning; }
+#custom-rarrow5.out-critical,
+#custom-rarrow7.out-critical { color: @critical; }
 
 /* ===================================================================
    CENTER - clock with decorative bookend arrows

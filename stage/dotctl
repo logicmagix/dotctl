@@ -2492,6 +2492,8 @@ ACTIONS
                                    runtime-suspended dGPU (reports zzz)
   vram                             Waybar JSON: GPU VRAM used/total (same
                                    never-wake rules as gputemp)
+  thermal-sep [--out M] [--in M]   Waybar JSON: chevron state bridge; emits
+                                   out-*/in-* classes for M ∈ {cputemp, gputemp}
   ws-cycle <next|prev> [min max]   Step hyprland workspaces with wraparound
                                    (waybar workspace-arrow on-click)
   vpn [cmd...]                     Pass through to vpnctl (opt-in VPN module;
@@ -2606,7 +2608,7 @@ main() {
     apply)            cmd_apply "$@";;
     watch)            cmd_watch "$@";;
     launcher)         cmd_launcher "$@";;
-    audio-output|audio-output-menu|audio-output-status|audio-hotplug-watch|cputemp|gputemp|vram|ws-cycle|power)
+    audio-output|audio-output-menu|audio-output-status|audio-hotplug-watch|cputemp|gputemp|vram|thermal-sep|ws-cycle|power)
                       run_module "$action" "$@";;
     vpn)              cmd_vpn "$@";;
     help|-h|--help|'') cmd_help;;

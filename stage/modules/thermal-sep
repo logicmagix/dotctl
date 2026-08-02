@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# waybar-thermal-sep - state bridge for a chevron between waybar blocks.
+# A chevron glyph is painted in the color of the block it leads OUT of and
+# sits on the background of the block it leads INTO. GTK CSS has no
+# previous-sibling selector and waybar/GTK ignores `~`, so a chevron next to
+# a thermal block polls that block's state itself and republishes it as
+# prefixed waybar classes for style.css to color on:
+#   thermal-sep [--out cputemp|gputemp] [--in cputemp|gputemp]
+# Output: {"text":"","class":["out-warning","in-normal"]}
+
+dir=$(dirname "$(readlink -f "$0")")
+out="" inn=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --out) out="$2";  shift 2;;
+    --in)  inn="$2";  shift 2;;
+    *)     shift;;
+  esac
+done
+
+state() { # <module> -> normal|warning|critical|unknown
+  local s
+  s=$("$dir/$1" 2>/dev/null | sed -n 's/.*"class":"\([^"]*\)".*/\1/p')
+  printf '%s' "${s:-unknown}"
+}
+
+cls=""
+[[ -n "$out" ]] && cls="\"out-$(state "$out")\""
+[[ -n "$inn" ]] && cls="${cls:+$cls,}\"in-$(state "$inn")\""
+
+printf '{"text":"","class":[%s]}\n' "$cls"

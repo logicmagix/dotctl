@@ -349,7 +349,7 @@ sys_link "$STAGE/dotctl" "$SYS_BIN/dotctl"
 for m in "$STAGE"/modules/*; do
   name="$(basename "$m")"
   case "$name" in
-    launcher|audio-output|audio-output-menu|audio-output-status|audio-hotplug-watch|cputemp|gputemp|ws-cycle|power)
+    launcher|audio-output|audio-output-menu|audio-output-status|audio-hotplug-watch|cputemp|gputemp|thermal-sep|ws-cycle|power)
       # Older installs symlinked these onto PATH; remove ours so the
       # standalone names stop resolving. Foreign files are left alone.
       # (WANT_GPU no longer gates a gputemp symlink - it only controls

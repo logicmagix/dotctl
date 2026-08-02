@@ -62,11 +62,49 @@
   // ===== Separators (pointed chevrons - swapped to half-circles when WAYBAR_DECOR=round) =====
   "custom/rarrow1":        { "format": "\ue0b0", "tooltip": false },
   "custom/rarrow2":        { "format": "\ue0b0", "tooltip": false },
+  // Chevrons flanking a thermal block exec `dotctl thermal-sep`, which
+  // republishes the neighbor states as prefixed classes (out-* = block the
+  // glyph leads out of, in-* = block it leads into) so style.css can repaint
+  // glyph and bg to match - GTK CSS has no previous-sibling selector and
+  // waybar/GTK ignores `~`. Duplicate keys resolve last-wins (same trick as
+  // rsep-pulse), ordered furthest-module-first like the rules in style.css.
   "custom/rarrow3":        { "format": "\ue0b0", "tooltip": false },
+  /* GPU:BEGIN */
+  "custom/rarrow3":        { "exec": "dotctl thermal-sep --in gputemp", "interval": 2, "return-type": "json", "format": "\ue0b0", "tooltip": false },
+  /* GPU:END */
+  /* RAM:BEGIN */
+  "custom/rarrow3":        { "format": "\ue0b0", "tooltip": false },
+  /* RAM:END */
+  /* CPUTEMP:BEGIN */
+  "custom/rarrow3":        { "exec": "dotctl thermal-sep --in cputemp", "interval": 3, "return-type": "json", "format": "\ue0b0", "tooltip": false },
+  /* CPUTEMP:END */
+  /* CPU:BEGIN */
+  "custom/rarrow3":        { "format": "\ue0b0", "tooltip": false },
+  /* CPU:END */
   "custom/rarrow4":        { "format": "\ue0b0", "tooltip": false },
-  "custom/rarrow5":        { "format": "\ue0b0", "tooltip": false },
+  /* GPU:BEGIN */
+  "custom/rarrow4":        { "exec": "dotctl thermal-sep --in gputemp", "interval": 2, "return-type": "json", "format": "\ue0b0", "tooltip": false },
+  /* GPU:END */
+  /* RAM:BEGIN */
+  "custom/rarrow4":        { "format": "\ue0b0", "tooltip": false },
+  /* RAM:END */
+  /* CPUTEMP:BEGIN */
+  "custom/rarrow4":        { "exec": "dotctl thermal-sep --in cputemp", "interval": 3, "return-type": "json", "format": "\ue0b0", "tooltip": false },
+  /* CPUTEMP:END */
+  /* CPUTEMP:BEGIN */
+  "custom/rarrow5":        { "exec": "dotctl thermal-sep --out cputemp", "interval": 3, "return-type": "json", "format": "\ue0b0", "tooltip": false },
+  /* GPU:BEGIN */
+  "custom/rarrow5":        { "exec": "dotctl thermal-sep --out cputemp --in gputemp", "interval": 2, "return-type": "json", "format": "\ue0b0", "tooltip": false },
+  /* GPU:END */
+  /* RAM:BEGIN */
+  "custom/rarrow5":        { "exec": "dotctl thermal-sep --out cputemp", "interval": 3, "return-type": "json", "format": "\ue0b0", "tooltip": false },
+  /* RAM:END */
+  /* CPUTEMP:END */
   "custom/rarrow6":        { "format": "\ue0b0", "tooltip": false },
-  "custom/rarrow7":        { "format": "\ue0b0", "tooltip": false },
+  /* GPU:BEGIN */
+  "custom/rarrow6":        { "exec": "dotctl thermal-sep --in gputemp", "interval": 2, "return-type": "json", "format": "\ue0b0", "tooltip": false },
+  "custom/rarrow7":        { "exec": "dotctl thermal-sep --out gputemp", "interval": 2, "return-type": "json", "format": "\ue0b0", "tooltip": false },
+  /* GPU:END */
   "custom/rarrow8":        { "format": "\ue0b0", "tooltip": false },
   "custom/rarrow-center-l": {
     "format": "\ue0b2",

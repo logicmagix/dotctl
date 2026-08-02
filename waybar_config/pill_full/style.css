@@ -62,6 +62,14 @@
   -gtk-icon-shadow: none;
 }
 
+/* Waybar copies module state classes (warning/critical/...) onto the inner
+   label node too, and the GTK system theme paints label.warning with its
+   own colors - visible as an off-palette box behind the text. All state
+   colors here are authored on the module nodes, so keep labels clear. */
+label {
+  background: none;
+}
+
 /* -- Tooltips ----------------------------------------------------- */
 tooltip {
   font-size: 14px;
