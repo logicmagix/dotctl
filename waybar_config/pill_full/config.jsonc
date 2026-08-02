@@ -110,6 +110,7 @@
   "custom/vpn": {
     "exec": "vpn-status-indicator",
     "interval": 5,
+    "signal": 9,
     "return-type": "json",
     "format": "{}",
     "on-click": "vpnctl menu"

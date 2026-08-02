@@ -293,10 +293,11 @@ tooltip {
 /* AUDIO:END */
 
 /* VPN:BEGIN - stripped when WAYBAR_VPN=off */
+/* State colors snap - no transition, so no mid-animation frame can strand
+   a stale seam line at fractional display scales. */
 #custom-vpn {
   padding-left: 11px;
   padding-right: 11px;
-  transition: background-color 0.18s ease-out, color 0.18s ease-out;
 }
 #custom-vpn.on              { background: @green; color: @hover_fg; }
 #custom-vpn.on.killswitch   { background: @mint;  color: @black;    }
@@ -362,9 +363,8 @@ tooltip {
   padding-top: 0px;
   padding-bottom: 0px;
   min-height: 1.22em;
-  transition-property: background-color, color;
-  transition-duration: 0.18s;
-  transition-timing-function: ease-out;
+  /* no color transitions: chevron state colors snap so no mid-animation
+     frame can strand a stale seam line at fractional display scales */
 }
 
 /* ===================================================================

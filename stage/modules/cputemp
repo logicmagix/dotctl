@@ -4,6 +4,20 @@
 
 labels=('Tctl' 'Tdie' 'CPU Package' 'CPU Composite' 'Package id 0')
 
+# The flanking chevrons render this module's state but only re-exec on
+# RTMIN+8 ("interval": "once" in the waybar config), so nudge them the
+# moment the class flips - polling on separate timers left the block and
+# its chevrons flipping up to an interval apart. First run only seeds the
+# cache: signaling would re-exec every startup poller for nothing.
+notify_state_change() { # <class>
+  local f="${XDG_RUNTIME_DIR:-/tmp}/dotctl-cputemp.class" prev=""
+  [[ -r "$f" ]] && prev=$(<"$f")
+  [[ "$1" == "$prev" ]] && return 0
+  printf '%s' "$1" > "$f" 2>/dev/null || return 0
+  [[ -n "$prev" ]] && pkill -RTMIN+8 -x waybar 2>/dev/null
+  return 0
+}
+
 # CPU model name for the tooltip; & escaped for waybar's Pango markup.
 cpu_name() {
   local n
@@ -45,6 +59,7 @@ fi
 name="$(cpu_name)"
 
 if [[ -z "$val" ]]; then
+  notify_state_change unknown
   printf '{"text":"CPU: --","class":"unknown","alt":"unknown","tooltip":"%s"}\n' "$name"
   exit 0
 fi
@@ -56,4 +71,5 @@ elif (( t < 80 )); then cls="warning"
 else                    cls="critical"
 fi
 
+notify_state_change "$cls"
 printf '{"text":"CPU: %d°C","class":"%s","alt":"%s","tooltip":"%s"}\n' "$t" "$cls" "$cls" "$name"

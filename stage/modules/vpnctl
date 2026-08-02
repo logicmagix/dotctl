@@ -14,6 +14,14 @@ else
   SUDO=""
 fi
 
+# Refresh the waybar VPN block + separators right after a state change
+# instead of waiting out their poll interval. RTMIN+9 re-execs every
+# module wired with "signal": 9 in the waybar config.
+nudge_waybar() {
+  pkill -RTMIN+9 -x waybar 2>/dev/null
+  return 0
+}
+
 usage() {
   cat <<USAGE
 Usage: vpnctl <command> [args...]
@@ -100,6 +108,7 @@ vpn_on() {
 
   sleep 3
   vpn_status
+  nudge_waybar
 }
 
 vpn_up() {
@@ -133,6 +142,8 @@ vpn_off() {
     $SUDO rm -f "$PIDFILE"
   fi
   $SUDO pkill openvpn 2>/dev/null || true
+  sleep 1   # let tun0 tear down before the indicator re-reads it
+  nudge_waybar
 }
 
 vpn_list() {
@@ -219,6 +230,7 @@ killswitch_on() {
     fi
 
     echo "Killswitch enabled."
+    nudge_waybar
 }
 
 killswitch_off() {
@@ -237,6 +249,7 @@ killswitch_off() {
     fi
 
     echo "Killswitch disabled."
+    nudge_waybar
 }
 
 killswitch_status() {

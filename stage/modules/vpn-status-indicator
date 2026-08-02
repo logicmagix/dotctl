@@ -31,6 +31,20 @@ fi
 classes="$state"
 [[ "$ks" == "true" ]] && classes="$classes killswitch"
 
+# The VPN separators render this state but only re-exec on RTMIN+9
+# ("interval": "once" in the waybar config), so nudge them the moment the
+# class flips - polling on separate timers left the vpn block and its
+# separators flipping up to an interval apart. First run only seeds the
+# cache: signaling would re-exec every startup poller for nothing.
+state_file="${XDG_RUNTIME_DIR:-/tmp}/dotctl-vpn.class"
+prev=""
+[[ -r "$state_file" ]] && prev=$(<"$state_file")
+if [[ "$classes" != "$prev" ]]; then
+  if printf '%s' "$classes" > "$state_file" 2>/dev/null; then
+    [[ -n "$prev" ]] && pkill -RTMIN+9 -x waybar 2>/dev/null
+  fi
+fi
+
 # Icons as JSON \uXXXX escapes (waybar parses this output as JSON) - literal
 # PUA glyphs are invisible in editors and get silently dropped by tooling.
 if [[ "$state" == "on" ]]; then

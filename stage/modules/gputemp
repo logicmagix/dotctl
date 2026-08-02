@@ -5,6 +5,20 @@
 # laptops) or a GPU-named hwmon device.
 # Output: {"text":"GPU: N°C","class":"normal|warning|critical","alt":"...","tooltip":"<gpu model>"}
 
+# The flanking chevrons render this module's state but only re-exec on
+# RTMIN+8 ("interval": "once" in the waybar config), so nudge them the
+# moment the class flips - polling on separate timers left the block and
+# its chevrons flipping up to an interval apart. First run only seeds the
+# cache: signaling would re-exec every startup poller for nothing.
+notify_state_change() { # <class>
+  local f="${XDG_RUNTIME_DIR:-/tmp}/dotctl-gputemp.class" prev=""
+  [[ -r "$f" ]] && prev=$(<"$f")
+  [[ "$1" == "$prev" ]] && return 0
+  printf '%s' "$1" > "$f" 2>/dev/null || return 0
+  [[ -n "$prev" ]] && pkill -RTMIN+8 -x waybar 2>/dev/null
+  return 0
+}
+
 # True if an NVIDIA GPU is present and runtime-suspended (hybrid/Optimus
 # laptops power the dGPU down to D3 when idle). nvidia-smi wakes the card on
 # every call, so polling it from waybar would keep the dGPU awake permanently
@@ -107,11 +121,13 @@ name="$(gpu_name || true)"
 [[ -n "$name" ]] || name="GPU"
 
 if [[ -z "$temp" ]]; then
+  notify_state_change unknown
   printf '{"text":"GPU: --","class":"unknown","alt":"unknown","tooltip":"%s"}\n' "$name"
   exit 0
 fi
 
 if [[ "$temp" == "sleeping" ]]; then
+  notify_state_change normal
   printf '{"text":"GPU: zzz","class":"normal","alt":"sleeping","tooltip":"%s (suspended)"}\n' "$name"
   exit 0
 fi
@@ -121,4 +137,5 @@ elif (( temp < 80 )); then cls="warning"
 else                       cls="critical"
 fi
 
+notify_state_change "$cls"
 printf '{"text":"GPU: %d°C","class":"%s","alt":"%s","tooltip":"%s"}\n' "$temp" "$cls" "$cls" "$name"

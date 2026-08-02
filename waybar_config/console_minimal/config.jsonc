@@ -57,7 +57,8 @@
   /* VPN:BEGIN */
   "custom/rsep-vpn": {
     "exec": "vpn-status-indicator",
-    "interval": 5,
+    "interval": "once",
+    "signal": 9,
     "return-type": "json",
     "format": "\ue0b2",
     "tooltip": false
@@ -68,7 +69,8 @@
   /* VPN:BEGIN */
   "custom/rsep-pulse": {
     "exec": "vpn-status-indicator",
-    "interval": 5,
+    "interval": "once",
+    "signal": 9,
     "return-type": "json",
     "format": "\ue0b2",
     "tooltip": false
@@ -107,6 +109,7 @@
   "custom/vpn": {
     "exec": "vpn-status-indicator",
     "interval": 5,
+    "signal": 9,
     "return-type": "json",
     "format": "{}",
     "on-click": "vpnctl menu"
