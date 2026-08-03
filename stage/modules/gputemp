@@ -2,7 +2,8 @@
 # waybar-gputemp - print GPU temp + waybar state class (JSON).
 # Works with NVIDIA (nvidia-smi), AMD (sensors edge/junction), and any chip that
 # exposes a GPU temp via an lm-sensors "GPU" label (e.g. ThinkPad EC on hybrid
-# laptops) or a GPU-named hwmon device.
+# laptops) or a GPU-named hwmon device. On Raspberry Pi (v3d) it falls back to
+# the shared SoC die sensor - see pick_temp.
 # Output: {"text":"GPU: N°C","class":"normal|warning|critical","alt":"...","tooltip":"<gpu model> (N% load)"}
 
 # The flanking chevrons render this module's state but only re-exec on
@@ -138,6 +139,23 @@ sysfs_load() {
   return 1
 }
 
+# True if the Broadcom VideoCore GPU (v3d) is present - Raspberry Pi 4/5.
+v3d_present() {
+  local d
+  for d in /sys/class/drm/card*/device; do
+    [[ -r "$d/uevent" ]] && grep -q '^DRIVER=v3d$' "$d/uevent" && return 0
+  done
+  return 1
+}
+
+# Pi tooltip name. There is no PCI device to look up, so use the board model.
+v3d_name() {
+  v3d_present || return 1
+  local m=""
+  [[ -r /proc/device-tree/model ]] && m=$(tr -d '\0' < /proc/device-tree/model)
+  printf 'VideoCore GPU%s (shared SoC die sensor)\n' "${m:+ - ${m//&/&amp;}}"
+}
+
 # Prints "<temp> <load>", where <load> is a utilization percentage or "-" when
 # the source can't report one, or the bare word "sleeping".
 pick_temp() {
@@ -208,6 +226,21 @@ pick_temp() {
     fi
   done
 
+  # Raspberry Pi: nothing above matches, because the SoC exposes no GPU-named
+  # sensor - the BCM27xx has a single on-die sensor shared by the CPU cluster
+  # and the VideoCore GPU. That reading IS the GPU's temperature, so report it
+  # (last, so any real GPU sensor still wins) and say so in the tooltip. Note
+  # this necessarily reads identical to the cputemp module. v3d exposes no
+  # gpu_busy_percent - the vram module samples gpu_stats for busy% instead -
+  # so the load column is "-" and the tooltip carries the name alone.
+  if v3d_present; then
+    for d in /sys/class/thermal/thermal_zone*; do
+      [[ -r "$d/type" && -r "$d/temp" && $(<"$d/type") == *cpu-thermal* ]] || continue
+      t=$(<"$d/temp")
+      [[ "$t" =~ ^[0-9]+$ ]] && { printf '%s -\n' $((t / 1000)); return 0; }
+    done
+  fi
+
   return 1
 }
 
@@ -260,7 +293,7 @@ maybe_alert() { # <held-seconds>
 
 out="$(pick_temp || true)"
 
-name="$(gpu_name || true)"
+name="$(gpu_name || v3d_name || true)"
 [[ -n "$name" ]] || name="GPU"
 
 read -r temp load <<< "$out"

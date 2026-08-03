@@ -57,8 +57,9 @@ This script will:
      launcher, power, audio-*, cputemp, gputemp, ws-cycle - runs through
      dotctl and is not symlinked)
   4. Optionally symlink ${BOLD}$SYS_BIN/${RST}{vpnctl, vpn-status-indicator} → repo
-  4a. Optionally enable the ${BOLD}GPU temp + VRAM modules${RST} (skip on machines
-      without a discrete GPU - run as \`dotctl gputemp\` / \`dotctl vram\`)
+  4a. Optionally enable the ${BOLD}GPU temp + VRAM modules${RST} (skip on machines with
+      no readable GPU sensor - run as \`dotctl gputemp\` / \`dotctl vram\`; on a
+      Raspberry Pi they report SoC die temp and V3D busy%)
   4b. Optionally enable the ${BOLD}battery module${RST} (laptop charge % in waybar,
       to the right of audio - native waybar module, no binary to symlink)
       (per-module fine-tuning - power/launcher buttons etc. - lives in the
@@ -285,13 +286,13 @@ if confirm "Install the optional VPN module (vpnctl + vpn-status-indicator)?" n;
 fi
 
 # ── Gate: GPU temp module (opt-in) ──────────────────────────────────────────
-# gputemp reads from nvidia-smi / lm-sensors / hwmon. Machines without a
-# discrete GPU (or with integrated graphics that expose no temp sensor) can
-# skip the symlink - the waybar module block stays authored and is a no-op
-# until the binary is restored on PATH.
+# gputemp reads from nvidia-smi / lm-sensors / hwmon, or the shared SoC sensor
+# on a Raspberry Pi (v3d). Machines whose integrated graphics expose no temp
+# sensor at all can skip the symlink - the waybar module block stays authored
+# and is a no-op until the binary is restored on PATH.
 
 WANT_GPU=0
-if confirm "Install the optional GPU temp module (gputemp - skip on non-discrete GPU machines)?" y; then
+if confirm "Install the optional GPU temp module (gputemp - skip if no GPU sensor is readable)?" y; then
   WANT_GPU=1
 fi
 

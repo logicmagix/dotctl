@@ -1290,7 +1290,8 @@ dotctl set [FLAGS]
   --waybar-vpn <S>         waybar vpn module (on | off) - requires vpnctl + vpn-status-indicator on PATH
   --waybar-battery <S>     waybar battery module (on | off) - for laptops; needs a /sys/class/power_supply/BAT* battery
   --waybar-vram <S>        waybar VRAM usage module (on | off) - sits after the
-                           GPU temp block, styled like the RAM module
+                           GPU temp block, styled like the RAM module; on a
+                           Raspberry Pi it reports V3D busy% (there is no VRAM)
   --waybar-cpu <S>         waybar CPU load module (on | off)
   --waybar-cputemp <S>     waybar CPU temp module (on | off)
   --waybar-ram <S>         waybar RAM usage module (on | off)

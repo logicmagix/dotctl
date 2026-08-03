@@ -2,6 +2,8 @@
 # waybar-vram - print GPU VRAM usage + waybar state class (JSON).
 # Works with NVIDIA (nvidia-smi) and AMD (amdgpu sysfs mem_info_vram_*).
 # Output: {"text":"VRAM: U.UG/T.TG","class":"normal|warning|critical","alt":"...","tooltip":"<used/total MiB (pct)>"}
+# On Broadcom VideoCore (v3d - Raspberry Pi 4/5) there is no VRAM to report at
+# all, so the block reports GPU busy% instead; see the v3d section below.
 # Same never-wake rules as gputemp: nvidia-smi is skipped while the dGPU is
 # runtime-suspended or no client holds /dev/nvidiactl, so polling this from
 # waybar can't hold the card out of D3.
@@ -76,7 +78,122 @@ pick_vram() {
   return 1
 }
 
+# --- Broadcom VideoCore / v3d (Raspberry Pi) -------------------------------
+# The Pi has no VRAM in any form this module can report: V3D backs its buffers
+# with ordinary system RAM through its own MMU, so there is no dedicated pool,
+# no mem_info_vram_* attributes, and no total to divide by. (The legacy
+# gpu_mem split is gone on Pi 5, and CmaTotal is a 64 MiB carveout v3d does not
+# allocate from - reporting it would be a made-up number.) What the driver does
+# export is per-queue busy time, so the block reports GPU utilisation instead:
+# a real live value with a natural 0-100 range for the same state classes.
+
+# Path to the v3d card's gpu_stats, or nothing.
+v3d_stats() {
+  local d
+  for d in /sys/class/drm/card*/device; do
+    [[ -r "$d/gpu_stats" && -r "$d/uevent" ]] || continue
+    grep -q '^DRIVER=v3d$' "$d/uevent" || continue
+    printf '%s\n' "$d/gpu_stats"
+    return 0
+  done
+  return 1
+}
+
+# One sample as "<timestamp_ns> <runtime_ns>..." (one runtime per queue, in
+# file order). gpu_stats counters are cumulative, so a rate needs two samples.
+v3d_sample() { # <gpu_stats path>
+  awk 'NR>1 && NF>=4 { ts=$2; r=r" "$4 } END { if (ts != "") print ts r }' "$1"
+}
+
+# Busy percent between two samples: the busiest queue, since bin/render/tfu run
+# as concurrent pipeline stages and summing them would exceed 100%. Fails (no
+# output) when the samples do not line up or the window is unusable.
+v3d_busy() { # <prev sample> <cur sample>
+  awk -v p="$1" -v c="$2" 'BEGIN {
+    np = split(p, P, " "); nc = split(c, C, " ")
+    if (np < 2 || nc != np) exit 1
+    dt = C[1] - P[1]
+    # Reject a window that is zero-length, backwards, or so old it would
+    # average the GPU over minutes of history (stale cache after a restart).
+    if (dt <= 0 || dt > 30e9) exit 1
+    for (i = 2; i <= nc; i++) {
+      d = C[i] - P[i]
+      if (d > 0 && d / dt > best) best = d / dt
+    }
+    b = best * 100
+    if (b > 100) b = 100
+    printf "%d\n", b + 0.5
+  }'
+}
+
+# Total GPU memory held by v3d clients, in KiB, from DRM fdinfo. Deduped by
+# drm-client-id because inherited/shared fds report the same client from every
+# process that holds them. Only same-uid processes are readable, so this is a
+# floor, not a total - it stays in the tooltip for that reason.
+v3d_mem_kib() {
+  local files=()
+  # grep first, not awk over the raw glob: awk dies fatally the moment one of
+  # those paths is unreadable (another user's process) or has already vanished
+  # (an fd closed between glob expansion and the read - a certainty on /proc).
+  # grep -s skips both and this also cuts ~800 files down to the handful that
+  # are v3d clients.
+  mapfile -t files < <(grep -lsE '^drm-driver:[[:space:]]*v3d$' /proc/[0-9]*/fdinfo/* 2>/dev/null)
+  (( ${#files[@]} )) || { printf '0\n'; return 0; }
+  awk '
+    function flush() {
+      if (drv == "v3d" && id != "" && !(id in seen)) {
+        seen[id] = 1
+        sum += (res != "" ? res : tot)
+      }
+      drv = ""; id = ""; res = ""; tot = ""
+    }
+    FNR == 1                     { flush() }
+    $1 == "drm-driver:"          { drv = $2 }
+    $1 == "drm-client-id:"       { id  = $2 }
+    $1 == "drm-resident-memory:" { res = $2 }
+    $1 == "drm-total-memory:"    { tot = $2 }
+    END { flush(); print sum + 0 }
+  ' "${files[@]}" 2>/dev/null
+}
+
+v3d_report() { # <gpu_stats path>
+  local cache="${XDG_RUNTIME_DIR:-/tmp}/dotctl-vram.v3d" cur prev="" pct mem tip
+  cur="$(v3d_sample "$1")"
+  [[ -n "$cur" ]] || return 1
+  [[ -r "$cache" ]] && prev=$(<"$cache")
+  pct="$(v3d_busy "$prev" "$cur" || true)"
+  # No usable previous sample (first poll after boot, or one left stale by a
+  # waybar restart): take our own second sample rather than showing "--" until
+  # the next interval comes round.
+  if [[ -z "$pct" ]]; then
+    prev="$cur"
+    sleep 0.25
+    cur="$(v3d_sample "$1")"
+    pct="$(v3d_busy "$prev" "$cur" || true)"
+  fi
+  printf '%s' "$cur" > "$cache" 2>/dev/null
+  [[ "$pct" =~ ^[0-9]+$ ]] || return 1
+
+  if   (( pct < 75 )); then cls="normal"
+  elif (( pct < 90 )); then cls="warning"
+  else                      cls="critical"
+  fi
+
+  tip="VideoCore (v3d) - no dedicated VRAM, GPU memory comes from system RAM"
+  mem="$(v3d_mem_kib)"
+  [[ "$mem" =~ ^[0-9]+$ ]] && (( mem > 0 )) && \
+    tip="$tip\n$((mem / 1024)) MiB held by v3d clients"
+
+  printf '{"text":"V3D: %d%%","class":"%s","alt":"%s","tooltip":"%s"}\n' \
+    "$pct" "$cls" "$cls" "$tip"
+}
+
 out="$(pick_vram || true)"
+
+# Only after the discrete-GPU paths come up empty, so a real card always wins.
+if [[ -z "$out" ]] && stats="$(v3d_stats)"; then
+  v3d_report "$stats" && exit 0
+fi
 
 if [[ -z "$out" ]]; then
   printf '{"text":"VRAM: --","class":"unknown","alt":"unknown","tooltip":"no VRAM source"}\n'
