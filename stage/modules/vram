@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # waybar-vram - print GPU VRAM usage + waybar state class (JSON).
-# Works with NVIDIA (nvidia-smi) and AMD (amdgpu sysfs mem_info_vram_*).
+# Works with NVIDIA (nvidia-smi), AMD amdgpu (sysfs mem_info_vram_*), and
+# legacy radeon/older AMD (radeontop fallback).
 # Output: {"text":"VRAM: U.UG/T.TG","class":"normal|warning|critical","alt":"...","tooltip":"<used/total MiB (pct)>"}
 # On Broadcom VideoCore (v3d - Raspberry Pi 4/5) there is no VRAM to report at
 # all, so the block reports GPU busy% instead; see the v3d section below.
@@ -74,6 +75,22 @@ pick_vram() {
     printf '%s %s\n' $((u / 1048576)) $((t / 1048576))
     return 0
   done
+
+  # radeontop fallback for legacy radeon driver (and amdgpu without sysfs).
+  # Output: "vram 11.81% 241.90mb" -> derive total from used and percentage.
+  if command -v radeontop >/dev/null 2>&1; then
+    local line pct used_mb
+    line=$(radeontop -d - -l 1 2>/dev/null | grep -o 'vram [0-9.]*% [0-9.]*mb')
+    if [[ -n "$line" ]]; then
+      pct=${line#vram }; pct=${pct%% *}; pct=${pct%\%}
+      used_mb=${line##* }; used_mb=${used_mb%mb}
+      read -r u t < <(awk -v u="$used_mb" -v p="$pct" 'BEGIN{
+        total = (p > 0) ? u * 100 / p : 0
+        printf "%d %d\n", int(u + 0.5), int(total + 0.5)
+      }')
+      [[ "$u" =~ ^[0-9]+$ && "$t" =~ ^[0-9]+$ && "$t" -gt 0 ]] && { printf '%s %s\n' "$u" "$t"; return 0; }
+    fi
+  fi
 
   return 1
 }
