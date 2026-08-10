@@ -359,6 +359,14 @@ tooltip {
 #custom-rsep-battery,
 /* BATTERY:END */
 #custom-rsep-tray {
+  /* Pin the chevron font like #custom-power / #custom-launcher do. Without
+     this the glyph inherits the #waybar family list, which dotctl fills from
+     the active fontdef - and a bar font with no Powerline coverage (phoenix)
+     drops U+E0B0 to whatever fontconfig ranks first system-wide. Nerd Font
+     separators are drawn to overflow the em box so they fill the full line;
+     an ordinary font's are drawn inside it and render ~20% short, leaving
+     the chevron notched against its neighbouring blocks. */
+  font-family: "MesloLGS NF", "Symbols Nerd Font", monospace;
   font-size: 1.8em;
   padding-top: 0px;
   padding-bottom: 0px;
