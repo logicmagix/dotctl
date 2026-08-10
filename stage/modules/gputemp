@@ -3,7 +3,7 @@
 # Works with NVIDIA (nvidia-smi), AMD (sensors edge/junction), and any chip that
 # exposes a GPU temp via an lm-sensors "GPU" label (e.g. ThinkPad EC on hybrid
 # laptops) or a GPU-named hwmon device.
-# Output: {"text":"GPU: N°C","class":"normal|warning|critical","alt":"...","tooltip":"<gpu model>"}
+# Output: {"text":"GPU: N°C","class":"normal|warning|critical","alt":"...","tooltip":"<gpu model> (N% load)"}
 
 # The flanking chevrons render this module's state but only re-exec on
 # RTMIN+8 ("interval": "once" in the waybar config), so nudge them the
@@ -67,8 +67,23 @@ gpu_name() {
   printf '%s\n' "${n//&/&amp;}"
 }
 
+# GPU utilization in percent for the non-NVIDIA paths, from the amdgpu-style
+# sysfs attribute (also exposed by some other drivers). Nothing to print on
+# chips that don't have it - the tooltip then just carries the model name.
+sysfs_load() {
+  local d v
+  for d in /sys/class/drm/card*/device; do
+    [[ -r "$d/gpu_busy_percent" ]] || continue
+    v=$(<"$d/gpu_busy_percent")
+    [[ "$v" =~ ^[0-9]+$ ]] && { printf '%s\n' "$v"; return 0; }
+  done
+  return 1
+}
+
+# Prints "<temp> <load>", where <load> is a utilization percentage or "-" when
+# the source can't report one, or the bare word "sleeping".
 pick_temp() {
-  local t=""
+  local t="" l=""
 
   # NVIDIA — but never wake a sleeping dGPU just to read its temperature
   if command -v nvidia-smi >/dev/null 2>&1; then
@@ -84,8 +99,14 @@ pick_temp() {
     if ! fuser -s /dev/nvidiactl 2>/dev/null; then
       printf 'sleeping\n'; return 0
     fi
-    t=$(nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader,nounits 2>/dev/null | head -n1 | tr -d '[:space:]')
-    [[ -n "$t" && "$t" =~ ^[0-9]+$ ]] && { printf '%s\n' "$t"; return 0; }
+    # One query for both fields: a second nvidia-smi call per poll would
+    # double the wake-up cost on a card we're trying to leave alone.
+    read -r t l < <(nvidia-smi --query-gpu=temperature.gpu,utilization.gpu \
+      --format=csv,noheader,nounits 2>/dev/null | head -n1 | tr -d ',%')
+    if [[ "$t" =~ ^[0-9]+$ ]]; then
+      [[ "$l" =~ ^[0-9]+$ ]] || l="-"
+      printf '%s %s\n' "$t" "$l"; return 0
+    fi
   fi
 
   # lm-sensors: GPU temp under a recognizable label.
@@ -95,7 +116,10 @@ pick_temp() {
   # dGPU but the EC still reports a GPU temperature.
   if command -v sensors >/dev/null 2>&1; then
     t=$(sensors 2>/dev/null | awk 'tolower($1) ~ /^(edge|junction|gpu):$/ {gsub(/[+°C]/,"",$2); print int($2); exit}')
-    [[ -n "$t" && "$t" =~ ^[0-9]+$ ]] && { printf '%s\n' "$t"; return 0; }
+    if [[ -n "$t" && "$t" =~ ^[0-9]+$ ]]; then
+      l="$(sysfs_load || true)"; [[ -n "$l" ]] || l="-"
+      printf '%s %s\n' "$t" "$l"; return 0
+    fi
   fi
 
   # hwmon fallback: any device with "gpu" in its name
@@ -107,7 +131,10 @@ pick_temp() {
       input=$(ls "$d"/temp*_input 2>/dev/null | head -n1)
       if [[ -r "$input" ]]; then
         t=$(<"$input")
-        [[ -n "$t" ]] && { printf '%s\n' $((t / 1000)); return 0; }
+        if [[ -n "$t" ]]; then
+          l="$(sysfs_load || true)"; [[ -n "$l" ]] || l="-"
+          printf '%s %s\n' $((t / 1000)) "$l"; return 0
+        fi
       fi
     fi
   done
@@ -115,10 +142,14 @@ pick_temp() {
   return 1
 }
 
-temp="$(pick_temp || true)"
+out="$(pick_temp || true)"
 
 name="$(gpu_name || true)"
 [[ -n "$name" ]] || name="GPU"
+
+read -r temp load <<< "$out"
+# Sources that can't report utilization leave the tooltip at the model alone.
+[[ "$load" =~ ^[0-9]+$ ]] && name="$name ($load% load)"
 
 if [[ -z "$temp" ]]; then
   notify_state_change unknown

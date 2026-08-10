@@ -216,7 +216,12 @@ Same for the GPU: NVIDIA via nvidia-smi, AMD via sensors edge/junction
 labels, generic hwmon fallback. Never wakes a runtime-suspended dGPU -
 reports
 .B zzz
-until a real client holds the device. Wired as the waybar
+until a real client holds the device. The tooltip carries the GPU model
+and, where the driver reports one
+.RI ( utilization.gpu
+on NVIDIA, the amdgpu
+.I gpu_busy_percent
+sysfs attribute elsewhere), the current load percentage. Wired as the waybar
 .B custom/gpu
 module's
 .BR exec .
