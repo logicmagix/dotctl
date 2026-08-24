@@ -22,9 +22,13 @@ if [[ "$state" == "on" && -e "$DEFAULT_CONF" ]]; then
   fi
 fi
 
-# Detect killswitch
+# Detect killswitch. iptables needs root, so vpnctl drops/removes a marker in
+# /run (tmpfs: gone on reboot, same as the rules). Prefer a real iptables
+# query if a passwordless sudo rule ever exists.
 ks="false"
-if iptables -S OUTPUT 2>/dev/null | grep -q '! -o tun0' | grep -q ' -j REJECT'; then
+if sudo -n iptables -S OUTPUT 2>/dev/null | grep -F '! -o tun0' | grep -qF ' -j REJECT'; then
+  ks="true"
+elif [[ -e /run/vpnctl-killswitch ]]; then
   ks="true"
 fi
 

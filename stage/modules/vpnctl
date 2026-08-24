@@ -6,6 +6,9 @@ DEFAULT_CONF="${CONFIG_DIR}/nordvpn.conf"
 AUTH_FILE="${CONFIG_DIR}/nordvpn.auth"
 OVPN_DIR="${HOME}/nordvpn/ovpn_udp"
 PIDFILE="/run/openvpn-nordvpn.pid"
+# Marker read by vpn-status-indicator (iptables needs root; /run is tmpfs so
+# the marker disappears on reboot together with the rules).
+KS_MARK="/run/vpnctl-killswitch"
 
 # Use sudo for privileged operations if not already root
 if [[ $EUID -ne 0 ]]; then
@@ -229,6 +232,7 @@ killswitch_on() {
         $SUDO ip6tables -I OUTPUT ! -o "${dev}" -m conntrack --ctstate NEW -j REJECT || true
     fi
 
+    $SUDO touch "$KS_MARK" 2>/dev/null || true
     echo "Killswitch enabled."
     nudge_waybar
 }
@@ -248,6 +252,7 @@ killswitch_off() {
         $SUDO ip6tables -D OUTPUT -o "${dev}" -m conntrack --ctstate NEW -j ACCEPT 2>/dev/null || true
     fi
 
+    $SUDO rm -f "$KS_MARK" 2>/dev/null || true
     echo "Killswitch disabled."
     nudge_waybar
 }
@@ -260,6 +265,14 @@ killswitch_status() {
     if command -v ip6tables >/dev/null 2>&1; then
         v6=$($SUDO ip6tables -S OUTPUT 2>/dev/null | grep -F "! -o ${dev}" | grep -F " -j REJECT" || true)
     fi
+
+    # Re-sync the marker with reality in case rules were changed by hand
+    if [[ -n "$v4" || -n "$v6" ]]; then
+        $SUDO touch "$KS_MARK" 2>/dev/null || true
+    else
+        $SUDO rm -f "$KS_MARK" 2>/dev/null || true
+    fi
+    nudge_waybar
 
     if [[ -n "$v4" || -n "$v6" ]]; then
         echo "Killswitch: ENABLED"
