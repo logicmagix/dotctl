@@ -125,7 +125,8 @@ vpnctl up [file]        Foreground connect (exec openvpn; used by systemd)
 vpnctl off              Disconnect
 vpnctl status           Process / interface / public IP
 vpnctl list [filter]    List available .ovpn configs
-vpnctl random           Pick random server and connect
+vpnctl random           Pick random server and connect (skips retired servers)
+vpnctl stale            List configs whose server no longer resolves
 vpnctl use <file>       Set the default config without connecting
 vpnctl pick             Interactive fzf picker
 vpnctl killswitch on    Enable iptables kill switch (block non-tun0)
@@ -282,6 +283,16 @@ yourname ALL=(root) NOPASSWD: /usr/sbin/openvpn, /usr/sbin/iptables, /usr/sbin/i
   while the scripts live in `/usr/local/bin`. Fix the path in the jsonc.
 - **State stuck on OFF**: run `ip link show tun0` - if it says "does not
   exist", OpenVPN isn't actually connected. Try `vpnctl status` for details.
+- **`vpnctl on` reports "no tun0 after 30s"**: the server in the config is
+  unreachable. Providers retire servers without notice, and a pool of
+  `.ovpn` files downloaded months ago can be a third dead - the process
+  sits retrying a remote that will never answer while the indicator
+  correctly shows OFF. Run `vpnctl stale` to list the dead configs
+  (`vpnctl stale | sed "s#^#$HOME/nordvpn/ovpn_udp/#" | xargs rm` prunes
+  them), or download a fresh set from your provider. `vpnctl random`
+  already skips configs whose hostname no longer resolves. OpenVPN's
+  output for `vpnctl on` lands in `/var/log/openvpn/nordvpn.log`; raise
+  the wait with `VPNCTL_CONNECT_TIMEOUT=60 vpnctl on` on slow links.
 - **Killswitch class never triggers**: the script checks `iptables -S OUTPUT`
   for a rule matching `! -o tun0 ... -j REJECT`. If you use a different
   interface or firewall (ufw, firewalld, nftables), edit the `iptables`

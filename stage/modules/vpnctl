@@ -6,6 +6,15 @@ DEFAULT_CONF="${CONFIG_DIR}/nordvpn.conf"
 AUTH_FILE="${CONFIG_DIR}/nordvpn.auth"
 OVPN_DIR="${HOME}/nordvpn/ovpn_udp"
 PIDFILE="/run/openvpn-nordvpn.pid"
+# `vpnctl on` backgrounds openvpn, so its output would otherwise die with the
+# terminal (the wofi menu closes its kitty window after two seconds).
+LOG_FILE="/var/log/openvpn/nordvpn.log"
+# Seconds `vpnctl on` waits for tun0 before declaring the connect failed. A
+# live server answers the UDP handshake in a few seconds; a retired one never
+# does, and openvpn would retry it forever while the indicator shows OFF.
+CONNECT_TIMEOUT="${VPNCTL_CONNECT_TIMEOUT:-30}"
+# How many random picks to try before giving up on finding a live server.
+RANDOM_TRIES=10
 # Marker read by vpn-status-indicator (iptables needs root; /run is tmpfs so
 # the marker disappears on reboot together with the rules).
 KS_MARK="/run/vpnctl-killswitch"
@@ -25,6 +34,29 @@ nudge_waybar() {
   return 0
 }
 
+# Hostname a config connects to: the `remote` line if it is a name, else the
+# certificate CN it verifies, else the filename stem (us1234.nordvpn.com).
+# NordVPN pins `remote` to an IP and drops the DNS record when it retires a
+# server, so "does the CN resolve" is a cheap liveness check for the pool.
+cfg_host() {
+  local f="$1" host
+  host=$(awk '$1=="remote"{print $2; exit}' "$f" 2>/dev/null)
+  if [[ -n "$host" && ! "$host" =~ ^[0-9.]+$ && "$host" != *:* ]]; then
+    printf '%s\n' "$host"
+    return 0
+  fi
+  host=$(sed -n 's/^verify-x509-name[[:space:]]\{1,\}\(CN=\)\{0,1\}\([^[:space:]]*\).*/\2/p' "$f" 2>/dev/null | head -n1)
+  if [[ -z "$host" ]]; then
+    host=$(basename "$f")
+    host="${host%.ovpn}"; host="${host%.udp}"; host="${host%.tcp}"
+  fi
+  printf '%s\n' "$host"
+}
+
+host_resolves() {
+  getent ahosts "$1" >/dev/null 2>&1
+}
+
 usage() {
   cat <<USAGE
 Usage: vpnctl <command> [args...]
@@ -35,7 +67,8 @@ Commands:
   off              Disconnect (kill OpenVPN)
   status           Show VPN status (process, tun0, public IP)
   list [filter]    List available .ovpn configs (optional grep filter)
-  random           Pick random server and connect
+  random           Pick random server and connect (skips servers that no longer resolve)
+  stale            List configs whose server no longer resolves (retired by provider)
   use <file>       Set DEFAULT_CONF symlink to OVPN file (no connect)
   pick             Interactive pick (requires fzf)
   killswitch on    Enable iptables kill switch (block non-tun0)
@@ -92,6 +125,13 @@ vpn_on() {
     echo "Default config set to: $cfgname"
   fi
 
+  local host
+  host=$(cfg_host "$(readlink -f "$DEFAULT_CONF" 2>/dev/null || echo "$DEFAULT_CONF")")
+  if [[ -n "$host" ]] && ! host_resolves "$host"; then
+    echo "WARNING: $host does not resolve - the provider has probably retired" >&2
+    echo "         this server. Trying anyway; use 'vpnctl random' or 'vpnctl stale'." >&2
+  fi
+
   echo "Stopping any existing OpenVPN..."
   echo "Closing any existing NordVPN connection..."
   $SUDO pkill openvpn 2>/dev/null || true
@@ -100,18 +140,52 @@ vpn_on() {
   echo "Starting OpenVPN using: $DEFAULT_CONF"
   echo "NordVPN Connecting..."
 
+  $SUDO mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
   $SUDO openvpn \
     --config "$DEFAULT_CONF" \
-    --auth-user-pass "$AUTH_FILE" &
+    --auth-user-pass "$AUTH_FILE" \
+    --log-append "$LOG_FILE" &
 
   openvpn_pid=$!
-  echo "OpenVPN PID: $openvpn_pid"
+  echo "OpenVPN PID: $openvpn_pid (log: $LOG_FILE)"
   $SUDO mkdir -p "$(dirname "$PIDFILE")" || true
   echo "$openvpn_pid" | $SUDO tee "$PIDFILE" >/dev/null || true
 
-  sleep 3
-  vpn_status
+  # Wait for the tunnel instead of a fixed sleep. Without this a dead remote
+  # leaves openvpn retrying forever while the waybar block says VPN OFF, and
+  # nothing tells the user why. /proc is used for liveness because the child
+  # runs as root, so `kill -0` would fail with EPERM even while it is alive.
+  local waited=0
+  while (( waited < CONNECT_TIMEOUT )); do
+    if ip link show tun0 >/dev/null 2>&1; then
+      break
+    fi
+    if [[ ! -d "/proc/$openvpn_pid" ]]; then
+      break
+    fi
+    sleep 1
+    (( waited++ ))
+  done
+
+  if ip link show tun0 >/dev/null 2>&1; then
+    echo "Connected after ${waited}s."
+    vpn_status
+    nudge_waybar
+    return 0
+  fi
+
+  if [[ -d "/proc/$openvpn_pid" ]]; then
+    echo "ERROR: no tun0 after ${CONNECT_TIMEOUT}s - server unreachable (retired?). Stopping openvpn." >&2
+    $SUDO kill "$openvpn_pid" 2>/dev/null || true
+    $SUDO pkill openvpn 2>/dev/null || true
+  else
+    echo "ERROR: openvpn exited before the tunnel came up (auth or config problem?)." >&2
+  fi
+  $SUDO rm -f "$PIDFILE" 2>/dev/null || true
+  echo "Last log lines ($LOG_FILE):" >&2
+  $SUDO tail -n 15 "$LOG_FILE" 2>/dev/null | sed 's/^/  /' >&2
   nudge_waybar
+  return 1
 }
 
 vpn_up() {
@@ -166,16 +240,47 @@ vpn_random() {
     echo "OVPN dir not found: $OVPN_DIR" >&2
     exit 1
   fi
-  local cfg
-  if command -v shuf >/dev/null 2>&1; then
-    cfg=$(ls "$OVPN_DIR"/*.ovpn 2>/dev/null | shuf -n1)
-  else
-    cfg=$(ls "$OVPN_DIR"/*.ovpn 2>/dev/null | sort -R | head -n1)
+  local cfg host tries=0
+  while (( tries < RANDOM_TRIES )); do
+    if command -v shuf >/dev/null 2>&1; then
+      cfg=$(ls "$OVPN_DIR"/*.ovpn 2>/dev/null | shuf -n1)
+    else
+      cfg=$(ls "$OVPN_DIR"/*.ovpn 2>/dev/null | sort -R | head -n1)
+    fi
+    [[ -z "$cfg" ]] && { echo "No .ovpn files found"; exit 1; }
+    host=$(cfg_host "$cfg")
+    if host_resolves "$host"; then
+      break
+    fi
+    echo "Skipping $(basename "$cfg"): $host does not resolve (retired server)"
+    cfg=""
+    (( tries++ ))
+  done
+  if [[ -z "$cfg" ]]; then
+    echo "No live server found in $RANDOM_TRIES picks. The config pool looks stale;" >&2
+    echo "run 'vpnctl stale' to list dead configs, or download a fresh set." >&2
+    exit 1
   fi
-  [[ -z "$cfg" ]] && { echo "No .ovpn files found"; exit 1; }
   cfg=$(basename "$cfg")
   echo "Randomly selected server: $cfg"
   vpn_on "$cfg"
+}
+
+vpn_stale() {
+  # Print configs whose server hostname no longer resolves. Providers retire
+  # servers without notice; a pool downloaded months ago can be a third dead.
+  # DNS lookups run in parallel so thousands of configs finish in a minute.
+  if [[ ! -d "$OVPN_DIR" ]]; then
+    echo "OVPN dir not found: $OVPN_DIR" >&2
+    exit 1
+  fi
+  local total
+  total=$(ls "$OVPN_DIR"/*.ovpn 2>/dev/null | wc -l)
+  echo "Checking DNS for $total configs in $OVPN_DIR ..." >&2
+  export -f cfg_host host_resolves
+  ls "$OVPN_DIR"/*.ovpn 2>/dev/null \
+    | xargs -P 32 -I{} bash -c 'host_resolves "$(cfg_host "$1")" || basename "$1"' _ {} \
+    | sort
 }
 
 vpn_use() {
@@ -317,13 +422,18 @@ vpn_menu() {
            --yoffset 10
   )" || exit 0
 
+  # Connect windows auto-close on success but stay open on failure so the
+  # error and log tail from `vpnctl on` can actually be read.
+  local hold='echo; stty sane; read -n1 -rp "Press any key to close..."'
+  local on_ok="sleep 2"
+  local on_fail="{ $hold; }"
+
   case "$choice" in
     "Connect (default)")
-      # Run connect, show a bit of output, auto-close
-      kitty --class vpnstatus -e bash -c "vpnctl on; echo; sleep 2"
+      kitty --class vpnstatus -e bash -c "vpnctl on && $on_ok || $on_fail"
       ;;
     "Connect (random)")
-      kitty --class vpnstatus -e bash -c "vpnctl random; echo; sleep 2"
+      kitty --class vpnstatus -e bash -c "vpnctl random && $on_ok || $on_fail"
       ;;
     "Pick server")
       cfg="$(
@@ -338,30 +448,7 @@ vpn_menu() {
       )" || exit 0
       cfg=$(basename "$cfg")
       if [[ -n "$cfg" ]]; then
-        kitty --class vpnstatus -e bash -c "vpnctl on    \"$cfg\"; echo; sleep 2"
-      fi
-      ;;
-
-    "Connect (default)")
-      kitty --class vpnstatus -e bash -c "vpnctl on; stty sane; echo; read -n1 -rp 'Press any key to close...'"
-      ;;
-    "Connect (random)")
-      kitty --class vpnstatus -e bash -c "vpnctl random; stty sane; echo; read -n1 -rp 'Press any key to close...'"
-      ;;
-    "Pick server")
-      cfg="$(
-        vpn_list | sed 's#.*/##' | wofi --dmenu \
-          --prompt 'Pick server' \
-          --location 3 \
-          --insensitive \
-          --width 550 \
-          --height 450 \
-          --xoffset -55 \
-          --yoffset 10
-      )" || exit 0
-      cfg=$(basename "$cfg")
-      if [[ -n "$cfg" ]]; then
-        kitty --class vpnstatus -e bash -c "vpnctl on \"$cfg\"; stty sane; echo; read -n1 -rp 'Press any key to close...'"
+        kitty --class vpnstatus -e bash -c "vpnctl on \"$cfg\" && $on_ok || $on_fail"
       fi
       ;;
 
@@ -398,6 +485,7 @@ case "$cmd" in
   status)     vpn_status ;;
   list)       vpn_list "$@" ;;
   random)     vpn_random ;;
+  stale)      vpn_stale ;;
   use)        vpn_use "$@" ;;
   pick)       vpn_pick ;;
   locs)       vpn_locs ;;
