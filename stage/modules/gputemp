@@ -33,6 +33,76 @@ nvidia_suspended() {
   return 1
 }
 
+# True when the dGPU is powered up (the complement of nvidia_suspended, but
+# stated positively so the idle checks below read the way they're meant to).
+nvidia_active() {
+  local d
+  for d in /sys/bus/pci/devices/*; do
+    [[ -r "$d/vendor" && $(<"$d/vendor") == 0x10de ]] || continue
+    [[ -r "$d/class"  && $(<"$d/class")  == 0x03*  ]] || continue
+    [[ -r "$d/power/runtime_status" && $(<"$d/power/runtime_status") != suspended ]] && return 0
+  done
+  return 1
+}
+
+# True when the dGPU's runtime PM is actually armed (power/control == auto).
+# TLP sets control=on while on AC, which disables runtime PM outright - the
+# card then sits in D0 BY POLICY and there is no autosuspend timer to protect
+# and nothing anomalous to report. Every idle check below is gated on this.
+rpm_enabled() {
+  local d
+  for d in /sys/bus/pci/devices/*; do
+    [[ -r "$d/vendor" && $(<"$d/vendor") == 0x10de ]] || continue
+    [[ -r "$d/class"  && $(<"$d/class")  == 0x03*  ]] || continue
+    [[ -r "$d/power/control" && $(<"$d/power/control") == auto ]] && return 0
+  done
+  return 1
+}
+
+# True when a battery is present at all. Together with an NVIDIA dGPU this
+# identifies the hybrid-laptop population the idle alert is meant for -
+# desktops and AMD machines never arm it.
+has_battery() {
+  local d
+  for d in /sys/class/power_supply/*; do
+    [[ -r "$d/type" && $(<"$d/type") == Battery ]] && return 0
+  done
+  return 1
+}
+
+# True when every mains adapter reports offline (and at least one exists).
+# An idling-but-awake dGPU is merely untidy on AC; on battery it is silently
+# eating runtime, which is the only case worth interrupting the user for.
+on_battery() {
+  local d found=1
+  for d in /sys/class/power_supply/*; do
+    [[ -r "$d/type" && $(<"$d/type") == Mains && -r "$d/online" ]] || continue
+    found=0
+    [[ $(<"$d/online") == 1 ]] && return 1
+  done
+  return $found
+}
+
+# nvidia-smi resets the card's runtime-PM autosuspend timer on every call, so
+# polling it at the waybar interval (2s for this module) can pin an otherwise
+# idle card awake - the module then perpetuates the very state it reports.
+# Cache the reading instead and refresh at most every NVSMI_TTL seconds: the
+# output stays correct at ANY waybar interval, and the driver gets long quiet
+# gaps in which the card can actually reach D3.
+NVSMI_TTL=${DOTCTL_NVSMI_TTL:-15}
+nvsmi_cache="${XDG_RUNTIME_DIR:-/tmp}/dotctl-gputemp.cache"
+
+cache_read() {
+  local mtime now line
+  [[ -r "$nvsmi_cache" ]] || return 1
+  mtime=$(stat -c %Y "$nvsmi_cache" 2>/dev/null) || return 1
+  now=$(date +%s)
+  (( now - mtime < NVSMI_TTL )) || return 1
+  line=$(<"$nvsmi_cache") || return 1
+  [[ -n "$line" ]] || return 1
+  printf '%s\n' "$line"
+}
+
 # GPU model name for the tooltip, resolved from the PCI ID database. Reads only
 # cached sysfs attributes (vendor/device/class), never PCI config space or
 # nvidia-smi, so a runtime-suspended dGPU stays asleep. Prefers a non-Intel
@@ -83,21 +153,28 @@ sysfs_load() {
 # Prints "<temp> <load>", where <load> is a utilization percentage or "-" when
 # the source can't report one, or the bare word "sleeping".
 pick_temp() {
-  local t="" l=""
+  local t="" l="" out=""
 
   # NVIDIA — but never wake a sleeping dGPU just to read its temperature
   if command -v nvidia-smi >/dev/null 2>&1; then
     if nvidia_suspended; then
       printf 'sleeping\n'; return 0
     fi
-    # Card awake but no client of ours has it open (boot init, driver probe,
-    # leftover wake): calling nvidia-smi here would reset the autosuspend
-    # timer every poll and the card could NEVER doze off — the exact
-    # keep-awake trap the suspended-check above tries to prevent. Report it
-    # as sleeping-bound and let it reach D3; temps resume when a real
-    # client (game) holds the device.
+    # Nothing holds the card: a leftover wake, a driver probe, or simply an
+    # unused dGPU that AC policy is keeping powered. Either way nothing is
+    # rendering on it, so report it without calling nvidia-smi - asking for a
+    # temperature would reset the autosuspend timer where one is still armed,
+    # and there is no reading worth having where one isn't.
     if ! fuser -s /dev/nvidiactl 2>/dev/null; then
-      printf 'sleeping\n'; return 0
+      printf 'idle\n'; return 0
+    fi
+    # A client holds the device. Note this does NOT mean the card is doing
+    # work: anything that merely dlopens NVIDIA's Vulkan ICD (libGLX_nvidia.so,
+    # loaded by any Vulkan device enumeration - GTK4's default renderer does
+    # this) holds /dev/nvidia* open for its whole lifetime while rendering
+    # nothing. The 0%-load check downstream is what tells those two apart.
+    if out=$(cache_read); then
+      printf '%s\n' "$out"; return 0
     fi
     # One query for both fields: a second nvidia-smi call per poll would
     # double the wake-up cost on a card we're trying to leave alone.
@@ -105,7 +182,9 @@ pick_temp() {
       --format=csv,noheader,nounits 2>/dev/null | head -n1 | tr -d ',%')
     if [[ "$t" =~ ^[0-9]+$ ]]; then
       [[ "$l" =~ ^[0-9]+$ ]] || l="-"
-      printf '%s %s\n' "$t" "$l"; return 0
+      printf '%s %s\n' "$t" "$l" | tee "$nvsmi_cache" 2>/dev/null \
+        || printf '%s %s\n' "$t" "$l"
+      return 0
     fi
   fi
 
@@ -142,6 +221,53 @@ pick_temp() {
   return 1
 }
 
+# --- awake-but-doing-nothing tracking --------------------------------------
+# A dGPU sitting in D0 at 0% load is the signature of something holding
+# /dev/nvidia* open without rendering. It costs a couple of watts and nothing
+# on the bar used to say so: a plain temperature reading looks entirely normal,
+# which is how a card stayed awake through a full day on battery. Require the
+# condition to persist before flagging it, so a single 0% sample between frames
+# mid-game doesn't flicker the module.
+idle_since_f="${XDG_RUNTIME_DIR:-/tmp}/dotctl-gputemp.idle-since"
+idle_alerted_f="${XDG_RUNTIME_DIR:-/tmp}/dotctl-gputemp.idle-alerted"
+IDLE_SHOW=${DOTCTL_GPU_IDLE_SHOW:-60}          # seconds before the bar flags it
+IDLE_ALERT_AFTER=${DOTCTL_GPU_IDLE_ALERT_AFTER:-300}   # seconds before notifying
+
+# Prints how many seconds the idle-but-awake condition has held (0 when clear).
+idle_held() { # <1 if idle now, else 0>
+  local now since
+  now=$(date +%s)
+  if [[ "$1" != 1 ]]; then
+    rm -f "$idle_since_f" "$idle_alerted_f" 2>/dev/null
+    printf '0\n'; return 0
+  fi
+  if [[ -r "$idle_since_f" ]]; then
+    since=$(<"$idle_since_f")
+  else
+    since="$now"; printf '%s' "$now" > "$idle_since_f" 2>/dev/null
+  fi
+  [[ "$since" =~ ^[0-9]+$ ]] || since="$now"
+  printf '%s\n' $(( now - since ))
+}
+
+# Notify once per episode, and only for the machines this can actually hurt:
+# a battery must exist (hybrid laptop, not a desktop) and be discharging.
+# Set DOTCTL_GPU_IDLE_ALERT=0 to silence it.
+maybe_alert() { # <held-seconds>
+  [[ "${DOTCTL_GPU_IDLE_ALERT:-1}" == 0 ]] && return 0
+  (( $1 >= IDLE_ALERT_AFTER )) || return 0
+  rpm_enabled  || return 0
+  has_battery  || return 0
+  on_battery   || return 0
+  [[ -e "$idle_alerted_f" ]] && return 0
+  command -v notify-send >/dev/null 2>&1 || return 0
+  : > "$idle_alerted_f" 2>/dev/null
+  notify-send -u critical -a dotctl "dGPU awake on battery" \
+    "Idle but powered up for $(( $1 / 60 )) min - something holds /dev/nvidia* open.\nCheck with: fuser -v /dev/nvidia*" \
+    2>/dev/null
+  return 0
+}
+
 out="$(pick_temp || true)"
 
 name="$(gpu_name || true)"
@@ -158,8 +284,29 @@ if [[ -z "$temp" ]]; then
 fi
 
 if [[ "$temp" == "sleeping" ]]; then
+  idle_held 0 >/dev/null
   notify_state_change normal
   printf '{"text":"GPU: zzz","class":"normal","alt":"sleeping","tooltip":"%s (suspended)"}\n' "$name"
+  exit 0
+fi
+
+# Awake with nothing to show for it: either no client holds the card ("idle"
+# from pick_temp) or a client holds it while utilization sits at 0%. Only a
+# fault while runtime PM is armed - with control=on (AC) the card sits in D0
+# by policy and 0% load is simply what an unused dGPU looks like.
+idle_now=0
+if rpm_enabled && [[ "$temp" == "idle" || "$load" == "0" ]]; then idle_now=1; fi
+held=$(idle_held "$idle_now")
+(( idle_now )) && maybe_alert "$held"
+
+# No client at all, so no temperature was read - same zzz the module has always
+# shown for an unused card. Only the tooltip distinguishes why it is still up:
+# runtime PM armed means it is on its way down, control=on means AC policy is
+# holding it there and it will not drop until you unplug.
+if [[ "$temp" == "idle" ]]; then
+  notify_state_change normal
+  if rpm_enabled; then why="idle, powering down"; else why="idle, AC policy keeps it powered"; fi
+  printf '{"text":"GPU: zzz","class":"normal","alt":"sleeping","tooltip":"%s (%s)"}\n' "$name" "$why"
   exit 0
 fi
 
@@ -168,5 +315,15 @@ elif (( temp < 80 )); then cls="warning"
 else                       cls="critical"
 fi
 
+# The temperature stays on the bar - a number already means "awake" the way
+# zzz means "asleep", and replacing it with a word threw that away. Flag the
+# anomaly with the class instead, so it reads as a normal block that has gone
+# amber rather than a different kind of block.
+alt="$cls"
+if (( idle_now )) && (( held >= IDLE_SHOW )); then
+  cls="warning"; alt="idle-on"
+  name="$name - awake at 0% load for $(( held / 60 )) min, nothing is rendering on it"
+fi
+
 notify_state_change "$cls"
-printf '{"text":"GPU: %d°C","class":"%s","alt":"%s","tooltip":"%s"}\n' "$temp" "$cls" "$cls" "$name"
+printf '{"text":"GPU: %d°C","class":"%s","alt":"%s","tooltip":"%s"}\n' "$temp" "$cls" "$alt" "$name"

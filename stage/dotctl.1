@@ -225,13 +225,54 @@ sysfs attribute elsewhere), the current load percentage. Wired as the waybar
 .B custom/gpu
 module's
 .BR exec .
+.IP
+An unclaimed card reports
+.B zzz
+whatever the power source - nothing is rendering on it, and no reading is
+taken. A card that a client HOLDS while utilization sits at 0% is the
+interesting case: something has
+.I /dev/nvidia*
+open without rendering on it, typically an application whose Vulkan device
+enumeration loaded NVIDIA's ICD, which is enough to block runtime PM and burn
+several watts indefinitely. Once that has held for
+.B DOTCTL_GPU_IDLE_SHOW
+seconds the module keeps showing the temperature but moves it into the
+.B warning
+class, with
+.B idle\-on
+as the
+.IR alt ;
+the number itself already distinguishes an awake card from
+.BR zzz ,
+so the class carries the anomaly rather than replacing the reading. On a
+machine with a battery, while discharging, it additionally raises one
+.BR notify-send (1)
+notification per episode after
+.BR DOTCTL_GPU_IDLE_ALERT_AFTER .
+All of this is gated on the card's
+.I power/control
+being
+.BR auto :
+TLP sets it to
+.B on
+while on AC, and a card held in D0 by policy is not a fault.
+Because
+.BR nvidia-smi (1)
+resets the card's autosuspend timer on every call, readings are cached for
+.B DOTCTL_NVSMI_TTL
+seconds, so the module is safe at any waybar
+.B interval
+and cannot itself keep the card awake.
 .TP
 .B vram
 Waybar JSON line for GPU VRAM: used/total in G plus a
 normal/warning/critical class by percentage. NVIDIA via nvidia-smi (with
 gputemp's never-wake-a-suspended-dGPU rules - reports
 .B zzz
-while the card sleeps), AMD via the amdgpu sysfs
+while the card sleeps, and caches readings for
+.B DOTCTL_NVSMI_TTL
+seconds so polling cannot reset the card's autosuspend timer), AMD via the
+amdgpu sysfs
 .I mem_info_vram_*
 attributes. Wired as the waybar
 .B custom/vram
@@ -1009,6 +1050,37 @@ places its cache directory (lockfile) there.
 .B EDITOR
 Used in documentation examples for hand-editing cycle scripts and the state
 file.
+.TP
+.B DOTCTL_NVSMI_TTL
+Seconds for which
+.BR gputemp / vram
+cache an
+.BR nvidia-smi (1)
+reading (default
+.BR 15 ).
+Each call resets the dGPU's runtime-PM autosuspend timer, so this bounds how
+often the modules can touch the card regardless of the waybar
+.BR interval .
+.TP
+.B DOTCTL_GPU_IDLE_SHOW
+Seconds a held-but-0%-load dGPU must persist before
+.B gputemp
+moves its temperature into the
+.B warning
+class (default
+.BR 60 ).
+The delay keeps a single idle sample between frames from flickering the module
+mid-game.
+.TP
+.B DOTCTL_GPU_IDLE_ALERT_AFTER
+Seconds before the idle-dGPU notification is raised (default
+.BR 300 ).
+.TP
+.B DOTCTL_GPU_IDLE_ALERT
+Set to
+.B 0
+to suppress the idle-dGPU notification entirely. It is otherwise raised only
+on machines that have a battery and are discharging, once per episode.
 .SH SEE ALSO
 .BR hyprland (1),
 .BR hyprctl (1),

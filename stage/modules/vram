@@ -17,9 +17,28 @@ nvidia_suspended() {
   return 1
 }
 
+# Every nvidia-smi call resets the card's runtime-PM autosuspend timer, so
+# querying at the waybar interval can pin an idle card awake even when the
+# never-wake guards above are satisfied (a client may hold /dev/nvidia* while
+# rendering nothing - see gputemp). Cache the reading and refresh at most every
+# NVSMI_TTL seconds, so this module is safe at any waybar interval.
+NVSMI_TTL=${DOTCTL_NVSMI_TTL:-15}
+nvsmi_cache="${XDG_RUNTIME_DIR:-/tmp}/dotctl-vram.cache"
+
+cache_read() {
+  local mtime now line
+  [[ -r "$nvsmi_cache" ]] || return 1
+  mtime=$(stat -c %Y "$nvsmi_cache" 2>/dev/null) || return 1
+  now=$(date +%s)
+  (( now - mtime < NVSMI_TTL )) || return 1
+  line=$(<"$nvsmi_cache") || return 1
+  [[ -n "$line" ]] || return 1
+  printf '%s\n' "$line"
+}
+
 # Prints "used_mib total_mib", "sleeping", or nothing.
 pick_vram() {
-  local used="" total=""
+  local used="" total="" cached=""
 
   if command -v nvidia-smi >/dev/null 2>&1; then
     if nvidia_suspended; then
@@ -30,9 +49,16 @@ pick_vram() {
     if ! fuser -s /dev/nvidiactl 2>/dev/null; then
       printf 'sleeping\n'; return 0
     fi
+    if cached=$(cache_read); then
+      printf '%s\n' "$cached"; return 0
+    fi
     read -r used total < <(nvidia-smi --query-gpu=memory.used,memory.total \
       --format=csv,noheader,nounits 2>/dev/null | head -n1 | tr -d ',')
-    [[ "$used" =~ ^[0-9]+$ && "$total" =~ ^[0-9]+$ ]] && { printf '%s %s\n' "$used" "$total"; return 0; }
+    if [[ "$used" =~ ^[0-9]+$ && "$total" =~ ^[0-9]+$ ]]; then
+      printf '%s %s\n' "$used" "$total" | tee "$nvsmi_cache" 2>/dev/null \
+        || printf '%s %s\n' "$used" "$total"
+      return 0
+    fi
   fi
 
   # AMD (and any driver exposing the amdgpu-style attributes): bytes -> MiB.
@@ -56,7 +82,11 @@ if [[ -z "$out" ]]; then
 fi
 
 if [[ "$out" == "sleeping" ]]; then
-  printf '{"text":"VRAM: zzz","class":"normal","alt":"sleeping","tooltip":"GPU suspended"}\n'
+  # Same zzz either way, but don't claim "suspended" for a card that is merely
+  # unclaimed - on AC it is powered up and staying that way. Matches the
+  # wording gputemp uses for the identical condition.
+  if nvidia_suspended; then why="GPU suspended"; else why="GPU idle, nothing holding it"; fi
+  printf '{"text":"VRAM: zzz","class":"normal","alt":"sleeping","tooltip":"%s"}\n' "$why"
   exit 0
 fi
 
