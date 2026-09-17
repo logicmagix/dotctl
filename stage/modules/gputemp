@@ -33,18 +33,6 @@ nvidia_suspended() {
   return 1
 }
 
-# True when the dGPU is powered up (the complement of nvidia_suspended, but
-# stated positively so the idle checks below read the way they're meant to).
-nvidia_active() {
-  local d
-  for d in /sys/bus/pci/devices/*; do
-    [[ -r "$d/vendor" && $(<"$d/vendor") == 0x10de ]] || continue
-    [[ -r "$d/class"  && $(<"$d/class")  == 0x03*  ]] || continue
-    [[ -r "$d/power/runtime_status" && $(<"$d/power/runtime_status") != suspended ]] && return 0
-  done
-  return 1
-}
-
 # True when the dGPU's runtime PM is actually armed (power/control == auto).
 # TLP sets control=on while on AC, which disables runtime PM outright - the
 # card then sits in D0 BY POLICY and there is no autosuspend timer to protect
@@ -182,8 +170,10 @@ pick_temp() {
       --format=csv,noheader,nounits 2>/dev/null | head -n1 | tr -d ',%')
     if [[ "$t" =~ ^[0-9]+$ ]]; then
       [[ "$l" =~ ^[0-9]+$ ]] || l="-"
-      printf '%s %s\n' "$t" "$l" | tee "$nvsmi_cache" 2>/dev/null \
-        || printf '%s %s\n' "$t" "$l"
+      # Cache write is best-effort and kept off stdout: the reading must be
+      # printed exactly once even when the runtime dir isn't writable.
+      { printf '%s %s\n' "$t" "$l" > "$nvsmi_cache"; } 2>/dev/null || true
+      printf '%s %s\n' "$t" "$l"
       return 0
     fi
   fi

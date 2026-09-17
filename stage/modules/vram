@@ -55,8 +55,10 @@ pick_vram() {
     read -r used total < <(nvidia-smi --query-gpu=memory.used,memory.total \
       --format=csv,noheader,nounits 2>/dev/null | head -n1 | tr -d ',')
     if [[ "$used" =~ ^[0-9]+$ && "$total" =~ ^[0-9]+$ ]]; then
-      printf '%s %s\n' "$used" "$total" | tee "$nvsmi_cache" 2>/dev/null \
-        || printf '%s %s\n' "$used" "$total"
+      # Cache write is best-effort and kept off stdout: the reading must be
+      # printed exactly once even when the runtime dir isn't writable.
+      { printf '%s %s\n' "$used" "$total" > "$nvsmi_cache"; } 2>/dev/null || true
+      printf '%s %s\n' "$used" "$total"
       return 0
     fi
   fi
