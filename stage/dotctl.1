@@ -184,6 +184,14 @@ is one of
 (resolved at runtime from pactl port/sink data - no hardcoded sink names), or
 .B toggle\-mute
 to mute/unmute the current default sink.
+.B heal
+recovers from WirePlumber leaving the effective default on a fallback sink
+after the configured one (typically HDMI) returns from monitor-off or
+suspend: if the configured default is present and plugged but not in use,
+its card profile is bounced so it gets re-selected. A silent no-op
+otherwise, so it is safe to run unconditionally from a resume hook, e.g.
+hypridle's
+.BR after_sleep_cmd .
 .TP
 .B audio\-output\-menu
 Wofi picker offering the common output classes; selecting one delegates to

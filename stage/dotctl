@@ -2483,7 +2483,9 @@ ACTIONS
   power                            Wofi power menu: poweroff/reboot/logout
                                    (waybar power-button on-click; toggles)
   audio-output <profile>           Route the default sink; profile ∈ {headset,
-                                   hdmi, speaker, aux, usb, bluetooth, toggle-mute}
+                                   hdmi, speaker, aux, usb, bluetooth, toggle-mute};
+                                   `heal` un-sticks a default sink that stopped
+                                   following the configured one after resume
   audio-output-menu                Wofi output picker (waybar on-click; toggles)
   audio-output-status              Waybar JSON status stream for the default sink
   audio-hotplug-watch              Poll for new sinks, open the picker on hotplug

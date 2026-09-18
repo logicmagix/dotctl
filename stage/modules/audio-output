@@ -18,6 +18,9 @@
 #             already claimed as headset or HDMI.
 #   bluetooth: any bluez_output.* sink (paired bluetooth audio device).
 #
+# Actions (not profiles): toggle-mute, and heal - un-stick WirePlumber when
+# its effective default sink stops following the configured one after resume.
+#
 # Override any of the above with environment regexes (extended regex,
 # checked against both sink name and description):
 #   DOTCTL_AUDIO_HEADSET_MATCH, DOTCTL_AUDIO_HDMI_MATCH, DOTCTL_AUDIO_AUX_MATCH
@@ -29,7 +32,7 @@ PROFILE="${1:-}"
 notify() { notify-send "$@" 2>/dev/null || true; }
 
 if [ -z "$PROFILE" ]; then
-  notify "Audio" "Usage: audio-output {headset|hdmi|speaker|aux|usb|bluetooth|toggle-mute}"
+  notify "Audio" "Usage: audio-output {headset|hdmi|speaker|aux|usb|bluetooth|toggle-mute|heal}"
   exit 1
 fi
 
@@ -42,6 +45,80 @@ if [ "$PROFILE" = "toggle-mute" ]; then
     notify "🔊 Unmuted" ""
   fi
   exit 0
+fi
+
+# ---- stuck-default recovery ---------------------------------------------------
+#
+# WirePlumber can wedge on a sink that went away and came back under it (HDMI
+# across a DPMS-off + suspend/resume): the *configured* default is the HDMI
+# sink but the effective default stays on the fallback it picked while the
+# monitor was off. Re-requesting the default is a no-op because the configured
+# value doesn't change - so pavucontrol can't fix it either. Bouncing the card
+# profile makes WirePlumber rebuild the sink and re-select.
+
+# Wait up to ~1s for the effective default to become $1.
+default_is() {
+  local i
+  for i in 1 2 3 4 5; do
+    [ "$(pactl get-default-sink 2>/dev/null)" = "$1" ] && return 0
+    sleep 0.2
+  done
+  return 1
+}
+
+bounce_card_of() {
+  local sink="$1" card profile
+  card=$(pactl list sinks 2>/dev/null | awk -v s="$sink" '
+    $1=="Name:"              { k=($2==s) }
+    k && $1=="device.name"   { gsub(/"/,"",$3); print $3; exit }
+  ')
+  profile=$(pactl list cards 2>/dev/null | awk -v c="${card:-}" '
+    $1=="Name:"                          { k=($2==c) }
+    k && $1=="Active" && $2=="Profile:"  { print $3; exit }
+  ')
+  [ -n "${card:-}" ] && [ -n "${profile:-}" ] && [ "$profile" != "off" ] || return 1
+  pactl set-card-profile "$card" off 2>/dev/null || true
+  sleep 0.5
+  pactl set-card-profile "$card" "$profile" 2>/dev/null || true
+  sleep 1
+}
+
+# Sink $1 exists and its active port is not reported unplugged. A configured
+# default that fails this (monitor off, headset away) is legitimately skipped.
+sink_usable() {
+  pactl list sinks 2>/dev/null | awk -v s="$1" '
+    $1=="Name:"                           { k=($2==s); inports=0; if (k) found=1 }
+    k && /^[[:space:]]+Ports:/            { inports=1; next }
+    k && inports && /type:/               { p=$1; sub(/:$/,"",p); if ($0 ~ /not available/) na[p]=1 }
+    k && $1=="Active" && $2=="Port:"      { inports=0; if ($3 in na) bad=1 }
+    END                                   { exit (found && !bad) ? 0 : 1 }
+  '
+}
+
+# heal: if the configured default sink is usable but WirePlumber isn't using
+# it, bounce its card. Silent no-op otherwise, so it is safe to run blindly
+# after resume (e.g. from hypridle's after_sleep_cmd).
+if [ "$PROFILE" = "heal" ]; then
+  command -v pw-metadata >/dev/null 2>&1 || exit 0
+  want=$(pw-metadata -n default 0 default.configured.audio.sink 2>/dev/null \
+    | sed -n "s/.*key:'default\.configured\.audio\.sink'.*\"name\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" \
+    | head -n1)
+  [ -n "$want" ] || exit 0
+  sink_usable "$want" || exit 0
+  default_is "$want" && exit 0
+
+  # Streams already playing on the sink get kicked off by the bounce; remember
+  # them so they can be put back. Streams parked elsewhere are left alone.
+  want_idx=$(pactl list short sinks 2>/dev/null | awk -v s="$want" '$2==s {print $1; exit}')
+  moved=$(pactl list short sink-inputs 2>/dev/null | awk -v i="${want_idx:-x}" '$2==i {print $1}')
+  bounce_card_of "$want" || exit 0
+  if default_is "$want"; then
+    for id in $moved; do pactl move-sink-input "$id" "$want" 2>/dev/null || true; done
+    notify "🔊 Audio recovered" "Default output restored to $want"
+    exit 0
+  fi
+  notify "Audio" "Default sink stuck on $(pactl get-default-sink 2>/dev/null) - restart wireplumber"
+  exit 1
 fi
 
 : "${DOTCTL_AUDIO_HEADSET_MATCH:=}"
@@ -208,6 +285,18 @@ if [ -n "$match_port" ]; then
 fi
 
 pactl set-default-sink "$match_sink"
+
+if ! default_is "$match_sink"; then
+  bounce_card_of "$match_sink"
+  if [ -n "$match_port" ]; then
+    pactl set-sink-port "$match_sink" "$match_port" >/dev/null 2>&1 || true
+  fi
+  pactl set-default-sink "$match_sink" 2>/dev/null || true
+  if ! default_is "$match_sink"; then
+    notify "Audio" "Default sink stuck on $(pactl get-default-sink 2>/dev/null) - restart wireplumber"
+    exit 1
+  fi
+fi
 
 pactl list short sink-inputs 2>/dev/null | awk '{print $1}' \
   | xargs -r -I{} pactl move-sink-input {} "$match_sink" 2>/dev/null || true
