@@ -293,6 +293,8 @@ yourname ALL=(root) NOPASSWD: /usr/sbin/openvpn, /usr/sbin/iptables, /usr/sbin/i
   already skips configs whose hostname no longer resolves. OpenVPN's
   output for `vpnctl on` lands in `/var/log/openvpn/nordvpn.log`; raise
   the wait with `VPNCTL_CONNECT_TIMEOUT=60 vpnctl on` on slow links.
+  `vpnctl on` rotates that log (`.1`, `.2`) once it passes 10 MB; tune
+  with `VPNCTL_LOG_MAX_MB`.
 - **Killswitch class never triggers**: the script checks `iptables -S OUTPUT`
   for a rule matching `! -o tun0 ... -j REJECT`. If you use a different
   interface or firewall (ufw, firewalld, nftables), edit the `iptables`

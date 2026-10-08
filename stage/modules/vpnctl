@@ -13,6 +13,13 @@ LOG_FILE="/var/log/openvpn/nordvpn.log"
 # live server answers the UDP handshake in a few seconds; a retired one never
 # does, and openvpn would retry it forever while the indicator shows OFF.
 CONNECT_TIMEOUT="${VPNCTL_CONNECT_TIMEOUT:-30}"
+# `vpnctl on` rotates the openvpn log once it passes this many MB, keeping
+# LOG_KEEP older generations (.1, .2). Nothing else ever trims it and it had
+# quietly grown to 237 MB. Rotation happens at connect time, after the old
+# openvpn is killed and before the new one opens the file, so a plain mv is
+# safe - no copytruncate dance.
+LOG_MAX_MB="${VPNCTL_LOG_MAX_MB:-10}"
+LOG_KEEP=2
 # How many random picks to try before giving up on finding a live server.
 RANDOM_TRIES=10
 # Marker read by vpn-status-indicator (iptables needs root; /run is tmpfs so
@@ -32,6 +39,26 @@ fi
 nudge_waybar() {
   pkill -RTMIN+9 -x waybar 2>/dev/null
   return 0
+}
+
+# Shift nordvpn.log -> .1 -> .2 when it is over LOG_MAX_MB. Only called from
+# vpn_on with openvpn already stopped. stat works unprivileged (the log dir is
+# 755); the moves need root because the files are 600.
+rotate_log() {
+  local size i
+  size=$(stat -c %s "$LOG_FILE" 2>/dev/null || echo 0)
+  (( size > LOG_MAX_MB * 1024 * 1024 )) || return 0
+  echo "Rotating $LOG_FILE ($(( size / 1024 / 1024 )) MB > ${LOG_MAX_MB} MB)..."
+  for (( i = LOG_KEEP; i >= 1; i-- )); do
+    if [[ -e "${LOG_FILE}.$i" ]]; then
+      if (( i == LOG_KEEP )); then
+        $SUDO rm -f "${LOG_FILE}.$i"
+      else
+        $SUDO mv -f "${LOG_FILE}.$i" "${LOG_FILE}.$(( i + 1 ))"
+      fi
+    fi
+  done
+  $SUDO mv -f "$LOG_FILE" "${LOG_FILE}.1"
 }
 
 # Hostname a config connects to: the `remote` line if it is a name, else the
@@ -141,6 +168,7 @@ vpn_on() {
   echo "NordVPN Connecting..."
 
   $SUDO mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
+  rotate_log
   $SUDO openvpn \
     --config "$DEFAULT_CONF" \
     --auth-user-pass "$AUTH_FILE" \
