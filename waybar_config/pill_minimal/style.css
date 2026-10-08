@@ -298,6 +298,13 @@ tooltip {
 /* BATTERY:END */
 
 /* VPN:BEGIN - stripped when WAYBAR_VPN=off */
+/* No transition on `color`: GTK3 leaves a label's text stuck at the old
+   colour when `color` is animated across a class flip (border-color
+   animates fine), so the pill showed green text on a red border until a
+   hover forced a restyle. Background/border still fade. */
+#custom-vpn {
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
 #custom-vpn.on              { color: @green; border-color: @green; }
 #custom-vpn.on.killswitch   { color: @mint;  border-color: @mint;  }
 #custom-vpn.off             { color: @red;   border-color: @red;   }
