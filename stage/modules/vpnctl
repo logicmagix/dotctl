@@ -304,7 +304,8 @@ vpn_pick() {
     exit 0
   fi
   local choice
-  choice=$(vpn_list | fzf --prompt="Pick NordVPN server: " --height=40%) || exit 1
+  choice=$(vpn_list | sed 's#.*/##' | fzf --prompt="Pick NordVPN server: " --height=40%) \
+    || { echo "Cancelled." >&2; exit 0; }
   choice=$(basename "$choice")
   vpn_on "$choice"
 }
@@ -436,20 +437,9 @@ vpn_menu() {
       kitty --class vpnstatus -e bash -c "vpnctl random && $on_ok || $on_fail"
       ;;
     "Pick server")
-      cfg="$(
-        vpn_list | sed 's#.*/##' | wofi --dmenu \
-          --prompt 'Pick server' \
-          --location 3 \
-          --insensitive \
-          --width 550 \
-          --height 450 \
-          --xoffset -55 \
-          --yoffset 10
-      )" || exit 0
-      cfg=$(basename "$cfg")
-      if [[ -n "$cfg" ]]; then
-        kitty --class vpnstatus -e bash -c "vpnctl on \"$cfg\" && $on_ok || $on_fail"
-      fi
+      # fzf in a terminal: wofi inserts its 18k rows lazily, so a search typed
+      # right after opening only sees the first few thousand entries.
+      kitty --class vpnstatus -e bash -c "vpnctl pick && $on_ok || $on_fail"
       ;;
 
     "Disconnect")
