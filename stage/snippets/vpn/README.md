@@ -132,57 +132,45 @@ vpnctl pick             Interactive fzf picker
 vpnctl killswitch on    Enable iptables kill switch (block non-tun0)
 vpnctl killswitch off
 vpnctl killswitch stat
+vpnctl autostart on     Connect at boot (installs an OpenRC/systemd unit if needed)
+vpnctl autostart off    Do not connect at boot
+vpnctl autostart stat   Show whether the boot unit is enabled
 vpnctl menu             wofi menu (what the waybar button calls)
 ```
 
 The waybar button calls `vpnctl menu` on click, which presents a wofi
-dmenu for connect/disconnect/killswitch/pick-server/status.
+dmenu for connect/disconnect/killswitch/pick-server/status, plus a
+`Connect at boot: ON|OFF` entry that toggles `vpnctl autostart`.
 
 ## 5. Auto-start at boot (optional)
 
 By default `vpnctl` is a manual CLI - nothing starts it on login or boot.
-If you want the tunnel up automatically, wire it into your init system.
-
-### systemd (Arch / Fedora / Debian / openSUSE / Void / ...)
-
-A unit template ships at `stage/snippets/vpn/vpnctl.service`. It calls
-`vpnctl up`, which `exec`s `openvpn` in the foreground so systemd tracks
-the real process (not a wrapper), can stop it cleanly with `SIGTERM`, and
-restarts it on failure.
-
-Install and enable:
+To have the tunnel come up automatically, pick `Connect at boot: OFF` in
+the waybar menu (it flips to `ON`), or run:
 
 ```bash
-sudo install -m644 stage/snippets/vpn/vpnctl.service /etc/systemd/system/vpnctl.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now vpnctl.service
+vpnctl autostart on      # connect at boot
+vpnctl autostart off     # stay disconnected at boot
+vpnctl autostart stat    # which is it right now?
 ```
 
-Check status:
+`autostart` detects the init system and manages one unit for it:
 
-```bash
-systemctl status vpnctl.service
-journalctl -u vpnctl.service -f
-```
+| Init    | Unit                                   | Boot action  |
+|---------|----------------------------------------|--------------|
+| OpenRC  | `/etc/init.d/vpnctl` in `default`      | `vpnctl on`  |
+| systemd | `/etc/systemd/system/vpnctl.service`   | `vpnctl up`  |
 
-Once enabled, drive the connection via systemd rather than the CLI:
+The unit is generated on the first `autostart on` (nothing is written if
+it already exists) and left in place by `autostart off`, which only drops
+it from the boot set. Toggling never touches the current connection. The
+boot connect uses whatever `/etc/openvpn/nordvpn.conf` points at, so
+`vpnctl use <file>` (or any connect from the menu) also picks the server
+for next boot.
 
-```bash
-sudo systemctl start vpnctl        # connect
-sudo systemctl stop  vpnctl        # disconnect
-sudo systemctl restart vpnctl      # reconnect (e.g., after switching servers)
-```
-
-To switch servers, use `vpnctl use <file>` to update the `nordvpn.conf`
-symlink, then `sudo systemctl restart vpnctl`.
-
-**Do not** mix `vpnctl on` / `vpnctl off` with the systemd unit. Both
-call `pkill openvpn`, so they'll fight: `vpnctl off` will kill systemd's
-openvpn, and `Restart=on-failure` will immediately bring it back.
-
-If you need `network-online.target` to actually wait for the network
-(rather than resolving instantly), enable whichever wait helper your
-network stack provides:
+If you need `network-online.target` (systemd) or `net` (OpenRC) to
+actually wait for the network rather than resolving instantly, enable
+whichever wait helper your network stack provides - for systemd:
 
 ```bash
 # NetworkManager:
@@ -190,6 +178,23 @@ sudo systemctl enable NetworkManager-wait-online.service
 # or systemd-networkd:
 sudo systemctl enable systemd-networkd-wait-online.service
 ```
+
+### systemd details
+
+The unit is the same file that ships at `stage/snippets/vpn/vpnctl.service`
+(install it by hand with `install -m644` + `systemctl daemon-reload` +
+`systemctl enable` if you prefer). It calls `vpnctl up`, which `exec`s
+`openvpn` in the foreground so systemd tracks the real process, can stop
+it cleanly with `SIGTERM`, and restarts it on failure.
+
+```bash
+systemctl status vpnctl.service
+journalctl -u vpnctl.service -f
+```
+
+`vpnctl off` and the menu's Disconnect stop the unit before killing
+openvpn, so `Restart=on-failure` does not bring the tunnel back. Driving
+it with `sudo systemctl start|stop|restart vpnctl` also works.
 
 #### Stop OpenVPN log spam on the greeter TTY
 
@@ -217,61 +222,41 @@ extra units into `After=` if you run companion services (e.g. a
 `nordvpn-watch.service` that reacts to tunnel state) that also log to
 the console.
 
-### OpenRC (Gentoo / Artix)
+### OpenRC details (Gentoo / Artix)
 
-OpenRC ships its own `openvpn` init script that supports one service
-instance per config file via symlink naming. Because it uses
-`start-stop-daemon` (no respawning supervisor), it coexists cleanly with
-`vpnctl on` / `vpnctl off` - the waybar button and `pkill` do not fight
-an always-on watchdog.
+The generated `/etc/init.d/vpnctl` is a plain `start()` / `stop()` script
+around `vpnctl on` / `vpnctl off` - no `supervise-daemon`. That is
+deliberate: a supervisor respawns openvpn on any exit, including a clean
+`vpnctl off`, so the tunnel becomes impossible to turn off from the
+waybar module. Runtime control stays with `vpnctl` and the menu whether
+or not the service is in the runlevel.
 
-**Do not** write a custom `supervise-daemon`-based init script for this.
-That supervisor respawns openvpn on any exit (including a clean
-`vpnctl off`), so the tunnel becomes impossible to turn off from the
-waybar module.
-
-Wire it up:
+If you already have a hand-rolled `/etc/init.d/vpn` that calls `vpnctl`,
+`autostart` keeps driving that one instead of installing a twin.
 
 ```bash
-# 1. Create a per-config instance bound to /etc/openvpn/nordvpn.conf
-sudo ln -s /etc/init.d/openvpn /etc/init.d/openvpn.nordvpn
+sudo rc-service vpnctl start|stop|status
+rc-update show default | grep vpnctl
 ```
 
-Then pick boot behavior - this is the one-command toggle between
-"start connected" and "start disconnected" at login:
-
-```bash
-# Start CONNECTED at boot
-sudo rc-update add openvpn.nordvpn default
-
-# Start DISCONNECTED at boot (remove from runlevel)
-sudo rc-update del openvpn.nordvpn default
-```
-
-Start/stop now without rebooting:
-
-```bash
-sudo rc-service openvpn.nordvpn start
-sudo rc-service openvpn.nordvpn stop
-```
-
-Runtime control stays with `vpnctl` and the waybar module regardless of
-whether the init service is enabled - `vpnctl off` kills openvpn and it
-stays dead until you reconnect (no supervisor bringing it back). One
-cosmetic caveat: `rc-service openvpn.nordvpn status` can go stale after
-you toggle via waybar, because `vpnctl` does not update the init
-script's pidfile. The waybar indicator (which reads `tun0` directly) is
-always accurate.
+OpenRC's stock `openvpn` init script (`ln -s /etc/init.d/openvpn
+/etc/init.d/openvpn.nordvpn`) is an alternative, but it does not pass
+`--auth-user-pass`, so provider configs with a bare `auth-user-pass`
+line (NordVPN's) hang on a credential prompt at boot. Use it only if you
+edit the config to `auth-user-pass /etc/openvpn/nordvpn.auth`.
 
 ## 6. Sudo behavior
 
 `vpnctl` needs root for `openvpn`, `iptables`, `ip6tables`, `kill`, and
-`tee /run/openvpn-*.pid`. It re-invokes itself with `sudo` when needed.
-To avoid a password prompt every click, add a sudoers drop-in:
+`rm /run/openvpn-*.pid`; `vpnctl autostart` additionally needs
+`rc-update` or `systemctl` (and `tee` + `chmod` into `/etc/init.d` or
+`/etc/systemd/system` the first time). It re-invokes itself with `sudo`
+when needed. Every menu action runs in a terminal window, so a password
+prompt there works; to avoid one every click, add a sudoers drop-in:
 
 ```
 # /etc/sudoers.d/dotctl-vpn
-yourname ALL=(root) NOPASSWD: /usr/sbin/openvpn, /usr/sbin/iptables, /usr/sbin/ip6tables, /bin/kill, /usr/bin/tee /run/openvpn-*.pid, /bin/rm /run/openvpn-*.pid
+yourname ALL=(root) NOPASSWD: /usr/sbin/openvpn, /usr/sbin/iptables, /usr/sbin/ip6tables, /bin/kill, /bin/rm /run/openvpn-*.pid
 ```
 
 (Paths may differ on your distro - adjust with `command -v openvpn`, etc.)

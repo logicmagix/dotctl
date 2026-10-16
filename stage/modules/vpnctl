@@ -5,9 +5,13 @@ CONFIG_DIR="/etc/openvpn"
 DEFAULT_CONF="${CONFIG_DIR}/nordvpn.conf"
 AUTH_FILE="${CONFIG_DIR}/nordvpn.auth"
 OVPN_DIR="${HOME}/nordvpn/ovpn_udp"
+# Written by openvpn itself (--writepid) once it has daemonized.
 PIDFILE="/run/openvpn-nordvpn.pid"
-# `vpnctl on` backgrounds openvpn, so its output would otherwise die with the
-# terminal (the wofi menu closes its kitty window after two seconds).
+# `vpnctl on` runs openvpn with --daemon, so it detaches from the terminal
+# and logs here. Keeping it attached as a plain background job held the
+# menu's kitty window open forever: kitty (close_on_child_death=no) will
+# not close while any process still has the pty, and sudo's use_pty relay
+# swallowed the keystrokes meant to dismiss it.
 LOG_FILE="/var/log/openvpn/nordvpn.log"
 # Seconds `vpnctl on` waits for tun0 before declaring the connect failed. A
 # live server answers the UDP handshake in a few seconds; a retired one never
@@ -25,6 +29,12 @@ RANDOM_TRIES=10
 # Marker read by vpn-status-indicator (iptables needs root; /run is tmpfs so
 # the marker disappears on reboot together with the rules).
 KS_MARK="/run/vpnctl-killswitch"
+# `vpnctl autostart` installs one unit per init system and toggles it in the
+# boot set: /etc/init.d/vpnctl on OpenRC (runs `vpnctl on`/`off`, no
+# supervisor), vpnctl.service on systemd (runs `vpnctl up` in the
+# foreground). Both are generated below so a bare /usr/local/bin install
+# works without the repo's snippets dir.
+SYSTEMD_UNIT="/etc/systemd/system/vpnctl.service"
 
 # Use sudo for privileged operations if not already root
 if [[ $EUID -ne 0 ]]; then
@@ -89,7 +99,7 @@ usage() {
 Usage: vpnctl <command> [args...]
 
 Commands:
-  on [file]        Connect using DEFAULT_CONF or OVPN file (relative to \$OVPN_DIR)
+  on [file]        Connect (daemonized) using DEFAULT_CONF or OVPN file (relative to \$OVPN_DIR)
   up [file]        Foreground connect (exec; for systemd Type=simple units)
   off              Disconnect (kill OpenVPN)
   status           Show VPN status (process, tun0, public IP)
@@ -101,6 +111,9 @@ Commands:
   killswitch on    Enable iptables kill switch (block non-tun0)
   killswitch off   Disable kill switch
   killswitch stat  Show kill switch rule presence
+  autostart on     Connect at boot (installs an OpenRC or systemd unit if needed)
+  autostart off    Do not connect at boot (the current connection is untouched)
+  autostart stat   Show whether the boot unit is enabled
   locs             Show unique "locations" (based on filenames)
 USAGE
 }
@@ -161,6 +174,7 @@ vpn_on() {
 
   echo "Stopping any existing OpenVPN..."
   echo "Closing any existing NordVPN connection..."
+  stop_systemd_unit
   $SUDO pkill openvpn 2>/dev/null || true
   $SUDO rm -f "$PIDFILE" 2>/dev/null || true
 
@@ -169,26 +183,34 @@ vpn_on() {
 
   $SUDO mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
   rotate_log
-  $SUDO openvpn \
+  # --daemon: openvpn forks, drops the terminal, and the foreground sudo
+  # returns as soon as the config parses. Startup errors (bad config, missing
+  # auth file) surface here as a non-zero exit; connect problems show up in
+  # the wait loop below.
+  if ! $SUDO openvpn \
     --config "$DEFAULT_CONF" \
     --auth-user-pass "$AUTH_FILE" \
-    --log-append "$LOG_FILE" &
-
-  openvpn_pid=$!
-  echo "OpenVPN PID: $openvpn_pid (log: $LOG_FILE)"
-  $SUDO mkdir -p "$(dirname "$PIDFILE")" || true
-  echo "$openvpn_pid" | $SUDO tee "$PIDFILE" >/dev/null || true
+    --log-append "$LOG_FILE" \
+    --writepid "$PIDFILE" \
+    --daemon; then
+    echo "ERROR: openvpn refused to start (see $LOG_FILE)." >&2
+    $SUDO tail -n 15 "$LOG_FILE" 2>/dev/null | sed 's/^/  /' >&2
+    return 1
+  fi
+  echo "OpenVPN started (log: $LOG_FILE)"
 
   # Wait for the tunnel instead of a fixed sleep. Without this a dead remote
   # leaves openvpn retrying forever while the waybar block says VPN OFF, and
-  # nothing tells the user why. /proc is used for liveness because the child
-  # runs as root, so `kill -0` would fail with EPERM even while it is alive.
-  local waited=0
+  # nothing tells the user why. The pid comes from openvpn's own pid file,
+  # written right after it daemonizes; /proc is used for liveness because
+  # the daemon runs as root, so `kill -0` would fail with EPERM while alive.
+  local waited=0 openvpn_pid=""
   while (( waited < CONNECT_TIMEOUT )); do
     if ip link show tun0 >/dev/null 2>&1; then
       break
     fi
-    if [[ ! -d "/proc/$openvpn_pid" ]]; then
+    [[ -z "$openvpn_pid" ]] && openvpn_pid=$(cat "$PIDFILE" 2>/dev/null)
+    if [[ -n "$openvpn_pid" && ! -d "/proc/$openvpn_pid" ]]; then
       break
     fi
     sleep 1
@@ -202,9 +224,9 @@ vpn_on() {
     return 0
   fi
 
-  if [[ -d "/proc/$openvpn_pid" ]]; then
+  if [[ -n "$openvpn_pid" && -d "/proc/$openvpn_pid" ]] || pgrep -x openvpn >/dev/null 2>&1; then
     echo "ERROR: no tun0 after ${CONNECT_TIMEOUT}s - server unreachable (retired?). Stopping openvpn." >&2
-    $SUDO kill "$openvpn_pid" 2>/dev/null || true
+    [[ -n "$openvpn_pid" ]] && { $SUDO kill "$openvpn_pid" 2>/dev/null || true; }
     $SUDO pkill openvpn 2>/dev/null || true
   else
     echo "ERROR: openvpn exited before the tunnel came up (auth or config problem?)." >&2
@@ -242,6 +264,7 @@ vpn_up() {
 vpn_off() {
   echo "Stopping OpenVPN..."
   echo "NordVPN Connection Closed..."
+  stop_systemd_unit
   if [[ -f "$PIDFILE" ]]; then
     $SUDO kill "$(cat "$PIDFILE")" 2>/dev/null || true
     $SUDO rm -f "$PIDFILE"
@@ -417,6 +440,163 @@ killswitch_status() {
     fi
 }
 
+# --- AUTOSTART AT BOOT -----------------------------------------------------
+
+init_system() {
+  # OpenRC first: Artix ships an empty /run/systemd for compatibility.
+  if [[ -d /run/openrc ]] && command -v rc-update >/dev/null 2>&1; then
+    echo openrc
+  elif [[ -d /run/systemd/system ]] && command -v systemctl >/dev/null 2>&1; then
+    echo systemd
+  else
+    echo none
+  fi
+}
+
+# OpenRC service name. Setups that predate `vpnctl autostart` hand-rolled
+# the same script as /etc/init.d/vpn; keep driving that one instead of
+# installing a twin that would race it at boot.
+rc_svc() {
+  if [[ ! -e /etc/init.d/vpnctl && -e /etc/init.d/vpn ]] \
+     && grep -q vpnctl /etc/init.d/vpn 2>/dev/null; then
+    echo vpn
+  else
+    echo vpnctl
+  fi
+}
+
+# `vpnctl on`/`off` kill openvpn directly. If systemd owns the running one,
+# stop the unit first so it does not count that as a failure and respawn.
+stop_systemd_unit() {
+  [[ "$(init_system)" == systemd ]] || return 0
+  systemctl is-active --quiet vpnctl.service 2>/dev/null || return 0
+  echo "Stopping vpnctl.service..."
+  $SUDO systemctl stop vpnctl.service 2>/dev/null || true
+}
+
+install_systemd_unit() {
+  [[ -e "$SYSTEMD_UNIT" ]] && return 0
+  echo "Installing $SYSTEMD_UNIT..."
+  $SUDO tee "$SYSTEMD_UNIT" >/dev/null <<'UNIT' || return 1
+[Unit]
+Description=NordVPN via vpnctl
+Documentation=man:openvpn(8)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/vpnctl up
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+  $SUDO systemctl daemon-reload
+}
+
+install_openrc_script() {
+  local svc; svc=$(rc_svc)
+  [[ -e "/etc/init.d/$svc" ]] && return 0
+  echo "Installing /etc/init.d/$svc..."
+  # Plain start/stop on purpose: a supervise-daemon script would respawn
+  # openvpn after `vpnctl off`, making the menu's Disconnect useless.
+  $SUDO tee "/etc/init.d/$svc" >/dev/null <<'RC' || return 1
+#!/sbin/openrc-run
+description="VPN via vpnctl (OpenVPN backend)"
+
+depend() {
+    need net
+    use dns
+}
+
+start() {
+    ebegin "Starting VPN (vpnctl on)"
+    /usr/local/bin/vpnctl on
+    eend $?
+}
+
+stop() {
+    ebegin "Stopping VPN (vpnctl off)"
+    /usr/local/bin/vpnctl off
+    eend $?
+}
+
+status() {
+    /usr/local/bin/vpnctl status
+}
+RC
+  $SUDO chmod 755 "/etc/init.d/$svc"
+}
+
+# Prints on/off; exit status mirrors it. Unprivileged, so the menu can
+# show the current state without a sudo prompt.
+autostart_status() {
+  case "$(init_system)" in
+    openrc)
+      if rc-update show default 2>/dev/null | awk '{print $1}' | grep -qx "$(rc_svc)"; then
+        echo on; return 0
+      fi ;;
+    systemd)
+      if systemctl is-enabled --quiet vpnctl.service 2>/dev/null; then
+        echo on; return 0
+      fi ;;
+  esac
+  echo off
+  return 1
+}
+
+autostart_on() {
+  case "$(init_system)" in
+    openrc)
+      install_openrc_script || return 1
+      $SUDO rc-update add "$(rc_svc)" default || return 1
+      ;;
+    systemd)
+      install_systemd_unit || return 1
+      $SUDO systemctl enable vpnctl.service || return 1
+      ;;
+    *)
+      echo "No supported init system found (need OpenRC or systemd)." >&2
+      return 1
+      ;;
+  esac
+  echo "Autostart enabled: the VPN connects at boot using $(readlink -f "$DEFAULT_CONF" 2>/dev/null || echo "$DEFAULT_CONF")."
+}
+
+autostart_off() {
+  case "$(init_system)" in
+    openrc)
+      local svc; svc=$(rc_svc)
+      if rc-update show default 2>/dev/null | awk '{print $1}' | grep -qx "$svc"; then
+        $SUDO rc-update del "$svc" default || return 1
+      fi
+      ;;
+    systemd)
+      if [[ -e "$SYSTEMD_UNIT" ]]; then
+        $SUDO systemctl disable vpnctl.service || return 1
+      fi
+      ;;
+    *)
+      echo "No supported init system found (need OpenRC or systemd)." >&2
+      return 1
+      ;;
+  esac
+  echo "Autostart disabled: the VPN stays off at boot (the current connection is untouched)."
+}
+
+autostart_stat() {
+  local init; init=$(init_system)
+  if autostart_status >/dev/null; then
+    echo "Autostart: ENABLED ($init)"
+  else
+    echo "Autostart: DISABLED ($init)"
+  fi
+}
+
 vpn_menu() {
   # Needs wofi
   if ! command -v wofi >/dev/null 2>&1; then
@@ -430,7 +610,9 @@ vpn_menu() {
     exit 0
   fi
 
-  # Build menu entries
+  # Build menu entries. The boot entry shows the current state and toggles it.
+  local boot
+  boot=$(autostart_status)
   choice="$(
     printf '%s\n' \
       "Connect (default)" \
@@ -440,13 +622,14 @@ vpn_menu() {
       "Killswitch ON" \
       "Killswitch OFF" \
       "Killswitch status" \
+      "Connect at boot: ${boot^^}" \
       "Full status (terminal)" \
     | wofi --dmenu \
            --prompt 'VPN' \
            --location 3 \
            --insensitive \
            --width 550 \
-           --height 450 \
+           --height 500 \
            --xoffset -55 \
            --yoffset 10
   )" || exit 0
@@ -482,6 +665,12 @@ vpn_menu() {
     "Killswitch status")
       kitty --class vpnstatus -e bash -c "vpnctl killswitch stat; echo; read -n1 -rp 'Press any key to close...'"
       ;;
+    "Connect at boot: ON")
+      kitty --class vpnstatus -e bash -c "vpnctl autostart off; echo; read -n1 -rp 'Press any key to close...'"
+      ;;
+    "Connect at boot: OFF")
+      kitty --class vpnstatus -e bash -c "vpnctl autostart on; echo; read -n1 -rp 'Press any key to close...'"
+      ;;
     "Full status (terminal)")
       kitty --class vpnstatus -e bash -c "vpnctl status; echo; read -n1 -rp 'Press any key to close...'"
       ;;
@@ -516,6 +705,16 @@ case "$cmd" in
       off)  killswitch_off "$@" ;;
       stat) killswitch_status ;;
       *)    echo "Usage: vpnctl killswitch {on|off|stat}" >&2; exit 1 ;;
+    esac
+    ;;
+  autostart)
+    sub="${1:-}"
+    shift || true
+    case "$sub" in
+      on)          autostart_on ;;
+      off)         autostart_off ;;
+      stat|status) autostart_stat ;;
+      *)    echo "Usage: vpnctl autostart {on|off|stat}" >&2; exit 1 ;;
     esac
     ;;
   ""|-h|--help|help) usage ;;
