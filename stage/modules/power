@@ -37,12 +37,24 @@ if [ -z "$hibernate_cmd" ] && command -v ZZZ >/dev/null 2>&1; then
   hibernate_cmd="ZZZ"
 fi
 
-# Only offer what the kernel can actually do (mem = suspend-to-RAM,
-# disk = hibernate). A box with no swap / no resume= still lists "disk"
-# here; in that case the logind call fails and we surface its error below.
-kernel_states="$(cat /sys/power/state 2>/dev/null)"
-case " $kernel_states " in *" mem "*) ;; *) suspend_cmd="" ;; esac
-case " $kernel_states " in *" disk "*) ;; *) hibernate_cmd="" ;; esac
+# Only offer what can actually happen. Ask logind first (systemd and elogind
+# both answer CanSuspend/CanHibernate over D-Bus): "na" means the kernel or
+# setup can't do it - e.g. hibernate with no swap - and "no" means policy
+# forbids it; only "yes"/"challenge" keep the entry. Without busctl, fall
+# back to the kernel's own list (mem = suspend-to-RAM, disk = hibernate),
+# which is less precise: "disk" shows up even with no swap to hibernate to.
+logind_can() {
+  busctl --no-pager call org.freedesktop.login1 /org/freedesktop/login1 \
+    org.freedesktop.login1.Manager "$1" 2>/dev/null
+}
+if command -v busctl >/dev/null 2>&1 && [ -n "$suspend_cmd$hibernate_cmd" ]; then
+  case "$(logind_can CanSuspend)"   in *'"yes"'*|*'"challenge"'*) ;; *) suspend_cmd="" ;; esac
+  case "$(logind_can CanHibernate)" in *'"yes"'*|*'"challenge"'*) ;; *) hibernate_cmd="" ;; esac
+else
+  kernel_states="$(cat /sys/power/state 2>/dev/null)"
+  case " $kernel_states " in *" mem "*) ;; *) suspend_cmd="" ;; esac
+  case " $kernel_states " in *" disk "*) ;; *) hibernate_cmd="" ;; esac
+fi
 
 # Lock only when hyprlock is installed. Listed first so a stray Enter locks
 # the session rather than powering it off.
@@ -104,10 +116,19 @@ hypr_exit() {
 # show the error instead of silently doing nothing.
 run_power() {
   err="$($1 2>&1)" && return 0
+  # elogind's loginctl exits 1 without a word when logind refuses, so give
+  # the usual reason rather than "unknown error".
+  if [ -z "$err" ]; then
+    case "$2" in
+      Hibernate) err="not available (no swap large enough, or no resume= device)" ;;
+      Sleep)     err="not available (kernel or firmware doesn't support suspend)" ;;
+      *)         err="unknown error" ;;
+    esac
+  fi
   if command -v notify-send >/dev/null 2>&1; then
-    notify-send -u critical "Power menu" "$2 failed: ${err:-unknown error}"
+    notify-send -u critical "Power menu" "$2 failed: $err"
   else
-    printf 'power: %s failed: %s\n' "$2" "${err:-unknown error}" >&2
+    printf 'power: %s failed: %s\n' "$2" "$err" >&2
   fi
   return 1
 }
