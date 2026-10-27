@@ -171,7 +171,7 @@ also forces the icon index to be rescanned.
 lists Terminal=true apps, which are hidden by default.
 .TP
 .B power
-Wofi power menu (poweroff / reboot / sleep / hibernate / logout); the waybar power button's
+Wofi power menu (lock / poweroff / reboot / sleep / hibernate / logout); the waybar power button's
 on-click target. A second invocation while wofi is up closes it. Detects
 the init system at runtime (systemd, elogind, OpenRC, sysv) and handles
 both legacy and Lua hyprland configs for logout.
@@ -602,7 +602,7 @@ with audio off that state accent is only visible on the VPN block
 itself.
 .TP
 .BI "--waybar-power " on|off
-Toggle the waybar power button (wofi poweroff/reboot/sleep/hibernate/logout menu, far left;
+Toggle the waybar power button (wofi lock/poweroff/reboot/sleep/hibernate/logout menu, far left;
 clicks run
 .BR "dotctl power" ).
 The script always ships with dotctl - this only controls the bar block.

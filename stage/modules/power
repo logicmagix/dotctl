@@ -44,10 +44,24 @@ kernel_states="$(cat /sys/power/state 2>/dev/null)"
 case " $kernel_states " in *" mem "*) ;; *) suspend_cmd="" ;; esac
 case " $kernel_states " in *" disk "*) ;; *) hibernate_cmd="" ;; esac
 
+# Lock only when hyprlock is installed. Listed first so a stray Enter locks
+# the session rather than powering it off.
+lock_cmd=""
+if command -v hyprlock >/dev/null 2>&1; then
+  lock_cmd="hyprlock"
+fi
+
 # Build the entry list; ~58px per row + ~60px for the prompt.
-entries="󰐥 Poweroff
+entries=""
+rows=0
+if [ -n "$lock_cmd" ]; then
+  entries="󰌾 Lock
+"
+  rows=1
+fi
+entries="${entries}󰐥 Poweroff
 󰜉 Reboot"
-rows=2
+rows=$((rows + 2))
 if [ -n "$suspend_cmd" ]; then
   entries="$entries
 󰒲 Sleep"
@@ -98,7 +112,13 @@ run_power() {
   return 1
 }
 
+# Same guard hypridle uses: a second hyprlock instance refuses to start.
+hypr_lock() {
+  pidof hyprlock >/dev/null || hyprlock
+}
+
 case "$choice" in
+  "󰌾 Lock")      hypr_lock ;;
   "󰐥 Poweroff")  run_power "$poweroff_cmd"  "Poweroff" ;;
   "󰜉 Reboot")    run_power "$reboot_cmd"    "Reboot" ;;
   "󰒲 Sleep")     run_power "$suspend_cmd"   "Sleep" ;;
