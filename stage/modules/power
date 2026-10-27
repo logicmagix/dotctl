@@ -6,27 +6,22 @@ if pgrep -x wofi >/dev/null; then
   exit 0
 fi
 
-# Open a small power menu in the top-left
-choice="$(
-  printf '%s\n' " Poweroff" " Reboot" "󰒲 Logout" |
-  wofi --dmenu \
-       --prompt 'Power Menu' \
-       --location 1 \
-       --insensitive \
-       --width 300 \
-       --height 235 \
-       --xoffset 10 \
-       --yoffset 10
-)"
-
 # Detect init system: systemd, elogind (OpenRC/runit), raw OpenRC, or sysv.
+# suspend/hibernate commands are left empty where the init system offers
+# nothing unprivileged; the menu then simply omits those entries.
+suspend_cmd=""
+hibernate_cmd=""
 if [ -d /run/systemd/system ]; then
   poweroff_cmd="systemctl poweroff"
   reboot_cmd="systemctl reboot"
+  suspend_cmd="systemctl suspend"
+  hibernate_cmd="systemctl hibernate"
 elif command -v loginctl >/dev/null 2>&1; then
   # elogind on OpenRC/runit: polkit-authorized, no root required.
   poweroff_cmd="loginctl poweroff"
   reboot_cmd="loginctl reboot"
+  suspend_cmd="loginctl suspend"
+  hibernate_cmd="loginctl hibernate"
 elif command -v openrc-shutdown >/dev/null 2>&1; then
   poweroff_cmd="openrc-shutdown -p now"
   reboot_cmd="openrc-shutdown -r now"
@@ -34,6 +29,52 @@ else
   poweroff_cmd="poweroff"
   reboot_cmd="reboot"
 fi
+# No logind at all: zzz/ZZZ (Void/runit) are the usual unprivileged helpers.
+if [ -z "$suspend_cmd" ] && command -v zzz >/dev/null 2>&1; then
+  suspend_cmd="zzz"
+fi
+if [ -z "$hibernate_cmd" ] && command -v ZZZ >/dev/null 2>&1; then
+  hibernate_cmd="ZZZ"
+fi
+
+# Only offer what the kernel can actually do (mem = suspend-to-RAM,
+# disk = hibernate). A box with no swap / no resume= still lists "disk"
+# here; in that case the logind call fails and we surface its error below.
+kernel_states="$(cat /sys/power/state 2>/dev/null)"
+case " $kernel_states " in *" mem "*) ;; *) suspend_cmd="" ;; esac
+case " $kernel_states " in *" disk "*) ;; *) hibernate_cmd="" ;; esac
+
+# Build the entry list; ~58px per row + ~60px for the prompt.
+entries="󰐥 Poweroff
+󰜉 Reboot"
+rows=2
+if [ -n "$suspend_cmd" ]; then
+  entries="$entries
+󰒲 Sleep"
+  rows=$((rows + 1))
+fi
+if [ -n "$hibernate_cmd" ]; then
+  entries="$entries
+󰤄 Hibernate"
+  rows=$((rows + 1))
+fi
+entries="$entries
+󰍃 Logout"
+rows=$((rows + 1))
+height=$((60 + rows * 58))
+
+# Open a small power menu in the top-left
+choice="$(
+  printf '%s\n' "$entries" |
+  wofi --dmenu \
+       --prompt 'Power Menu' \
+       --location 1 \
+       --insensitive \
+       --width 300 \
+       --height "$height" \
+       --xoffset 10 \
+       --yoffset 10
+)"
 
 # Runtime detection for Hyprland Lua config (v0.55+).
 # Try legacy dispatch first; if it fails with lua parse error, use eval.
@@ -45,8 +86,22 @@ hypr_exit() {
   fi
 }
 
+# Run a power command; on failure (e.g. hibernate with no resume device)
+# show the error instead of silently doing nothing.
+run_power() {
+  err="$($1 2>&1)" && return 0
+  if command -v notify-send >/dev/null 2>&1; then
+    notify-send -u critical "Power menu" "$2 failed: ${err:-unknown error}"
+  else
+    printf 'power: %s failed: %s\n' "$2" "${err:-unknown error}" >&2
+  fi
+  return 1
+}
+
 case "$choice" in
-  " Poweroff") $poweroff_cmd ;;
-  " Reboot")   $reboot_cmd ;;
-  "󰒲 Logout")  hypr_exit ;;
+  "󰐥 Poweroff")  run_power "$poweroff_cmd"  "Poweroff" ;;
+  "󰜉 Reboot")    run_power "$reboot_cmd"    "Reboot" ;;
+  "󰒲 Sleep")     run_power "$suspend_cmd"   "Sleep" ;;
+  "󰤄 Hibernate") run_power "$hibernate_cmd" "Hibernate" ;;
+  "󰍃 Logout")    hypr_exit ;;
 esac
