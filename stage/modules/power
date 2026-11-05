@@ -35,8 +35,19 @@ else
   reboot_cmd="reboot"
 fi
 
+# Hyprland >= 0.57 takes Lua in `hyprctl dispatch`; older versions take the
+# hyprlang dispatcher form. Pick based on the running compositor's version.
+hypr_logout() {
+  v="$(hyprctl version -j 2>/dev/null | sed -n 's/.*"tag" *: *"v\{0,1\}\([0-9.]*\)".*/\1/p' | cut -d. -f1,2)"
+  if [ -n "$v" ] && [ "$(printf '%s\n0.57\n' "$v" | sort -V | head -1)" = "0.57" ]; then
+    hyprctl dispatch 'hl.dsp.exit()'
+  else
+    hyprctl dispatch exit
+  fi
+}
+
 case "$choice" in
   " Poweroff") $poweroff_cmd ;;
   " Reboot")   $reboot_cmd ;;
-  "󰒲 Logout")  hyprctl dispatch exit ;;
+  "󰒲 Logout")  hypr_logout ;;
 esac

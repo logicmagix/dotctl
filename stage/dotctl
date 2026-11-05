@@ -30,6 +30,9 @@ readonly WAYBAR_DIR="$CONFIG_ROOT/waybar"
 readonly HYPR_DIR="$CONFIG_ROOT/hypr"
 readonly HYPR_COLORS_FILE="$HYPR_DIR/dotctl-colors.conf"
 readonly HYPR_COLORS_TEMPLATE="$HOME/.local/share/dotctl/dotctl-colors.conf.tmpl"
+# Hyprland >= 0.57 uses a Lua config and ignores hyprlang .conf files.
+readonly HYPR_COLORS_LUA_FILE="$HYPR_DIR/modules/dotctl_colors.lua"
+readonly HYPR_COLORS_LUA_TEMPLATE="$HOME/.local/share/dotctl/dotctl-colors.lua.tmpl"
 readonly WALLPAPER_ROOT="$HOME/Pictures/dotctl/wallpapers"
 
 readonly CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/dotctl"
@@ -681,6 +684,27 @@ _hypr_template_path() {
   return 1
 }
 
+# Same, for the Lua template used by Hyprland >= 0.57.
+_hypr_lua_template_path() {
+  [[ -f "$HYPR_COLORS_LUA_TEMPLATE" ]] && { printf '%s\n' "$HYPR_COLORS_LUA_TEMPLATE"; return 0; }
+  local self_dir
+  self_dir=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
+  if [[ -f "$self_dir/hypr/dotctl-colors.lua.tmpl" ]]; then
+    printf '%s\n' "$self_dir/hypr/dotctl-colors.lua.tmpl"
+    return 0
+  fi
+  return 1
+}
+
+# True when the running (or installed) Hyprland is >= 0.57, i.e. Lua-configured.
+_hypr_is_lua() {
+  local v
+  v=$(hyprctl version -j 2>/dev/null | sed -n 's/.*"tag" *: *"v\{0,1\}\([0-9.]*\)".*/\1/p' | cut -d. -f1,2)
+  [[ -z "$v" ]] && v=$(Hyprland --version 2>/dev/null | sed -n 's/.*Hyprland \([0-9]*\.[0-9]*\).*/\1/p' | head -1)
+  [[ -z "$v" ]] && return 1
+  [[ "$(printf '%s\n0.57\n' "$v" | sort -V | head -1)" == "0.57" ]]
+}
+
 # Parse a waybar `.palette` file into stdout as `NAME<space>HEX` lines,
 # resolving `@other_name` aliases one pass deep. Chained aliases (rare in
 # these palettes) are resolved in a second pass.
@@ -698,8 +722,15 @@ _parse_palette() {
 
 apply_hypr() {
   local palette="$WAYBAR_DIR/palettes/${WAYBAR_COLOR}.palette"
-  local template
-  template=$(_hypr_template_path) || { warn "hypr colors template missing - skipping apply_hypr"; return 0; }
+  local template is_lua=0 out_file
+  if _hypr_is_lua; then
+    is_lua=1
+    template=$(_hypr_lua_template_path) || { warn "hypr lua colors template missing - skipping apply_hypr"; return 0; }
+    out_file="$HYPR_COLORS_LUA_FILE"
+  else
+    template=$(_hypr_template_path) || { warn "hypr colors template missing - skipping apply_hypr"; return 0; }
+    out_file="$HYPR_COLORS_FILE"
+  fi
   [[ -f "$palette" ]] || { warn "hypr: palette missing: $palette"; return 0; }
   [[ -d "$HYPR_DIR" ]] || { log "hypr: $HYPR_DIR absent - skipping"; return 0; }
 
@@ -749,18 +780,19 @@ apply_hypr() {
     shadow|*) shadow_color="$black"; shadow_alpha="cc" ;;
   esac
 
+  [[ "$is_lua" == 1 ]] && mkdir -p "$(dirname "$out_file")"
   sed \
     -e "s/__CYAN__/${cyan}/g" \
     -e "s/__YELLOW__/${yellow}/g" \
     -e "s/__BG3__/${bg3}/g" \
     -e "s/__SHADOW_COLOR__/${shadow_color}/g" \
     -e "s/__SHADOW_ALPHA__/${shadow_alpha}/g" \
-    "$template" > "$HYPR_COLORS_FILE.tmp" && mv -f "$HYPR_COLORS_FILE.tmp" "$HYPR_COLORS_FILE"
+    "$template" > "$out_file.tmp" && mv -f "$out_file.tmp" "$out_file"
 
   # Reload hyprland in place if running. Silent on failure - the user may
-  # not yet have sourced the file from their hyprland.conf.
+  # not yet have sourced/required the file from their hyprland config.
   hyprctl reload >/dev/null 2>&1 || true
-  log "apply hypr: colors from ${WAYBAR_COLOR}.palette → $HYPR_COLORS_FILE (effect=${HYPR_EFFECT:-shadow})"
+  log "apply hypr: colors from ${WAYBAR_COLOR}.palette → $out_file (effect=${HYPR_EFFECT:-shadow})"
 }
 
 apply_all() {

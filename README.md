@@ -134,6 +134,27 @@ source = ~/.config/hypr/dotctl-colors.conf
 
 Then `hyprctl reload`.
 
+#### Hyprland >= 0.57 (Lua config)
+
+0.57 replaced hyprlang with Lua and ignores `.conf` files, so
+`dotctl apply` detects the version and writes
+`~/.config/hypr/modules/dotctl_colors.lua` instead of
+`dotctl-colors.conf`. Require it from `hyprland.lua`:
+
+```lua
+require("modules.dotctl_colors")
+```
+
+Keybinds are not auto-generated for Lua; copy the binds you want from
+`stage/hypr/dotctl-keybinds.conf` into your own Lua module, e.g.
+
+```lua
+hl.bind("SUPER + ALT + Up", hl.dsp.exec_cmd("dotctl cycle waybar next"),
+        { description = "Waybar variant next" })
+```
+
+Then `hyprctl reload`.
+
 ### Recommended animation and wallpaper settings
 
 Add these to your `hyprland.conf` for smooth wofi fade animations and
@@ -173,14 +194,34 @@ You now have:
 
 ### Keybinds cheatsheet (`keybinds`)
 
-The `keybinds` module is an opt-in wofi popup that reads your
-`~/.config/hypr/hyprland.conf`, follows every `source = ...` directive
-recursively (so `dotctl-keybinds.conf` is included for free), and
-renders a grouped cheatsheet of every bind you have explicitly
-labelled. `hyprland.conf` is never modified - you opt in by adding
-trailing comments to the binds you want surfaced.
+An opt-in wofi popup that renders a grouped cheatsheet of your binds. It
+picks its source from the running Hyprland version:
 
-#### Annotation grammar
+| Hyprland | Source | What it reads |
+|----------|--------|---------------|
+| >= 0.57  | `live` | `hyprctl binds -j` - the compositor's own bind list |
+| < 0.57   | `conf` | `~/.config/hypr/hyprland.conf` + every `source = ...` |
+
+0.57 replaced hyprlang with a Lua config and no longer reads
+`hyprland.conf`, so parsing that file there would show a stale list.
+Reading `hyprctl` instead means the cheatsheet can never drift from
+what is actually bound. Force either mode with
+`KEYBINDS_SOURCE=live|conf`; `keybinds --source` prints the choice.
+
+#### Opting in (Lua / `live`)
+
+Give a bind a `description` and it shows up:
+
+```lua
+hl.bind("SUPER + B", hl.dsp.exec_cmd("brave"), { description = "Brave Browser" })
+```
+
+Binds without a description are skipped, same opt-in spirit as the
+hyprlang annotations. Section headers are recovered from the
+`-- Header` comment lines in the Lua modules that `hyprland.lua`
+`require()`s, so grouping survives the move off hyprlang.
+
+#### Annotation grammar (hyprlang / `conf`)
 
 Two things drive the cheatsheet:
 
@@ -214,9 +255,14 @@ Bind it to whatever combo you like (or run it from a terminal):
 bind = ALT, B, exec, keybinds   # Keybinds cheatsheet
 ```
 
+```lua
+hl.bind("ALT + B", hl.dsp.exec_cmd("keybinds"), { description = "Keybinds cheatsheet" })
+```
+
 `keybinds --print` dumps the same output to stdout if you want to
-preview without spawning wofi. `KEYBINDS_HEADER_COLOR=#83a598` and
-`HYPR_CONF=...` override the defaults.
+preview without spawning wofi. `KEYBINDS_HEADER_COLOR=#83a598`,
+`KEYBINDS_SOURCE=`, `HYPR_CONF=` and `HYPR_LUA=` override the defaults.
+The `live` source needs `jq`.
 
 ## Quick start
 

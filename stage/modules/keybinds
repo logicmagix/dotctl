@@ -1,12 +1,17 @@
 #!/bin/bash
 # keybinds - hyprland keybinds cheatsheet (wofi)
 #
-# Reads ~/.config/hypr/hyprland.conf, follows `source = ...` recursively,
-# and emits a wofi menu of bind lines that have a trailing `# Label`
-# annotation. hyprland.conf itself is never modified - users opt in by
-# adding labels to whichever binds they want surfaced.
+# Two sources, picked automatically:
 #
-# See `keybinds --help` for the annotation grammar.
+#   live  (Hyprland >= 0.57, Lua config) - reads `hyprctl binds -j`, the
+#         compositor's own view of what is bound. Section headers are
+#         recovered from the `-- Header` comments in the Lua modules that
+#         hyprland.lua require()s, so grouping survives.
+#   conf  (Hyprland < 0.57, hyprlang config) - the original behaviour: parse
+#         ~/.config/hypr/hyprland.conf, follow `source = ...` recursively,
+#         and surface bind lines carrying a trailing `# Label` annotation.
+#
+# Override with KEYBINDS_SOURCE=live|conf. See `keybinds --help`.
 
 set -euo pipefail
 shopt -s extglob
@@ -22,6 +27,7 @@ fi
 # ──────────────────────────────────────────────────────────────────────────────
 
 readonly HYPR_CONF="${HYPR_CONF:-$HOME/.config/hypr/hyprland.conf}"
+readonly HYPR_LUA="${HYPR_LUA:-$HOME/.config/hypr/hyprland.lua}"
 readonly DEFAULT_HEADER_COLOR='#83a598'
 HEADER_COLOR="${KEYBINDS_HEADER_COLOR:-$DEFAULT_HEADER_COLOR}"
 PRINT_ONLY=false
@@ -37,42 +43,79 @@ keybinds - hyprland keybinds cheatsheet (wofi)
 USAGE
   keybinds            Toggle the cheatsheet (open if closed, close if open)
   keybinds --print    Dump the cheatsheet to stdout instead of wofi
+  keybinds --source   Print which source would be used, then exit
   keybinds -h         This help
 
-ANNOTATION GRAMMAR
+SOURCES
+  On Hyprland >= 0.57 the config is Lua and `hyprland.conf` is ignored by the
+  compositor, so the cheatsheet reads live state from `hyprctl binds -j`.
+  Every bind that carries a `description` is shown - that is the Lua
+  equivalent of the old trailing `# Label` opt-in:
+
+    hl.bind("SUPER + T", hl.dsp.exec_cmd("kitty"), { description = "Terminal" })
+
+  Section headers are read from the `-- Header` comment lines in the Lua
+  modules required by hyprland.lua, matched to binds by description.
+
+  On Hyprland < 0.57 the original hyprlang parser is used instead.
+
+ANNOTATION GRAMMAR (hyprlang / `conf` source only)
   Add a trailing `# Label` to any bind line you want to appear:
 
     # Browser binds                            ← section header
     bind = $mainMod, B, exec, $browser  # Brave             ← row label
-    bind = $mainMod SHIFT, B, exec, $bp # Brave (Incognito)
 
   Bindings without a trailing `# Label` are silently skipped, so the
   cheatsheet only ever shows what you explicitly opted in.
 
   Section headers come from the FIRST stand-alone `# ...` comment line
-  of each comment block preceding a group of binds. Multi-line block
-  comments use only the first line, so noisy explainer paragraphs do
-  not pollute the section name. Blank lines reset the block.
-
-  All `bind*` variants are recognised: bind, bindd, bindel, bindl,
-  bindm, binde. Commented-out binds (`#bind = ...`) with a trailing
-  label are still surfaced - useful for "disabled but documented".
-
-  Sourced .conf files are followed automatically via `source = ...`,
-  so dotctl-keybinds.conf and any other helpers you source are
-  included with no extra wiring.
+  of each comment block preceding a group of binds. Blank lines reset the
+  block. All `bind*` variants are recognised. Sourced .conf files are
+  followed automatically via `source = ...`.
 
 ENV
-  HYPR_CONF              Path to hyprland.conf
+  KEYBINDS_SOURCE        Force the source: `live` or `conf`
+                         (default: auto-detect from the Hyprland version)
+  HYPR_CONF              Path to hyprland.conf (hyprlang source)
                          (default: ~/.config/hypr/hyprland.conf)
+  HYPR_LUA               Path to hyprland.lua (for section headers)
+                         (default: ~/.config/hypr/hyprland.lua)
   KEYBINDS_HEADER_COLOR  Pango color for section headers
                          (default: #83a598)
 EOF
     exit 0;;
   --print) PRINT_ONLY=true;;
+  --source) ;;
   '') ;;
   *) die "unknown argument: $1 (try \`keybinds --help\`)";;
 esac
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  Source selection
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Hyprland >= 0.57 is Lua-configured and ignores hyprland.conf.
+_hypr_is_lua() {
+  local v
+  v=$(hyprctl version -j 2>/dev/null \
+      | sed -n 's/.*"tag" *: *"v\{0,1\}\([0-9.]*\)".*/\1/p' | cut -d. -f1,2)
+  [[ -z "$v" ]] && return 1
+  [[ "$(printf '%s\n0.57\n' "$v" | sort -V | head -1)" == "0.57" ]]
+}
+
+SOURCE="${KEYBINDS_SOURCE:-}"
+if [[ -z "$SOURCE" ]]; then
+  if _hypr_is_lua; then SOURCE=live; else SOURCE=conf; fi
+fi
+case "$SOURCE" in
+  live|conf) ;;
+  *) die "invalid KEYBINDS_SOURCE: $SOURCE (expected live or conf)";;
+esac
+
+if [[ "${1:-}" == "--source" ]]; then
+  printf '%s\n' "$SOURCE"
+  exit 0
+fi
 
 command -v wofi >/dev/null 2>&1 || [[ "$PRINT_ONLY" == "true" ]] || die "wofi not found in PATH"
 
@@ -139,6 +182,8 @@ fmt_key() {
     mouse_up)              REPLY='wheel ↑' ;;
     mouse:272)             REPLY='LMB' ;;
     mouse:273)             REPLY='RMB' ;;
+    equal)                 REPLY='=' ;;
+    minus)                 REPLY='−' ;;
     XF86AudioRaiseVolume)  REPLY='Volume +' ;;
     XF86AudioLowerVolume)  REPLY='Volume −' ;;
     XF86AudioMute)         REPLY='Mute' ;;
@@ -167,8 +212,130 @@ format_combo() {
   COMBO+="$REPLY"
 }
 
+# Decode a wayland/xkb modifier bitmask into "SUPER + CTRL + ..." order.
+# SHIFT=1 CAPS=2 CTRL=4 ALT=8 MOD2=16 MOD3=32 LOGO=64 MOD5=128
+fmt_modmask() {
+  local m="$1" out=""
+  (( m & 64 ))  && out+="SUPER + "
+  (( m & 4 ))   && out+="CTRL + "
+  (( m & 8 ))   && out+="ALT + "
+  (( m & 1 ))   && out+="SHIFT + "
+  (( m & 2 ))   && out+="CAPS + "
+  (( m & 16 ))  && out+="MOD2 + "
+  (( m & 32 ))  && out+="MOD3 + "
+  (( m & 128 )) && out+="MOD5 + "
+  REPLY="$out"
+}
+
+add_row() {
+  local sect="$1" label="$2" combo="$3"
+  sect="${sect% binds}"
+  sect="${sect% bind}"
+  [[ -z "$sect" ]] && sect="Other"
+  if [[ -z "${SECTION_ROWS[$sect]:-}" ]]; then
+    SECTIONS+=("$sect")
+    SECTION_ROWS[$sect]=""
+  fi
+  SECTION_ROWS[$sect]+="$label"$'\t'"$combo"$'\n'
+}
+
 # ──────────────────────────────────────────────────────────────────────────────
-#  Recursive parser
+#  live source: hyprctl binds -j + section headers from the Lua modules
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Emit "section<TAB>description" for every bind-ish line in the Lua config,
+# in file order. The description is the LAST double-quoted string on the line,
+# which holds for every form used in practice:
+#   exec(M, "T", terminal, "Terminal (Kitty)")
+#   hl.bind(key(M, "Q"), hl.dsp.window.close(), { description = "Kill" })
+#   hl.bind("XF86AudioMute", hl.dsp.exec_cmd("..."), el("Toggle mute"))
+# A trailing `"Workspace " .. i` yields the prefix, matched by prefix below.
+lua_section_map() {
+  local entry file dir
+  [[ -f "$HYPR_LUA" ]] || return 0
+  dir=$(dirname "$HYPR_LUA")
+
+  # hyprland.lua only require()s modules; walk them in declaration order.
+  while IFS= read -r entry; do
+    file="$dir/${entry//.//}.lua"
+    [[ -f "$file" ]] || continue
+    awk '
+      # Stand-alone comment line -> section candidate. Skip commented-out code.
+      /^[[:space:]]*--/ {
+        body = $0
+        sub(/^[[:space:]]*--[[:space:]]*/, "", body)
+        if (body ~ /^(exec\(|local |hl\.|--)/) next
+        if (body !~ /[A-Za-z]/) next
+        # Trim to the first sentence / parenthetical so explainer prose does
+        # not become the section title.
+        if (match(body, /\. /))  body = substr(body, 1, RSTART - 1)
+        if (match(body, / \(/))  body = substr(body, 1, RSTART - 1)
+        sub(/[[:space:]]+$/, "", body)
+        sect = body
+        next
+      }
+      # Bind-ish line -> take the last quoted string as the description.
+      /hl\.bind\(|^[[:space:]]*exec\(/ {
+        line = $0
+        last = ""
+        while (match(line, /"[^"]*"/)) {
+          last = substr(line, RSTART + 1, RLENGTH - 2)
+          line = substr(line, RSTART + RLENGTH)
+        }
+        if (last != "" && sect != "") print sect "\t" last
+      }
+    ' "$file"
+  done < <(sed -n 's/^[[:space:]]*require("\([^"]*\)").*/\1/p' "$HYPR_LUA")
+}
+
+build_live() {
+  command -v hyprctl >/dev/null 2>&1 || die "hyprctl not found in PATH"
+  command -v jq >/dev/null 2>&1 || die "jq not found in PATH (needed for the live source)"
+
+  local binds
+  binds=$(hyprctl binds -j 2>/dev/null) \
+    || die "could not read binds from hyprctl (is Hyprland running?)"
+  [[ -n "$binds" && "$binds" != "null" ]] || die "hyprctl returned no binds"
+
+  # description<TAB>section, plus a prefix table for dynamic descriptions.
+  declare -A DESC_SECT=()
+  declare -a PREFIXES=()
+  local sect desc
+  while IFS=$'\t' read -r sect desc; do
+    [[ -z "$desc" ]] && continue
+    # First writer wins, so the earliest section owning a description sticks.
+    [[ -n "${DESC_SECT[$desc]:-}" ]] || DESC_SECT[$desc]="$sect"
+    [[ "$desc" == *' ' ]] && PREFIXES+=("$desc")
+  done < <(lua_section_map)
+
+  # Keep hyprctl's order (declaration order), de-duplicating identical rows.
+  declare -A SEEN_ROW=()
+  local modmask key description combo pfx found row
+  while IFS=$'\t' read -r modmask key description; do
+    [[ -z "$description" ]] && continue   # no description = opted out
+    fmt_modmask "$modmask"; combo="$REPLY"
+    fmt_key "$key";         combo+="$REPLY"
+
+    sect="${DESC_SECT[$description]:-}"
+    if [[ -z "$sect" ]]; then
+      found=""
+      for pfx in "${PREFIXES[@]}"; do
+        if [[ "$description" == "$pfx"* ]]; then found="${DESC_SECT[$pfx]}"; break; fi
+      done
+      sect="${found:-Other}"
+    fi
+
+    row="$sect"$'\t'"$description"$'\t'"$combo"
+    [[ -n "${SEEN_ROW[$row]:-}" ]] && continue
+    SEEN_ROW[$row]=1
+    add_row "$sect" "$description" "$combo"
+  done < <(jq -r '.[] | select(.has_description)
+                       | [(.modmask|tostring), .key, .description]
+                       | @tsv' <<<"$binds")
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  conf source: recursive hyprlang parser (Hyprland < 0.57)
 # ──────────────────────────────────────────────────────────────────────────────
 
 parse_file() {
@@ -230,15 +397,8 @@ parse_file() {
       trim "${rest%%,*}"; key="$REPLY"
 
       sect="${SECTION_CANDIDATE:-Other}"
-      sect="${sect% binds}"
-      sect="${sect% bind}"
-
-      if [[ -z "${SECTION_ROWS[$sect]:-}" ]]; then
-        SECTIONS+=("$sect")
-        SECTION_ROWS[$sect]=""
-      fi
       format_combo "$mods_raw" "$key"
-      SECTION_ROWS[$sect]+="$label"$'\t'"$COMBO"$'\n'
+      add_row "$sect" "$label" "$COMBO"
       PREV_WAS_COMMENT=false
       continue
     fi
@@ -309,12 +469,17 @@ render() {
 #  Main
 # ──────────────────────────────────────────────────────────────────────────────
 
-[[ -f "$HYPR_CONF" ]] || die "hyprland.conf not found at $HYPR_CONF"
-
-parse_file "$HYPR_CONF"
-
-if (( ${#SECTIONS[@]} == 0 )); then
-  die "no annotated binds found in $HYPR_CONF (or any sourced files). See \`keybinds --help\` for the annotation grammar."
+if [[ "$SOURCE" == "live" ]]; then
+  build_live
+  if (( ${#SECTIONS[@]} == 0 )); then
+    die "no binds with a description found via hyprctl. Add \`{ description = \"...\" }\` to your hl.bind() calls, or set KEYBINDS_SOURCE=conf."
+  fi
+else
+  [[ -f "$HYPR_CONF" ]] || die "hyprland.conf not found at $HYPR_CONF"
+  parse_file "$HYPR_CONF"
+  if (( ${#SECTIONS[@]} == 0 )); then
+    die "no annotated binds found in $HYPR_CONF (or any sourced files). See \`keybinds --help\` for the annotation grammar."
+  fi
 fi
 
 if [[ "$PRINT_ONLY" == "true" ]]; then

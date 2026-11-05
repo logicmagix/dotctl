@@ -522,10 +522,13 @@ info "Installing cycle scripts to $CONFIG_HOME/dotctl/cycle/…"
 copy_config "$STAGE/cycle" "$CONFIG_HOME/dotctl/cycle"
 chmod +x "$CONFIG_HOME/dotctl/cycle"/cycle-hyprpaper-*
 
-# Hypr color template - apply_hypr reads it from ~/.local/share/dotctl/
-info "Installing hypr color template to $DATA_HOME/dotctl/…"
+# Hypr color templates - apply_hypr reads them from ~/.local/share/dotctl/
+# The .conf form is for Hyprland < 0.57 (hyprlang); the .lua form for >= 0.57.
+info "Installing hypr color templates to $DATA_HOME/dotctl/…"
 install -Dm644 "$STAGE/hypr/dotctl-colors.conf.tmpl" "$DATA_HOME/dotctl/dotctl-colors.conf.tmpl"
 ok "$DATA_HOME/dotctl/dotctl-colors.conf.tmpl"
+install -Dm644 "$STAGE/hypr/dotctl-colors.lua.tmpl" "$DATA_HOME/dotctl/dotctl-colors.lua.tmpl"
+ok "$DATA_HOME/dotctl/dotctl-colors.lua.tmpl"
 
 # Hypr snippets (keybinds + color stub). The color stub is a neutral-grey
 # placeholder so hyprland's `source = ~/.config/hypr/dotctl-colors.conf`
